@@ -1,11 +1,13 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from app.schemas.user import UserBrief
 
 
 # 文件响应
 class FileResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     filename: str
     original_name: str
@@ -15,10 +17,6 @@ class FileResponse(BaseModel):
     uploader: Optional[UserBrief] = None
     created_at: datetime
     
-    class Config:
-        from_attributes = True
-
-
 # 文件上传响应
 class FileUploadResponse(BaseModel):
     id: int

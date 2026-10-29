@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import (
     Column, Integer, String, Text, Boolean, DateTime, 
     ForeignKey, Table, Index
@@ -41,8 +41,12 @@ class Post(Base):
     
     author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
     
     # 全文搜索向量 - 使用 PostgreSQL 的 tsvector
     # search_vector = Column(TSVector())  # 需要 sqlalchemy-searchable

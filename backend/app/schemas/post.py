@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.user import UserBrief
 
 
@@ -14,11 +14,10 @@ class TagCreate(TagBase):
 
 
 class TagResponse(TagBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     slug: str
-    
-    class Config:
-        from_attributes = True
 
 
 # 文章基础模式
@@ -47,6 +46,8 @@ class PostUpdate(BaseModel):
 
 # 文章列表响应
 class PostListResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     title: str
     slug: str
@@ -59,10 +60,6 @@ class PostListResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
-
-
 # 文章详情响应
 class PostDetailResponse(PostListResponse):
     content: str

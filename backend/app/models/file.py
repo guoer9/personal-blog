@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from app.db.session import Base
@@ -16,7 +16,7 @@ class File(Base):
     
     uploader_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     
     # 关系
     uploader = relationship("User", back_populates="files", lazy="selectin")

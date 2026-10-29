@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 # 用户基础模式
@@ -24,6 +24,8 @@ class UserUpdate(BaseModel):
 
 # 用户响应
 class UserResponse(UserBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     is_admin: bool
     is_active: bool
@@ -31,20 +33,14 @@ class UserResponse(UserBase):
     bio: Optional[str] = None
     created_at: datetime
     
-    class Config:
-        from_attributes = True
-
-
 # 用户简要信息（用于嵌套）
 class UserBrief(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     username: str
     avatar: Optional[str] = None
     
-    class Config:
-        from_attributes = True
-
-
 # 登录请求
 class LoginRequest(BaseModel):
     username: str

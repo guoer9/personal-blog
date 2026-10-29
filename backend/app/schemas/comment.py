@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.user import UserBrief
 
 
@@ -17,6 +17,8 @@ class CommentCreate(CommentBase):
 
 # 评论响应
 class CommentResponse(CommentBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     post_id: int
     user: UserBrief
@@ -24,9 +26,5 @@ class CommentResponse(CommentBase):
     created_at: datetime
     replies: List["CommentResponse"] = []
     
-    class Config:
-        from_attributes = True
-
-
 # 解决循环引用
 CommentResponse.model_rebuild()
