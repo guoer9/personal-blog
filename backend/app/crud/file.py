@@ -2,7 +2,7 @@ from typing import Optional, List, Tuple
 import os
 import uuid
 import aiofiles
-from fastapi import UploadFile
+from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,17 +70,31 @@ async def save_upload_file(
     # 文件路径
     file_path = os.path.join(settings.UPLOAD_DIR, unique_filename)
     
-    # 异步写入文件
-    content = await upload_file.read()
-    async with aiofiles.open(file_path, 'wb') as f:
-        await f.write(content)
+    bytes_written = 0
+    try:
+        async with aiofiles.open(file_path, 'wb') as f:
+            while chunk := await upload_file.read(1024 * 1024):
+                bytes_written += len(chunk)
+                if bytes_written > settings.MAX_UPLOAD_SIZE:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=(
+                            "文件大小超过限制（最大 "
+                            f"{settings.MAX_UPLOAD_SIZE // 1024 // 1024}MB）"
+                        ),
+                    )
+                await f.write(chunk)
+    except Exception:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise
     
     # 创建数据库记录
     file_record = File(
         filename=unique_filename,
         original_name=upload_file.filename,
         file_path=file_path,
-        size=len(content),
+        size=bytes_written,
         mime_type=upload_file.content_type,
         uploader_id=uploader_id,
     )

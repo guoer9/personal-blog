@@ -1,6 +1,7 @@
 import json
 from typing import List
-from pydantic_settings import BaseSettings
+from pydantic import model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 
 
@@ -38,9 +39,27 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Personal Blog API"
     API_V1_PREFIX: str = "/api/v1"
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="ignore",
+    )
+
+    @model_validator(mode="after")
+    def validate_production_secret(self) -> "Settings":
+        if self.ENVIRONMENT.lower() == "production":
+            insecure_markers = (
+                "change-in-production",
+                "generate-a-local-secret",
+                "your-super-secret",
+            )
+            if len(self.SECRET_KEY) < 32 or any(
+                marker in self.SECRET_KEY.lower() for marker in insecure_markers
+            ):
+                raise ValueError(
+                    "SECRET_KEY must be a strong, non-placeholder value in production"
+                )
+        return self
 
 
 @lru_cache

@@ -22,12 +22,20 @@ async def get_current_user(
     payload = decode_token(token)
     if not payload:
         return None
+
+    if payload.get("type") != "access":
+        return None
     
     user_id = payload.get("sub")
     if not user_id:
         return None
     
-    result = await db.execute(select(User).where(User.id == int(user_id)))
+    try:
+        user_id = int(user_id)
+    except (TypeError, ValueError):
+        return None
+
+    result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     
     if not user or not user.is_active:

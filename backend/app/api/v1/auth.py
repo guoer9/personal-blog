@@ -7,7 +7,7 @@ from app.schemas.user import (
     UserCreate, UserResponse, Token, TokenRefresh, LoginRequest
 )
 from app.crud.user import (
-    create_user, get_user_by_username_or_email, authenticate_user
+    create_user, get_user_by_username_or_email, authenticate_user, get_user_by_id
 )
 from app.core.security import (
     create_access_token, create_refresh_token, decode_token
@@ -108,10 +108,21 @@ async def refresh_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="无效的令牌"
         )
+
+    try:
+        user = await get_user_by_id(db, int(user_id))
+    except (TypeError, ValueError):
+        user = None
+
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="用户不存在或已被禁用"
+        )
     
     return Token(
-        access_token=create_access_token(int(user_id)),
-        refresh_token=create_refresh_token(int(user_id)),
+        access_token=create_access_token(user.id),
+        refresh_token=create_refresh_token(user.id),
     )
 
 

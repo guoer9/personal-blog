@@ -1,6 +1,5 @@
 import os
 import math
-from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,11 +10,34 @@ from app.crud.file import (
     save_upload_file, get_file_by_filename, get_file_by_id,
     get_files, delete_file
 )
-from app.api.deps import get_current_user, get_current_admin
+from app.api.deps import get_current_user_required, get_current_admin
 from app.models.user import User
 from app.core.config import settings
 
 router = APIRouter()
+
+ALLOWED_MIME_TYPES = {
+    ".jpg": {"image/jpeg"},
+    ".jpeg": {"image/jpeg"},
+    ".png": {"image/png"},
+    ".gif": {"image/gif"},
+    ".webp": {"image/webp"},
+    ".pdf": {"application/pdf"},
+    ".doc": {"application/msword"},
+    ".docx": {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    },
+    ".xls": {"application/vnd.ms-excel"},
+    ".xlsx": {
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    },
+    ".zip": {"application/zip"},
+    ".rar": {"application/vnd.rar", "application/x-rar-compressed"},
+    ".7z": {"application/x-7z-compressed"},
+    ".mp4": {"video/mp4"},
+    ".mp3": {"audio/mpeg"},
+    ".wav": {"audio/wav", "audio/x-wav"},
+}
 
 
 def validate_file(file: UploadFile) -> None:
@@ -24,39 +46,38 @@ def validate_file(file: UploadFile) -> None:
     # 注意：实际文件大小检查需要在读取内容后进行
     
     # 检查文件扩展名
-    if file.filename:
-        ext = os.path.splitext(file.filename)[1].lower()
-        if ext not in settings.ALLOWED_EXTENSIONS:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"不支持的文件类型。允许的类型: {', '.join(settings.ALLOWED_EXTENSIONS)}"
-            )
+    if not file.filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="文件名不能为空",
+        )
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in settings.ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"不支持的文件类型。允许的类型: {', '.join(settings.ALLOWED_EXTENSIONS)}"
+        )
+
+    if file.content_type not in ALLOWED_MIME_TYPES.get(ext, set()):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="文件扩展名与 MIME 类型不匹配",
+        )
 
 
 @router.post("/upload", response_model=FileUploadResponse)
 async def upload_file(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_required)
 ):
     """上传文件"""
     # 验证文件
     validate_file(file)
     
-    # 读取内容检查大小
-    content = await file.read()
-    if len(content) > settings.MAX_UPLOAD_SIZE:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"文件大小超过限制（最大 {settings.MAX_UPLOAD_SIZE // 1024 // 1024}MB）"
-        )
-    
-    # 重置文件指针
-    await file.seek(0)
-    
     # 保存文件
-    uploader_id = current_user.id if current_user else None
-    file_record = await save_upload_file(db, file, uploader_id)
+    file_record = await save_upload_file(db, file, current_user.id)
     
     return FileUploadResponse(
         id=file_record.id,

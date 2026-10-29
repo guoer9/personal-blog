@@ -8,6 +8,10 @@ from app.core.config import settings
 from app.api.v1 import auth, posts, comments, files, tags
 
 
+# StaticFiles validates the directory during application construction.
+os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
