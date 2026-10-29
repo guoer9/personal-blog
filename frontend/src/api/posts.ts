@@ -61,6 +61,11 @@ export function getPost(slug: string) {
   return request.get<Post>(`/posts/${slug}`)
 }
 
+// 管理员按 ID 获取文章（包含草稿）
+export function getPostById(id: number) {
+  return request.get<Post>(`/posts/id/${id}`)
+}
+
 // 创建文章
 export function createPost(data: PostCreate) {
   return request.post<Post>('/posts', data)

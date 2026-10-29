@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MdEditor } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
-import { getPost, createPost, updatePost, type PostCreate, type PostUpdate } from '@/api/posts'
+import { getPostById, createPost, updatePost, type PostCreate, type PostUpdate } from '@/api/posts'
 import { getTags, type Tag } from '@/api/tags'
 import { uploadFile } from '@/api/files'
 import { ElMessage } from 'element-plus'
@@ -39,8 +39,7 @@ async function fetchPost() {
   
   loading.value = true
   try {
-    // 使用 ID 获取文章时，需要先用管理员权限获取
-    const response = await getPost(postId.value)
+    const response = await getPostById(parseInt(postId.value, 10))
     form.value = {
       title: response.data.title,
       content: response.data.content || '',

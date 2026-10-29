@@ -1,6 +1,8 @@
 import request from '@/utils/request'
 import type { Tag } from './posts'
 
+export type { Tag } from './posts'
+
 export interface TagCreate {
   name: string
 }

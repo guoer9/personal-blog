@@ -65,6 +65,22 @@ async def search(
     )
 
 
+@router.get("/id/{post_id}", response_model=PostDetailResponse)
+async def get_post_by_id_for_admin(
+    post_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin)
+):
+    """管理员按 ID 获取文章（包含草稿）"""
+    post = await get_post_by_id(db, post_id, include_unpublished=True)
+    if not post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="文章不存在"
+        )
+    return post
+
+
 @router.get("/{slug}", response_model=PostDetailResponse)
 async def get_post(
     slug: str,
