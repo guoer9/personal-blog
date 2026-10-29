@@ -14,7 +14,7 @@
 
 - The public product is a personal brand site for one author and public visitors.
 - The deployment route is Systemd + Nginx; Docker Compose is local-only PostgreSQL.
-- No repository file may contain `cgwdn.icu`, live certificate paths, or production credentials.
+- No repository file may contain the expired domain, live certificate paths, or production credentials.
 - No React/Next.js migration and no full Docker deployment migration.
 - Do not delete user content or remote server data.
 - Every task ends with a verification command and a Git commit.
@@ -43,7 +43,7 @@
 - [ ] **Step 2: Remove stale domain and secret references** from templates and deployment files; use `your-domain.example`, `/etc/personal-blog/blog-api.env`, and deployment-time certificate paths.
 - [ ] **Step 3: Make local PostgreSQL configuration consistent** across Compose, Alembic, and backend examples using host port `5433`.
 - [ ] **Step 4: Document local setup, production inputs, and verification commands** in the two README files.
-- [ ] **Step 5: Run `rg -n -i 'cgwdn\\.icu|your-secure-password|super-secret-key|blogpassword|letsencrypt/live' ...` and inspect the result.** Expected: only safe explanatory placeholder text remains, with no expired domain or live certificate path.
+- [ ] **Step 5: Run the repository baseline check and inspect the result.** Expected: no expired domain, live certificate path, or production credential marker remains.
 - [ ] **Step 6: Commit** with `chore: establish safe configuration baseline`.
 
 ### Task 2: Frontend Build and API Contract

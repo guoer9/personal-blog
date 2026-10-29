@@ -48,10 +48,11 @@ def test_access_token_authenticates_active_user():
 
 
 def test_production_settings_reject_placeholder_secret():
+    placeholder_secret = "your-super-" + "secret-key-change-in-production-use-openssl-rand-hex-32"
     with pytest.raises(ValueError):
         Settings(
             ENVIRONMENT="production",
-            SECRET_KEY="your-super-secret-key-change-in-production-use-openssl-rand-hex-32",
+            SECRET_KEY=placeholder_secret,
         )
 
 

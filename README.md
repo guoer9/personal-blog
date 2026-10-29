@@ -114,6 +114,9 @@ cd frontend && npm run build
 
 # 后端编译
 cd ../backend && python -m compileall -q app
+
+# 完整基线检查（过期部署标记、前端构建、后端编译和测试）
+cd .. && ./scripts/check-repository-baseline.sh
 ```
 
 ## 项目结构

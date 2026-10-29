@@ -9,7 +9,7 @@ The current Vue 3 + FastAPI + PostgreSQL stack is sufficient. The immediate prob
 ## Goals
 
 - Make local development and production configuration explicit and repeatable.
-- Remove the expired `cgwdn.icu` domain and its certificate references from repository configuration.
+- Remove the expired domain and its certificate references from repository configuration.
 - Keep deployment on Systemd + Nginx; use Docker Compose only for local PostgreSQL.
 - Restore a passing frontend build and a documented backend health/migration check.
 - Harden authentication, refresh tokens, uploads, CORS, and admin-only operations.
@@ -83,7 +83,7 @@ This would make the runtime more portable, but it requires Dockerfiles, health c
 
 - `npm run build` passes.
 - Backend compilation, migration configuration, and `/health` checks pass locally.
-- No repository file contains `cgwdn.icu`, real production credentials, or live certificate paths.
+- No repository file contains the expired domain, real production credentials, or live certificate paths.
 - Protected endpoints reject refresh tokens and unauthenticated uploads.
 - A clean local setup can start PostgreSQL, apply migrations, run the API, and serve the frontend using documented steps.
 - Automated checks cover the main public and admin flows and fail on regressions.
