@@ -1,0 +1,33 @@
+[Unit]
+Description=Personal Blog API (FastAPI)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/blog/backend
+
+# 环境变量
+Environment="PATH=/var/www/blog/backend/venv/bin"
+EnvironmentFile=/etc/personal-blog/blog-api.env
+
+# 启动命令
+ExecStart=/var/www/blog/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 2
+
+# 重启策略
+Restart=always
+RestartSec=5
+
+# 日志
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=blog-api
+
+# 安全设置
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

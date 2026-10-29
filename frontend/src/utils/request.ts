@@ -1,0 +1,78 @@
+import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios'
+import { ElMessage } from 'element-plus'
+import { useUserStore } from '@/stores/user'
+import router from '@/router'
+
+// 创建 axios 实例
+const request: AxiosInstance = axios.create({
+  baseURL: '/api/v1',
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
+
+// 请求拦截器
+request.interceptors.request.use(
+  (config) => {
+    const userStore = useUserStore()
+    if (userStore.token) {
+      config.headers.Authorization = `Bearer ${userStore.token}`
+    }
+    return config
+  },
+  (error) => {
+    return Promise.reject(error)
+  }
+)
+
+// 响应拦截器
+request.interceptors.response.use(
+  (response: AxiosResponse) => {
+    return response
+  },
+  async (error) => {
+    const { response } = error
+    
+    if (response) {
+      const { status, data } = response
+      
+      switch (status) {
+        case 401:
+          // Token 过期，尝试刷新
+          const userStore = useUserStore()
+          if (userStore.refreshToken) {
+            try {
+              await userStore.refreshAccessToken()
+              // 重试原请求
+              return request(error.config)
+            } catch {
+              userStore.logout()
+              router.push('/login')
+            }
+          } else {
+            userStore.logout()
+            router.push('/login')
+          }
+          break
+        case 403:
+          ElMessage.error(data.detail || '没有权限')
+          break
+        case 404:
+          ElMessage.error(data.detail || '资源不存在')
+          break
+        case 422:
+          ElMessage.error('请求参数错误')
+          break
+        default:
+          ElMessage.error(data.detail || '服务器错误')
+      }
+    } else {
+      ElMessage.error('网络错误，请检查网络连接')
+    }
+    
+    return Promise.reject(error)
+  }
+)
+
+export default request

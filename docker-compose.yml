@@ -1,0 +1,37 @@
+services:
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:16-alpine
+    container_name: blog-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bloguser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-password}
+      POSTGRES_DB: ${POSTGRES_DB:-blogdb}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-bloguser} -d $${POSTGRES_DB:-blogdb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 可选：pgAdmin 数据库管理工具
+  # pgadmin:
+  #   image: dpage/pgadmin4:latest
+  #   container_name: blog-pgadmin
+  #   restart: unless-stopped
+  #   environment:
+  #     PGADMIN_DEFAULT_EMAIL: admin@example.com
+  #     PGADMIN_DEFAULT_PASSWORD: admin123
+  #   ports:
+  #     - "5050:80"
+  #   depends_on:
+  #     - postgres
+
+volumes:
+  postgres_data:
+    name: blog_postgres_data

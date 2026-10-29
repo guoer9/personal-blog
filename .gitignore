@@ -1,0 +1,39 @@
+# Local secrets and environment files
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# Python
+backend/venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Runtime data
+backend/uploads/
+*.sqlite3
+*.db
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/tsconfig.tsbuildinfo
+
+# Tooling and local workspace files
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.worktrees/
+worktrees/
+.superpowers/
+output/playwright/
