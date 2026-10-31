@@ -1,279 +1,320 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, ref } from 'vue'
 import { getPosts, type Post } from '@/api/posts'
 import { getTags, type Tag } from '@/api/tags'
-import { formatDate } from '@/utils/format'
+import { profile, projects, resources } from '@/data/portfolio'
+import ImmersiveScene from '@/components/immersive/ImmersiveScene.vue'
+import MagneticLink from '@/components/immersive/MagneticLink.vue'
+import ScrollReveal from '@/components/immersive/ScrollReveal.vue'
+import ArticleRow from '@/components/blog/ArticleRow.vue'
+import StatePanel from '@/components/blog/StatePanel.vue'
 
-const router = useRouter()
 const posts = ref<Post[]>([])
 const tags = ref<Tag[]>([])
-const loading = ref(false)
-const currentPage = ref(1)
-const pageSize = ref(10)
-const total = ref(0)
+const loading = ref(true)
+const error = ref(false)
 
-async function fetchPosts() {
+async function loadHomeContent() {
   loading.value = true
+  error.value = false
   try {
-    const response = await getPosts({
-      page: currentPage.value,
-      page_size: pageSize.value,
-    })
-    posts.value = response.data.items
-    total.value = response.data.total
-  } catch (error) {
-    console.error('获取文章列表失败', error)
+    const [postResponse, tagResponse] = await Promise.all([getPosts({ page_size: 4 }), getTags()])
+    posts.value = postResponse.data.items
+    tags.value = tagResponse.data
+  } catch {
+    error.value = true
   } finally {
     loading.value = false
   }
 }
 
-async function fetchTags() {
-  try {
-    const response = await getTags()
-    tags.value = response.data
-  } catch (error) {
-    console.error('获取标签失败', error)
-  }
-}
-
-function handlePageChange(page: number) {
-  currentPage.value = page
-  fetchPosts()
-  window.scrollTo({ top: 0, behavior: 'smooth' })
-}
-
-onMounted(() => {
-  fetchPosts()
-  fetchTags()
-})
+onMounted(loadHomeContent)
 </script>
 
 <template>
-  <div class="home-page container">
-    <div class="content-wrapper">
-      <!-- 文章列表 -->
-      <div class="posts-section">
-        <h2 class="section-title">最新文章</h2>
-        
-        <div v-loading="loading" class="posts-list">
-          <article 
-            v-for="post in posts" 
-            :key="post.id" 
-            class="post-card"
-            @click="router.push(`/post/${post.slug}`)"
-          >
-            <div v-if="post.cover_image" class="post-cover">
-              <img :src="post.cover_image" :alt="post.title" />
-            </div>
-            <div class="post-content">
-              <h3 class="post-title">{{ post.title }}</h3>
-              <p v-if="post.summary" class="post-summary">{{ post.summary }}</p>
-              <div class="post-meta">
-                <span class="author">
-                  <el-avatar :size="20">{{ post.author.username.charAt(0) }}</el-avatar>
-                  {{ post.author.username }}
-                </span>
-                <span class="date">{{ formatDate(post.created_at) }}</span>
-                <span class="views">
-                  <el-icon><View /></el-icon>
-                  {{ post.view_count }}
-                </span>
-              </div>
-              <div v-if="post.tags.length" class="post-tags">
-                <el-tag 
-                  v-for="tag in post.tags" 
-                  :key="tag.id" 
-                  size="small"
-                  @click.stop="router.push(`/tag/${tag.slug}`)"
-                >
-                  {{ tag.name }}
-                </el-tag>
-              </div>
-            </div>
-          </article>
-          
-          <el-empty v-if="!loading && posts.length === 0" description="暂无文章" />
-        </div>
-        
-        <!-- 分页 -->
-        <div v-if="total > pageSize" class="pagination">
-          <el-pagination
-            v-model:current-page="currentPage"
-            :page-size="pageSize"
-            :total="total"
-            layout="prev, pager, next"
-            @current-change="handlePageChange"
-          />
+  <div class="home">
+    <section class="hero page-shell" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="hero-kicker"><span class="status-dot" /> {{ profile.availability }} <span>／</span> {{ profile.location }}</p>
+        <h1 id="hero-title">
+          <span>Make ideas</span>
+          <em>move.</em>
+        </h1>
+        <p class="hero-intro">{{ profile.intro }}</p>
+        <div class="hero-actions">
+          <router-link to="/writing" class="editorial-button editorial-button--acid">阅读文章 <span aria-hidden="true">↗</span></router-link>
+          <MagneticLink href="#projects">查看项目</MagneticLink>
         </div>
       </div>
-      
-      <!-- 侧边栏 -->
-      <aside class="sidebar">
-        <div class="sidebar-section">
-          <h3 class="sidebar-title">标签</h3>
-          <div class="tags-cloud">
-            <el-tag
-              v-for="tag in tags"
-              :key="tag.id"
-              class="tag-item"
-              @click="router.push(`/tag/${tag.slug}`)"
-            >
-              {{ tag.name }}
-            </el-tag>
-            <span v-if="tags.length === 0" class="no-tags">暂无标签</span>
-          </div>
-        </div>
-      </aside>
+      <div class="hero-visual">
+        <ImmersiveScene />
+        <span class="hero-signature">{{ profile.name }}</span>
+      </div>
+      <div class="hero-footnote">
+        <span>01 — FIELD NOTES</span>
+        <span>SOFTWARE / THINKING / MOTION</span>
+      </div>
+    </section>
+
+    <div class="marquee" aria-hidden="true">
+      <div class="marquee-track">
+        <span>CODE WITH INTENTION <i>✳</i> WRITE TO REMEMBER <i>✳</i> DESIGN FOR CLARITY <i>✳</i></span>
+        <span>CODE WITH INTENTION <i>✳</i> WRITE TO REMEMBER <i>✳</i> DESIGN FOR CLARITY <i>✳</i></span>
+      </div>
     </div>
+
+    <section id="writing" class="writing-section page-shell" aria-labelledby="writing-title">
+      <ScrollReveal>
+        <div class="section-title-row">
+          <div>
+            <p class="section-kicker">01 / Recent writing</p>
+            <h2 id="writing-title" class="section-heading">Latest<br /><em>field notes.</em></h2>
+          </div>
+          <router-link to="/writing" class="section-link">ALL NOTES <span>↗</span></router-link>
+        </div>
+      </ScrollReveal>
+      <div class="writing-grid">
+        <div class="article-list">
+          <ArticleRow v-for="(post, index) in posts" :key="post.id" :post="post" :index="index" />
+          <div v-if="loading" class="loading-lines" aria-label="正在载入文章">
+            <span v-for="index in 3" :key="index" />
+          </div>
+          <div v-if="error" class="inline-error">
+            <span>暂时无法读取文章列表。</span>
+            <button class="text-action" type="button" @click="loadHomeContent">重新尝试 ↗</button>
+          </div>
+          <StatePanel
+            v-if="!loading && !error && posts.length === 0"
+            title="第一篇，正在路上。"
+            description="文章会在发布后出现在这里。先去项目与关于页面逛逛吧。"
+            action-label="了解这个博客"
+            @action="$router.push('/about')"
+          />
+        </div>
+        <aside class="topic-index" aria-label="标签索引">
+          <div class="topic-index-heading">
+            <span>INDEX / TOPICS</span>
+            <span>↘</span>
+          </div>
+          <router-link v-for="(tag, index) in tags" :key="tag.id" :to="`/tag/${tag.slug}`" class="topic-row">
+            <span>{{ String(index + 1).padStart(2, '0') }}</span>
+            <strong>{{ tag.name }}</strong>
+            <span aria-hidden="true">↗</span>
+          </router-link>
+          <p v-if="!loading && tags.length === 0" class="empty-topics">更多主题将在写作中逐渐成形。</p>
+          <router-link to="/search" class="topic-search">寻找一个关键词 <span>⌕</span></router-link>
+        </aside>
+      </div>
+    </section>
+
+    <section id="projects" class="projects-section" aria-labelledby="projects-title">
+      <div class="page-shell">
+        <ScrollReveal>
+          <div class="section-title-row section-title-row--light">
+            <div>
+              <p class="section-kicker">02 / Selected work</p>
+              <h2 id="projects-title" class="section-heading">Made to<br /><em>be used.</em></h2>
+            </div>
+            <p class="projects-note">一些正在积累的作品，<br />以及仍在进行中的实验。</p>
+          </div>
+        </ScrollReveal>
+        <div class="project-grid">
+          <ScrollReveal v-for="(project, index) in projects" :key="project.number" :delay="index * 80">
+            <component
+              :is="project.external ? 'a' : 'router-link'"
+              v-bind="project.external ? { href: project.href, target: '_blank', rel: 'noreferrer' } : { to: project.href }"
+              class="project-card"
+              :class="`project-card--${project.accent}`"
+            >
+              <div class="project-topline"><span>{{ project.number }}</span><span>{{ project.type }}</span></div>
+              <div class="project-glyph" aria-hidden="true">
+                <span v-if="index === 0">▦</span>
+                <span v-else-if="index === 1">∿</span>
+                <span v-else>✳</span>
+              </div>
+              <div class="project-bottom">
+                <h3>{{ project.title }}</h3>
+                <p>{{ project.description }}</p>
+                <div class="project-stack"><span v-for="item in project.stack" :key="item">{{ item }}</span></div>
+              </div>
+              <span class="project-arrow" aria-hidden="true">↗</span>
+            </component>
+          </ScrollReveal>
+        </div>
+      </div>
+    </section>
+
+    <section id="motion" class="principle-section page-shell" aria-labelledby="principles-title">
+      <ScrollReveal>
+        <div class="principle-intro">
+          <p class="section-kicker">03 / Working principles</p>
+          <h2 id="principles-title" class="section-heading">Signal over<br /><em>noise.</em></h2>
+          <p>技术、视觉与表达最终都服务于理解。把复杂留给自己，把清晰交给读者。</p>
+        </div>
+      </ScrollReveal>
+      <div class="principle-list">
+        <ScrollReveal v-for="(principle, index) in profile.principles" :key="principle.title" :delay="index * 80">
+          <article class="principle-row">
+            <span>{{ String(index + 1).padStart(2, '0') }}</span>
+            <h3>{{ principle.title }}</h3>
+            <p>{{ principle.body }}</p>
+          </article>
+        </ScrollReveal>
+      </div>
+    </section>
+
+    <section id="resources" class="resource-section page-shell" aria-labelledby="resource-title">
+      <ScrollReveal>
+        <p class="section-kicker">04 / Elsewhere</p>
+        <h2 id="resource-title" class="section-heading">Keep<br /><em>exploring.</em></h2>
+      </ScrollReveal>
+      <div class="resource-grid">
+        <router-link v-for="resource in resources" :key="resource.index" :to="resource.href" class="resource-card">
+          <div class="resource-top"><span>{{ resource.index }}</span><span>{{ resource.kind }}</span></div>
+          <h3>{{ resource.title }}</h3>
+          <p>{{ resource.description }}</p>
+          <span class="resource-arrow" aria-hidden="true">↗</span>
+        </router-link>
+      </div>
+    </section>
   </div>
 </template>
 
 <style scoped>
-.home-page {
-  padding: 24px 20px;
-}
-
-.content-wrapper {
+.home { overflow: clip; }
+.hero {
   display: grid;
-  grid-template-columns: 1fr 280px;
-  gap: 24px;
-}
-
-@media (max-width: 768px) {
-  .content-wrapper {
-    grid-template-columns: 1fr;
-  }
-}
-
-.section-title {
-  font-size: 20px;
-  font-weight: 600;
-  margin-bottom: 20px;
-  color: #303133;
-}
-
-.posts-list {
-  min-height: 200px;
-}
-
-.post-card {
-  background: #fff;
-  border-radius: 12px;
-  overflow: hidden;
-  cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
-  margin-bottom: 20px;
-}
-
-.post-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-}
-
-.post-cover {
-  height: 200px;
-  overflow: hidden;
-}
-
-.post-cover img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.post-content {
-  padding: 20px;
-}
-
-.post-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 8px;
-  color: #303133;
-  line-height: 1.4;
-}
-
-.post-summary {
-  color: #606266;
-  font-size: 14px;
-  line-height: 1.6;
-  margin-bottom: 12px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.post-meta {
-  display: flex;
+  grid-template-columns: minmax(0, 0.92fr) minmax(360px, 1.08fr);
   align-items: center;
-  gap: 16px;
-  font-size: 13px;
-  color: #909399;
-  margin-bottom: 12px;
+  min-height: min(790px, calc(100vh - 76px));
+  padding-top: 36px;
+  padding-bottom: 64px;
 }
-
-.author {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.views {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.post-tags {
+.hero-copy { position: relative; z-index: 2; }
+.hero-kicker {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
+  margin-bottom: 36px;
+  color: var(--muted);
+  font: 0.65rem var(--mono-font);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
-
-.post-tags .el-tag {
-  cursor: pointer;
+.status-dot { width: 7px; height: 7px; margin-right: 2px; border-radius: 50%; background: #5c9917; box-shadow: 0 0 0 4px rgba(92, 153, 23, 0.14); }
+h1 {
+  margin-bottom: 28px;
+  font-family: var(--display-font);
+  font-size: clamp(5.2rem, 10vw, 10.5rem);
+  font-weight: 400;
+  letter-spacing: -0.075em;
+  line-height: 0.77;
 }
-
-.pagination {
+h1 span, h1 em { display: block; }
+h1 em, .section-heading em { color: var(--electric-blue); font-weight: 400; }
+.hero-intro { max-width: 480px; color: var(--muted); font-size: clamp(1rem, 1.5vw, 1.22rem); line-height: 1.8; }
+.hero-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 26px; margin-top: 38px; }
+.hero-visual { position: relative; min-width: 0; min-height: 480px; }
+.hero-visual :deep(.immersive-scene) { height: min(680px, 72vh); }
+.hero-signature { position: absolute; right: 10%; bottom: 18%; z-index: 1; color: rgba(17, 17, 17, 0.1); font: 800 clamp(3rem, 7vw, 7rem) var(--display-font); letter-spacing: -0.05em; pointer-events: none; }
+.hero-footnote { grid-column: 1 / -1; display: flex; justify-content: space-between; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font: 0.58rem var(--mono-font); letter-spacing: 0.07em; }
+.marquee { overflow: hidden; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); background: var(--acid); }
+.marquee-track { display: flex; width: max-content; animation: marquee 24s linear infinite; }
+.marquee-track span { display: block; padding: 13px 0; font: 0.72rem var(--mono-font); letter-spacing: 0.12em; white-space: nowrap; }
+.marquee i { padding: 0 30px; font-style: normal; }
+@keyframes marquee { to { transform: translateX(-50%); } }
+.writing-section { padding-top: var(--section-space); }
+.section-title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; }
+.section-link { display: inline-flex; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--ink); color: var(--ink); font: 0.68rem var(--mono-font); text-decoration: none; white-space: nowrap; }
+.writing-grid { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: clamp(40px, 7vw, 100px); }
+.topic-index { align-self: start; padding-top: 10px; }
+.topic-index-heading { display: flex; justify-content: space-between; padding-bottom: 13px; border-bottom: 1px solid var(--ink); color: var(--muted); font: 0.62rem var(--mono-font); letter-spacing: 0.06em; }
+.topic-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 14px 0; border-bottom: 1px solid var(--line); color: var(--ink); text-decoration: none; }
+.topic-row span { color: var(--muted); font: 0.6rem var(--mono-font); }
+.topic-row strong { overflow-wrap: anywhere; font-size: 0.82rem; font-weight: 500; }
+.topic-row:hover strong { color: var(--electric-blue); }
+.empty-topics { padding: 22px 0; color: var(--muted); font-size: 0.8rem; }
+.topic-search { display: flex; justify-content: space-between; margin-top: 24px; padding: 12px; border: 1px solid var(--ink); color: var(--ink); font: 0.65rem var(--mono-font); text-decoration: none; }
+.topic-search:hover { background: var(--acid); }
+.loading-lines { display: grid; gap: 1px; }
+.loading-lines span { display: block; height: 122px; background: linear-gradient(90deg, var(--paper-soft), rgba(255,255,255,0.42), var(--paper-soft)); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-top: 1px solid var(--line); }
+@keyframes shimmer { to { background-position: -200% 0; } }
+.projects-section { margin-top: var(--section-space); padding: var(--section-space) 0; background: var(--ink); color: var(--paper); }
+.section-title-row--light .section-kicker, .projects-note { color: #9ca09e; }
+.section-title-row--light .section-heading em { color: var(--acid); }
+.projects-note { max-width: 260px; text-align: right; font-size: 0.82rem; }
+.project-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.project-card {
+  position: relative;
   display: flex;
-  justify-content: center;
-  margin-top: 24px;
+  flex-direction: column;
+  min-height: 500px;
+  padding: 22px;
+  overflow: hidden;
+  border: 1px solid rgba(244, 241, 234, 0.35);
+  color: var(--paper);
+  text-decoration: none;
+  transition: transform 250ms ease, border-color 250ms ease;
 }
-
-.sidebar {
-  position: sticky;
-  top: 80px;
+.project-card:hover { transform: translateY(-8px); border-color: var(--acid); }
+.project-card--lime { background: #1c280b; }
+.project-card--blue { background: #101d50; }
+.project-card--paper { background: #242424; }
+.project-topline { display: flex; justify-content: space-between; gap: 15px; color: #b1b6b2; font: 0.61rem var(--mono-font); letter-spacing: 0.04em; }
+.project-glyph { display: grid; place-items: center; flex: 1; min-height: 200px; color: var(--acid); font: 17rem/1 var(--display-font); opacity: 0.78; transform: rotate(-12deg); }
+.project-card--blue .project-glyph { color: #8eb1ff; }
+.project-card--paper .project-glyph { color: #f3b1e3; }
+.project-bottom { position: relative; z-index: 1; }
+.project-bottom h3 { margin-bottom: 12px; font: 400 2.3rem/0.95 var(--display-font); letter-spacing: -0.04em; }
+.project-bottom p { color: #bdc2c0; font-size: 0.81rem; line-height: 1.65; }
+.project-stack { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 19px; }
+.project-stack span { padding: 3px 7px; border: 1px solid rgba(244, 241, 234, 0.27); color: #d4d8d4; font: 0.57rem var(--mono-font); }
+.project-arrow { position: absolute; top: 55px; right: 22px; font-size: 1.4rem; transition: transform 220ms ease; }
+.project-card:hover .project-arrow { transform: rotate(45deg); }
+.principle-section { display: grid; grid-template-columns: minmax(260px, 0.7fr) minmax(0, 1fr); gap: clamp(40px, 8vw, 130px); padding-top: var(--section-space); }
+.principle-intro > p:last-child { max-width: 330px; color: var(--muted); font-size: 0.9rem; }
+.principle-row { display: grid; grid-template-columns: 42px minmax(0, 0.8fr) minmax(0, 1fr); gap: 22px; padding: 23px 0; border-top: 1px solid var(--line); }
+.principle-row:last-child { border-bottom: 1px solid var(--line); }
+.principle-row > span { color: var(--muted); font: 0.61rem var(--mono-font); }
+.principle-row h3 { font-size: 0.94rem; font-weight: 700; line-height: 1.45; }
+.principle-row p { color: var(--muted); font-size: 0.8rem; line-height: 1.7; }
+.resource-section { padding-top: var(--section-space); }
+.resource-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.resource-card { position: relative; min-height: 270px; padding: 22px; border: 1px solid var(--line); color: var(--ink); text-decoration: none; transition: background 180ms ease; }
+.resource-card:hover { background: var(--paper-soft); }
+.resource-top { display: flex; justify-content: space-between; color: var(--muted); font: 0.6rem var(--mono-font); }
+.resource-card h3 { margin-top: 52px; font: 400 2rem/1 var(--display-font); letter-spacing: -0.04em; }
+.resource-card p { max-width: 260px; margin-top: 14px; color: var(--muted); font-size: 0.8rem; }
+.resource-arrow { position: absolute; right: 20px; bottom: 20px; font-size: 1.2rem; }
+@media (max-width: 1000px) {
+  .hero { grid-template-columns: 1fr 0.95fr; }
+  .hero-visual :deep(.immersive-scene) { min-height: 420px; }
+  .project-grid { grid-template-columns: 1fr 1fr; }
+  .project-card:last-child { grid-column: span 2; min-height: 390px; }
+  .writing-grid { grid-template-columns: minmax(0, 1fr) 230px; gap: 40px; }
 }
-
-.sidebar-section {
-  background: #fff;
-  border-radius: 12px;
-  padding: 20px;
-  margin-bottom: 20px;
+@media (max-width: 760px) {
+  .hero { grid-template-columns: 1fr; min-height: auto; padding-top: 42px; gap: 20px; }
+  .hero-kicker { margin-bottom: 26px; }
+  h1 { font-size: clamp(4.8rem, 20vw, 7.5rem); }
+  .hero-visual { min-height: auto; }
+  .hero-visual :deep(.immersive-scene) { height: 430px; min-height: 430px; }
+  .hero-footnote { margin-top: 6px; font-size: 0.53rem; }
+  .writing-grid, .principle-section { grid-template-columns: 1fr; gap: 42px; }
+  .section-title-row { display: block; }
+  .section-link { margin-top: 25px; }
+  .projects-note { margin-top: 24px; text-align: left; }
+  .project-grid, .resource-grid { grid-template-columns: 1fr; }
+  .project-card, .project-card:last-child { min-height: 430px; grid-column: auto; }
+  .project-glyph { font-size: 12rem; }
+  .principle-row { grid-template-columns: 30px 1fr; gap: 14px; }
+  .principle-row p { grid-column: 2; }
+  .resource-card { min-height: 230px; }
 }
-
-.sidebar-title {
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: 16px;
-  color: #303133;
-}
-
-.tags-cloud {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.tag-item {
-  cursor: pointer;
-}
-
-.no-tags {
-  color: #909399;
-  font-size: 14px;
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track { animation: none; }
+  .loading-lines span { animation: none; }
+  .project-card:hover { transform: none; }
 }
 </style>

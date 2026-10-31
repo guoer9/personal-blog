@@ -1,167 +1,92 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { getPosts, type Post } from '@/api/posts'
-import { formatDate } from '@/utils/format'
+import ArticleRow from '@/components/blog/ArticleRow.vue'
+import StatePanel from '@/components/blog/StatePanel.vue'
 
 const route = useRoute()
-const router = useRouter()
 const posts = ref<Post[]>([])
-const loading = ref(false)
-const currentPage = ref(1)
-const pageSize = ref(10)
+const loading = ref(true)
+const error = ref(false)
 const total = ref(0)
+const tagSlug = computed(() => String(route.params.slug || ''))
+const pageSize = 12
+const totalPages = computed(() => Math.ceil(total.value / pageSize))
+const currentPage = ref(1)
 
-const tagSlug = computed(() => route.params.slug as string)
-
-async function fetchPosts() {
+async function loadTagPosts(page = 1) {
   loading.value = true
+  error.value = false
+  currentPage.value = page
   try {
-    const response = await getPosts({
-      page: currentPage.value,
-      page_size: pageSize.value,
-      tag: tagSlug.value,
-    })
+    const response = await getPosts({ tag: tagSlug.value, page: currentPage.value, page_size: pageSize })
     posts.value = response.data.items
     total.value = response.data.total
-  } catch (error) {
-    console.error('获取文章列表失败', error)
+  } catch {
+    error.value = true
   } finally {
     loading.value = false
   }
 }
 
-function handlePageChange(page: number) {
-  currentPage.value = page
-  fetchPosts()
+function changePage(page: number) {
+  if (page < 1 || page > totalPages.value) return
+  loadTagPosts(page)
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-onMounted(() => {
-  fetchPosts()
-})
-
-watch(tagSlug, () => {
-  currentPage.value = 1
-  fetchPosts()
-})
+onMounted(() => loadTagPosts())
+watch(tagSlug, () => loadTagPosts())
 </script>
 
 <template>
-  <div class="tag-posts-page container">
-    <div class="page-header">
-      <el-button text @click="router.push('/')">
-        <el-icon><ArrowLeft /></el-icon>
-        返回
-      </el-button>
-      <h1 class="page-title">
-        <el-tag size="large">{{ tagSlug }}</el-tag>
-        <span>标签下的文章</span>
-      </h1>
-    </div>
-    
-    <div v-loading="loading" class="posts-list">
-      <article
-        v-for="post in posts"
-        :key="post.id"
-        class="post-card"
-        @click="router.push(`/post/${post.slug}`)"
-      >
-        <h3 class="post-title">{{ post.title }}</h3>
-        <p v-if="post.summary" class="post-summary">{{ post.summary }}</p>
-        <div class="post-meta">
-          <span class="author">{{ post.author.username }}</span>
-          <span class="date">{{ formatDate(post.created_at) }}</span>
-          <span class="views">
-            <el-icon><View /></el-icon>
-            {{ post.view_count }}
-          </span>
+  <div class="tag-page page-stage">
+    <div class="page-shell">
+      <header class="simple-page-header">
+        <router-link to="/writing" class="back-link">← 返回归档 / ARCHIVE</router-link>
+        <p class="section-kicker">Topic index / tagged notes</p>
+        <div class="heading-row">
+          <h1>#{{ tagSlug }}</h1>
+          <span class="result-count">{{ total }} 篇相关文章</span>
         </div>
-      </article>
-      
-      <el-empty v-if="!loading && posts.length === 0" description="该标签下暂无文章" />
-    </div>
-    
-    <div v-if="total > pageSize" class="pagination">
-      <el-pagination
-        v-model:current-page="currentPage"
-        :page-size="pageSize"
-        :total="total"
-        layout="prev, pager, next"
-        @current-change="handlePageChange"
-      />
+        <p class="page-lede">同一主题下的文章会在这里归到一起，方便沿着问题继续阅读。</p>
+      </header>
+
+      <section class="tag-results" aria-label="标签文章列表">
+        <div v-if="loading" class="loading-block" aria-label="正在载入文章">
+          <span v-for="index in 4" :key="index" />
+        </div>
+        <div v-else-if="error" class="inline-error">
+          <span>标签文章暂时无法加载。</span>
+          <button type="button" class="text-action" @click="loadTagPosts(currentPage)">重试 ↗</button>
+        </div>
+        <div v-else-if="posts.length" class="article-list">
+          <ArticleRow v-for="(post, index) in posts" :key="post.id" :post="post" :index="index" />
+        </div>
+        <StatePanel
+          v-else
+          title="这个主题还在等待第一篇文章。"
+          description="可以先去文章归档看看其他内容。"
+          action-label="浏览全部文章"
+          @action="$router.push('/writing')"
+        />
+        <div v-if="totalPages > 1" class="pagination-bar tag-pagination">
+          <span>PAGE {{ currentPage }} / {{ totalPages }}</span>
+          <div class="pagination-buttons">
+            <button type="button" :disabled="currentPage === 1" aria-label="上一页" @click="changePage(currentPage - 1)">←</button>
+            <button type="button" :disabled="currentPage === totalPages" aria-label="下一页" @click="changePage(currentPage + 1)">→</button>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 </template>
 
 <style scoped>
-.tag-posts-page {
-  max-width: 800px;
-  padding: 24px 20px;
-}
-
-.page-header {
-  margin-bottom: 24px;
-}
-
-.page-title {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 20px;
-  font-weight: 600;
-  margin-top: 16px;
-}
-
-.posts-list {
-  min-height: 200px;
-}
-
-.post-card {
-  background: #fff;
-  border-radius: 12px;
-  padding: 20px;
-  cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
-  margin-bottom: 16px;
-}
-
-.post-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-}
-
-.post-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 8px;
-  color: #303133;
-}
-
-.post-summary {
-  color: #606266;
-  font-size: 14px;
-  line-height: 1.6;
-  margin-bottom: 12px;
-}
-
-.post-meta {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  font-size: 13px;
-  color: #909399;
-}
-
-.views {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.pagination {
-  display: flex;
-  justify-content: center;
-  margin-top: 24px;
-}
+.tag-results { padding-top: 34px; }
+.tag-pagination { margin-top: 34px; }
+.loading-block { display: grid; }
+.loading-block span { display: block; height: 122px; border-top: 1px solid var(--line); background: linear-gradient(90deg, var(--paper-soft), transparent, var(--paper-soft)); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
+@keyframes shimmer { to { background-position: -200% 0; } }
 </style>

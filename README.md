@@ -1,34 +1,68 @@
-# 个人博客系统
+# GUOER · Field Notes
 
-一个基于 Vue 3 + FastAPI 的前后端分离个人博客系统。
+一个基于 Vue 3 + FastAPI + PostgreSQL 的个人博客与内容管理系统。本次二次开发保留了原有文章、标签、搜索、评论、认证、上传和后台能力，并重新划分公共展示、动效与内容系统之间的边界。
 
-## 功能特性
+## 你会看到什么
 
-- **用户系统**：注册、登录、JWT 认证
-- **博客功能**：文章发布、Markdown 编辑器、标签分类
-- **评论系统**：支持嵌套回复
-- **文件管理**：图片/文件上传下载
-- **搜索功能**：文章全文搜索
-- **管理后台**：文章、评论、文件、标签管理
+- 原创暖纸色、墨黑、酸橙绿和电蓝视觉系统。
+- 首页 Three.js 装饰场景、滚动揭示与原生页面阅读。
+- 文章归档、搜索、标签页、文章详情、关于页和 404。
+- 完整后台：登录、文章编辑、标签、评论与文件管理。
+- WebGL 不可用或开启减少动态效果时，仍然完整可读的静态版本。
+
+`lusion.co-ddw/` 是本地研究资料，已被 Git 忽略。它不参与构建，项目也不复制其中的模型、音频、原始着色器、文案或设计资产。
+
+## 架构
+
+```text
+public UI (Vue views/components)
+       ├── portfolio.ts      静态、可编辑的个人展示数据
+       ├── immersive/        DOM 动效、画布生命周期与海报后备
+       └── graphics/         Three.js 场景 + GLSL + 动效数学
+                    │
+                    ▼
+REST API (FastAPI) → PostgreSQL
+       ├── posts / tags / search / comments
+       ├── auth / uploads
+       └── admin authorization
+```
+
+公共博客层和后台内容系统共享同一套 API 与认证，但职责分开：
+
+- `frontend/src/data/` 只保存可替换的个人信息与作品入口，文章正文继续存在数据库。
+- `frontend/src/components/immersive/` 管理 DOM 动效、画布生命周期和静态后备。
+- `frontend/src/graphics/` 管理 WebGL 渲染与纯数学函数，不依赖参考目录。
+- `frontend/src/components/blog/` 放可复用的文章行和页面状态。
+- `backend/app/` 继续提供文章、搜索、评论、标签、上传与认证接口。
+
+## 编辑个人信息与项目
+
+打开 [portfolio.ts](frontend/src/data/portfolio.ts)：
+
+- `profile`：名称、角色、介绍、地点、状态和工作原则。
+- `projects`：首页项目卡的标题、描述、技术栈与链接。站内路径使用 `href`，外部链接同时设 `external: true`。
+- `resources`：归档、关于、搜索等公开入口。
+- `navigation`：顶部主导航。
+
+当前只写入已知身份信息：名称 `GUOER`，地点 `Shanghai, CN`。邮箱、GitHub、客户、奖项和真实外链在你提供并确认之前不应编造。
+
+## 动效和降级
+
+首页画布由 `ImmersiveScene.vue` 延迟创建，Three.js 模块只在确实需要 WebGL 时加载。场景随指针轻微旋转，`scrollY` 只用于调整视觉姿态，浏览器继续负责原生滚动。
+
+- 页面离开或画布离屏时停止动画。
+- 标签页隐藏时暂停渲染。
+- `prefers-reduced-motion: reduce` 直接呈现静态海报，不加载 Three.js。
+- WebGL 初始化失败会捕获异常并保留同一张静态海报。
+- 设备像素比最高为 `1.75`，指针数值经过边界限制和与帧率无关的阻尼。
+
+`liquidScene.ts` 当前是原创二十面体顶点形变和线框叠层的轻量场景，不包含参考项目的 ping-pong 纹理模拟，也没有复制参考站页面或引擎代码。
 
 ## 技术栈
 
-### 前端
-- Vue 3 + Composition API
-- TypeScript
-- Vue Router 4
-- Pinia
-- Element Plus
-- md-editor-v3
-- Vite
-
-### 后端
-- FastAPI
-- SQLAlchemy 2.0 (异步)
-- PostgreSQL
-- Alembic (数据库迁移)
-- python-jose (JWT)
-- passlib (密码加密)
+- 前端：Vue 3、TypeScript、Vue Router、Pinia、Element Plus、Three.js、Vite、Vitest。
+- 后端：FastAPI、SQLAlchemy 2.0 异步模式、PostgreSQL、Alembic、JWT。
+- 部署：Nginx + Systemd；本地数据库由 Docker Compose 提供。
 
 ## 快速开始
 
@@ -36,57 +70,101 @@
 
 - Python 3.11+
 - Node.js 18+
-- PostgreSQL 14+
+- PostgreSQL 14+，或使用仓库内的 Docker Compose
 
-### 后端设置
+### 启动数据库
 
 ```bash
-# 进入后端目录
-cd backend
-
-# 创建虚拟环境
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# venv\Scripts\activate   # Windows
-
-# 安装依赖
-pip install -r requirements.txt
-
-# 配置环境变量
-cp .env.example .env
-# 编辑 .env 文件，设置数据库连接等
-
-# 创建数据库
-createdb blogdb
-
-# 运行数据库迁移
-alembic upgrade head
-
-# 启动开发服务器
-uvicorn app.main:app --reload
+docker compose up -d postgres
 ```
 
-### 前端设置
+本地数据库映射到主机端口 `5433`。
+
+### 启动后端
 
 ```bash
-# 进入前端目录
+cd backend
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+# 编辑 backend/.env；本地示例已使用 docker-compose 的数据库配置
+alembic upgrade head
+uvicorn app.main:app --reload --port 8000
+```
+
+### 启动前端
+
+另开终端：
+
+```bash
 cd frontend
-
-# 安装依赖
 npm install
-
-# 启动开发服务器
 npm run dev
 ```
 
-### 访问应用
+访问：
 
-- 前端: http://localhost:5173
-- 后端 API: http://localhost:8000
-- API 文档: http://localhost:8000/docs
+- 前端：<http://localhost:5173>
+- 后端 API：<http://localhost:8000>
+- API 文档：<http://localhost:8000/docs>
+
+## 常用命令
+
+```bash
+# 前端单元测试
+npm --prefix frontend run test
+
+# 前端类型检查与生产构建
+npm --prefix frontend run build
+
+# 后端编译与测试
+python3 -m compileall -q backend/app
+python3 -m pytest -q
+
+# 完整基线检查（标记检查、构建、后端编译和测试）
+./scripts/check-repository-baseline.sh
+
+# 查看未提交差异
+git diff --check
+```
+
+## 项目结构
+
+```text
+personal-blog/
+├── frontend/
+│   ├── public/favicon.svg
+│   ├── src/
+│   │   ├── api/                  # API 请求
+│   │   ├── components/
+│   │   │   ├── blog/             # 公共文章条目与状态
+│   │   │   ├── immersive/        # 动效组件、WebGL 生命周期与后备
+│   │   │   └── navigation/
+│   │   ├── data/portfolio.ts     # 个人信息、项目与资源
+│   │   ├── graphics/             # Three.js、GLSL 与纯数学函数
+│   │   ├── layouts/              # 公共与后台布局
+│   │   ├── router/               # 路由、标题和滚动恢复
+│   │   ├── stores/               # 认证状态
+│   │   ├── views/blog/           # 首页、归档、搜索、标签、文章、关于、404
+│   │   └── views/admin/          # 后台页面
+│   └── vite.config.ts
+├── backend/
+│   ├── app/
+│   │   ├── api/                  # API 路由
+│   │   ├── core/                 # 配置与安全
+│   │   ├── crud/                 # 数据库操作
+│   │   ├── db/                   # 数据库配置
+│   │   ├── models/               # 数据模型
+│   │   └── schemas/              # Pydantic 模式
+│   └── alembic/                  # 数据库迁移
+├── deploy/                       # Nginx、Systemd 与部署脚本
+├── docs/implementation/          # 本次重建的实现记录
+├── docker-compose.yml
+└── README.md
+```
 
 ## 当前部署约定
-
 - 本地 PostgreSQL 由 `docker-compose.yml` 提供，主机端口是 `5433`。
 - 生产环境使用 Nginx + Systemd；生产环境变量由服务器上的 `/etc/personal-blog/blog-api.env` 提供。
 - `deploy/nginx.conf.template` 和 `deploy/deploy.sh` 不包含具体域名、证书或生产密钥。部署时通过 `DOMAIN` 和 `CERT_EMAIL` 注入当前有效域名。
@@ -106,55 +184,7 @@ MAX_UPLOAD_SIZE=10485760
 ENVIRONMENT=production
 ```
 
-## 验证
-
-```bash
-# 前端构建
-cd frontend && npm run build
-
-# 后端编译
-cd ../backend && python -m compileall -q app
-
-# 完整基线检查（过期部署标记、前端构建、后端编译和测试）
-cd .. && ./scripts/check-repository-baseline.sh
-```
-
-## 项目结构
-
-```
-personal-blog/
-├── frontend/                    # 前端项目
-│   ├── src/
-│   │   ├── api/                # API 请求
-│   │   ├── components/         # 组件
-│   │   ├── layouts/            # 布局
-│   │   ├── router/             # 路由
-│   │   ├── stores/             # 状态管理
-│   │   ├── utils/              # 工具函数
-│   │   └── views/              # 页面
-│   └── ...
-│
-├── backend/                     # 后端项目
-│   ├── app/
-│   │   ├── api/                # API 路由
-│   │   ├── core/               # 核心配置
-│   │   ├── crud/               # 数据库操作
-│   │   ├── db/                 # 数据库配置
-│   │   ├── models/             # 数据模型
-│   │   └── schemas/            # Pydantic 模式
-│   ├── alembic/                # 数据库迁移
-│   └── ...
-│
-├── deploy/                      # 部署配置
-│   ├── nginx.conf.template     # Nginx 配置模板
-│   ├── blog-api.service        # Systemd 服务
-│   └── deploy.sh               # 部署脚本
-│
-└── README.md
-```
-
 ## 部署
-
 ### 服务器要求
 
 - Ubuntu 20.04+ / Debian 11+
@@ -193,7 +223,6 @@ sudo ./deploy.sh
 参考 `deploy/deploy.sh` 脚本中的步骤手动执行。
 
 ## 环境变量
-
 ### 后端 (.env)
 
 | 变量 | 说明 | 示例 |
@@ -205,7 +234,6 @@ sudo ./deploy.sh
 | MAX_UPLOAD_SIZE | 最大上传大小 | 10485760 (10MB) |
 
 ## 常见问题
-
 ### 创建管理员账号
 
 1. 先通过网页注册一个普通用户
@@ -229,5 +257,4 @@ alembic downgrade -1
 ```
 
 ## License
-
 MIT

@@ -3,6 +3,13 @@ import { useUserStore } from '@/stores/user'
 
 const router = createRouter({
   history: createWebHistory(),
+  scrollBehavior(to, _from, savedPosition) {
+    if (savedPosition) return savedPosition
+    if (to.hash) {
+      return { el: to.hash, behavior: 'smooth', top: 92 }
+    }
+    return { top: 0 }
+  },
   routes: [
     {
       path: '/',
@@ -17,6 +24,11 @@ const router = createRouter({
           path: 'post/:slug',
           name: 'PostDetail',
           component: () => import('@/views/blog/PostDetail.vue'),
+        },
+        {
+          path: 'writing',
+          name: 'Archive',
+          component: () => import('@/views/blog/Archive.vue'),
         },
         {
           path: 'tag/:slug',
@@ -93,6 +105,21 @@ const router = createRouter({
       component: () => import('@/views/NotFound.vue'),
     },
   ],
+})
+
+const siteTitle = 'GUOER · Field Notes'
+const pageTitles: Record<string, string> = {
+  Home: siteTitle,
+  Archive: `文章归档 · ${siteTitle}`,
+  About: `关于 · ${siteTitle}`,
+  Search: `搜索 · ${siteTitle}`,
+  TagPosts: `标签 · ${siteTitle}`,
+  PostDetail: siteTitle,
+  NotFound: `页面未找到 · ${siteTitle}`,
+}
+
+router.afterEach((to) => {
+  document.title = pageTitles[String(to.name)] || siteTitle
 })
 
 // 路由守卫

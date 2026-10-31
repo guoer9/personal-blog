@@ -37,3 +37,8 @@ frontend/tsconfig.tsbuildinfo
 worktrees/
 .superpowers/
 output/playwright/
+
+# User-supplied reverse engineering reference (large nested repository)
+/lusion.co-ddw/
+.playwright-cli/
+frontend/coverage/
