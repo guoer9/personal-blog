@@ -48,9 +48,10 @@ const router = createRouter({
       ],
     },
     {
-      path: '/login',
-      name: 'Login',
-      component: () => import('@/views/auth/Login.vue'),
+      path: '/admin/login',
+      name: 'AdminLogin',
+      component: () => import('@/views/admin/Login.vue'),
+      meta: { title: '后台登录' },
     },
     {
       path: '/register',
@@ -116,6 +117,7 @@ const pageTitles: Record<string, string> = {
   TagPosts: `标签 · ${siteTitle}`,
   PostDetail: siteTitle,
   NotFound: `页面未找到 · ${siteTitle}`,
+  AdminLogin: `后台登录 · ${siteTitle}`,
 }
 
 router.afterEach((to) => {
@@ -129,7 +131,7 @@ router.beforeEach(async (to, _from, next) => {
   // 如果需要认证
   if (to.meta.requiresAuth) {
     if (!userStore.isLoggedIn) {
-      return next({ name: 'Login', query: { redirect: to.fullPath } })
+      return next({ name: 'AdminLogin', query: { redirect: to.fullPath } })
     }
     
     // 等待用户信息加载

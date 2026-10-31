@@ -56,8 +56,8 @@ async function handleSubmit() {
       email: form.email,
       password: form.password,
     })
-    ElMessage.success('注册成功，请登录')
-    router.push('/login')
+    ElMessage.success('注册成功，请前往后台登录')
+    router.push('/admin/login')
   } catch (error: any) {
     ElMessage.error(error.response?.data?.detail || '注册失败')
   } finally {
@@ -130,7 +130,7 @@ async function handleSubmit() {
       
       <div class="footer">
         已有账号？
-        <router-link to="/login">立即登录</router-link>
+        <router-link to="/admin/login">后台登录</router-link>
       </div>
       
       <div class="back-home">

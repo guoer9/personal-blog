@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { LiquidSceneController } from '@/graphics/liquidScene'
 import { pointerToNdc } from '@/graphics/motion'
 
-withDefaults(defineProps<{ alt?: string }>(), {
+const props = withDefaults(defineProps<{ alt?: string; progress?: number; paused?: boolean }>(), {
   alt: '跟随指针与滚动的抽象虹彩几何体',
+  progress: 0,
+  paused: false,
 })
 
 const canvas = ref<HTMLCanvasElement | null>(null)
@@ -15,8 +17,16 @@ const fallback = ref(false)
 const reducedMotion = ref(false)
 const pointerX = ref(0)
 const pointerY = ref(0)
-const scroll = ref(0)
-const resizePending = ref(false)
+const scroll = ref(props.progress)
+const renderState = ref<'booting' | 'playing' | 'paused' | 'static'>('booting')
+const showPoster = computed(() => fallback.value || reducedMotion.value || (props.paused && !ready.value))
+const renderLabel = computed(() => {
+  if (props.paused && !reducedMotion.value) return 'PAUSED / MANUAL'
+  if (fallback.value || reducedMotion.value) return 'STATIC / SIGNAL'
+  if (renderState.value === 'playing') return 'LIVE / WEBGL'
+  if (renderState.value === 'paused') return 'PAUSED / OFFSCREEN'
+  return 'STATIC / SIGNAL'
+})
 
 let controller: LiquidSceneController | null = null
 let frame = 0
@@ -30,7 +40,11 @@ let cleanupListeners: Array<() => void> = []
 
 function renderLoop(time: number) {
   frame = 0
-  if (!mounted || disposed || !controller || !isVisible || document.hidden) return
+  if (!mounted || disposed || !controller || !isVisible || document.hidden || props.paused) {
+    renderState.value = props.paused || document.hidden || !isVisible ? 'paused' : 'static'
+    return
+  }
+  renderState.value = 'playing'
   controller.setInput({ pointerX: pointerX.value, pointerY: pointerY.value, scroll: scroll.value })
   controller.render(time)
   frame = requestAnimationFrame(renderLoop)
@@ -39,10 +53,13 @@ function renderLoop(time: number) {
 function stopLoop() {
   if (frame) cancelAnimationFrame(frame)
   frame = 0
+  if (controller) renderState.value = fallback.value || reducedMotion.value ? 'static' : 'paused'
 }
 
 function startLoop() {
-  if (!frame && mounted && controller && isVisible && !document.hidden) frame = requestAnimationFrame(renderLoop)
+  if (!frame && mounted && controller && isVisible && !document.hidden && !props.paused) {
+    frame = requestAnimationFrame(renderLoop)
+  }
 }
 
 function resize() {
@@ -52,7 +69,7 @@ function resize() {
 }
 
 function updateScroll() {
-  scroll.value = Math.min(window.scrollY / Math.max(window.innerHeight, 1), 1.5)
+  scroll.value = Math.min(Math.max(props.progress, 0), 1)
 }
 
 function onPointerMove(event: PointerEvent) {
@@ -71,15 +88,6 @@ function resetPointer() {
   if (fallback.value && poster.value) poster.value.style.transform = ''
 }
 
-function onScroll() {
-  if (resizePending.value) return
-  resizePending.value = true
-  requestAnimationFrame(() => {
-    resizePending.value = false
-    updateScroll()
-  })
-}
-
 function handleVisibility() {
   if (document.hidden) stopLoop()
   else startLoop()
@@ -89,22 +97,28 @@ function setReducedMotion(event: MediaQueryListEvent | MediaQueryList) {
   reducedMotion.value = event.matches
 }
 
-function activatePoster() {
-  fallback.value = true
+function suspendScene() {
   ready.value = false
   stopLoop()
+  renderState.value = 'static'
   if (controller) {
     controller.dispose()
     controller = null
   }
 }
 
+function activatePoster() {
+  fallback.value = true
+  suspendScene()
+}
+
 let initializing = false
 
 async function initialize() {
   if (initializing) return
-  if (!mounted || disposed || reducedMotion.value) {
-    if (reducedMotion.value) activatePoster()
+  if (!mounted || disposed || reducedMotion.value || props.paused) {
+    if (reducedMotion.value) suspendScene()
+    else if (props.paused) renderState.value = 'paused'
     return
   }
   if (!canvas.value || fallback.value) return
@@ -112,7 +126,7 @@ async function initialize() {
   try {
     const { createLiquidScene } = await import('@/graphics/liquidScene')
     if (!mounted || disposed || reducedMotion.value || !canvas.value) return
-    controller = createLiquidScene(canvas.value, { pointerX: 0, pointerY: 0, scroll: 0 })
+    controller = createLiquidScene(canvas.value, { pointerX: 0, pointerY: 0, scroll: props.progress })
     resize()
     updateScroll()
     ready.value = true
@@ -125,9 +139,24 @@ async function initialize() {
   }
 }
 
+watch(() => props.progress, (nextProgress) => {
+  scroll.value = Math.min(Math.max(nextProgress, 0), 1)
+}, { flush: 'post' })
+
 watch(reducedMotion, (shouldReduce) => {
-  if (shouldReduce) activatePoster()
-  else if (!controller) initialize()
+  if (shouldReduce) suspendScene()
+  else if (!controller && !fallback.value && !props.paused) initialize()
+})
+
+watch(() => props.paused, (isPaused) => {
+  if (isPaused) {
+    stopLoop()
+    renderState.value = fallback.value || reducedMotion.value ? 'static' : 'paused'
+  } else if (controller) {
+    startLoop()
+  } else if (!reducedMotion.value && !fallback.value && isVisible && !document.hidden) {
+    void initialize()
+  }
 })
 
 onMounted(async () => {
@@ -138,12 +167,10 @@ onMounted(async () => {
 
   window.addEventListener('pointermove', onPointerMove, { passive: true })
   window.addEventListener('pointerleave', resetPointer)
-  window.addEventListener('scroll', onScroll, { passive: true })
   document.addEventListener('visibilitychange', handleVisibility)
   cleanupListeners = [
     () => window.removeEventListener('pointermove', onPointerMove),
     () => window.removeEventListener('pointerleave', resetPointer),
-    () => window.removeEventListener('scroll', onScroll),
     () => document.removeEventListener('visibilitychange', handleVisibility),
     () => mediaQuery?.removeEventListener('change', setReducedMotion),
   ]
@@ -158,6 +185,7 @@ onMounted(async () => {
     }, { threshold: 0.01 })
     visibilityObserver.observe(root.value)
   }
+  updateScroll()
   await initialize()
 })
 
@@ -177,20 +205,29 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="root" class="immersive-scene" role="img" :aria-label="alt">
+  <div
+    ref="root"
+    class="immersive-scene"
+    role="img"
+    :aria-label="alt"
+    :data-render-state="renderState"
+    :data-motion-stage="fallback ? undefined : scroll < 0.18 ? 'idea' : scroll < 0.48 ? 'writing' : scroll < 0.78 ? 'projects' : 'signal'"
+    :style="{ '--scene-progress': scroll }"
+  >
     <div class="scene-grid" aria-hidden="true" />
     <div class="scene-orbit scene-orbit--one" aria-hidden="true" />
     <div class="scene-orbit scene-orbit--two" aria-hidden="true" />
-    <canvas v-show="ready && !fallback" ref="canvas" class="scene-canvas" aria-hidden="true" />
-    <div v-show="fallback" ref="poster" class="scene-poster" aria-hidden="true">
+    <canvas v-show="ready && !fallback && !reducedMotion" ref="canvas" class="scene-canvas" aria-hidden="true" />
+    <div v-show="showPoster" ref="poster" class="scene-poster" aria-hidden="true">
       <span class="poster-ring poster-ring--one" />
       <span class="poster-ring poster-ring--two" />
       <span class="poster-core">∿</span>
       <span class="poster-coordinate">31.2304° N / 121.4737° E</span>
     </div>
     <div class="scene-caption" aria-hidden="true">
-      <span>{{ ready ? 'LIVE / WEBGL' : 'STATIC / SIGNAL' }}</span>
-      <span>MOVE TO DISTORT</span>
+      <span>{{ renderLabel }}</span>
+      <span class="scene-caption__pointer">MOVE TO DISTORT</span>
+      <span class="scene-caption__touch">SCROLL TO TRANSFORM</span>
     </div>
   </div>
 </template>
@@ -245,6 +282,7 @@ onBeforeUnmount(() => {
 .poster-ring--two { width: min(54vw, 360px); aspect-ratio: 1; border-color: var(--electric-blue); transform: rotate(24deg); }
 .poster-coordinate { position: absolute; right: 8%; bottom: 12%; font-family: var(--mono-font); font-size: 0.65rem; letter-spacing: 0.05em; }
 .scene-caption { position: absolute; z-index: 4; inset: auto 8% 6%; display: flex; justify-content: space-between; gap: 20px; font-family: var(--mono-font); font-size: 0.66rem; letter-spacing: 0.08em; pointer-events: none; }
+.scene-caption__touch { display: none; }
 @keyframes orbit { to { transform: rotate(343deg); } }
 @keyframes orbit-reverse { to { transform: rotate(-318deg); } }
 @keyframes float { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-12px) rotate(2deg); } }
@@ -253,6 +291,10 @@ onBeforeUnmount(() => {
   .scene-caption { inset: auto 6% 4%; font-size: 0.57rem; }
   .scene-grid { inset: 4%; background-size: 32px 32px; }
   .poster-core { width: min(70vw, 290px); }
+}
+@media (pointer: coarse) {
+  .scene-caption__pointer { display: none; }
+  .scene-caption__touch { display: inline; }
 }
 @media (prefers-reduced-motion: reduce) {
   .scene-orbit, .poster-core { animation: none; }

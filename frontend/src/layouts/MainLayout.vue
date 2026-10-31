@@ -25,7 +25,6 @@ import { profile } from '@/data/portfolio'
             <router-link to="/writing">文章归档</router-link>
             <router-link to="/about">关于</router-link>
             <router-link to="/search">搜索</router-link>
-            <router-link v-if="$route.path !== '/login'" to="/login">登录</router-link>
           </div>
         </div>
         <p class="footer-legal">© {{ new Date().getFullYear() }} {{ profile.name }} · Built with curiosity and code.</p>

@@ -1,18 +1,30 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { getPosts, type Post } from '@/api/posts'
 import { getTags, type Tag } from '@/api/tags'
 import { profile, projects, resources } from '@/data/portfolio'
 import ImmersiveScene from '@/components/immersive/ImmersiveScene.vue'
 import MagneticLink from '@/components/immersive/MagneticLink.vue'
+import ProjectCardMotion from '@/components/immersive/ProjectCardMotion.vue'
 import ScrollReveal from '@/components/immersive/ScrollReveal.vue'
 import ArticleRow from '@/components/blog/ArticleRow.vue'
 import StatePanel from '@/components/blog/StatePanel.vue'
+import { narrativeProgress, resolveMotionStage } from '@/graphics/motion'
 
 const posts = ref<Post[]>([])
 const tags = ref<Tag[]>([])
 const loading = ref(true)
 const error = ref(false)
+const home = ref<HTMLElement | null>(null)
+const storyProgress = ref(0)
+const manualMotionPaused = ref(false)
+const systemReducedMotion = ref(false)
+const motionPaused = computed(() => manualMotionPaused.value || systemReducedMotion.value)
+const motionStage = computed(() => resolveMotionStage(storyProgress.value))
+const MOTION_PAUSE_KEY = 'field-notes:motion-paused'
+let scrollFrame = 0
+let resizeObserver: ResizeObserver | null = null
+let reducedMotionQuery: MediaQueryList | null = null
 
 async function loadHomeContent() {
   loading.value = true
@@ -28,11 +40,79 @@ async function loadHomeContent() {
   }
 }
 
-onMounted(loadHomeContent)
+function updateNarrative() {
+  scrollFrame = 0
+  storyProgress.value = narrativeProgress(
+    window.scrollY,
+    document.documentElement.scrollHeight,
+    window.innerHeight,
+  )
+}
+
+function scheduleNarrativeUpdate() {
+  if (scrollFrame) return
+  scrollFrame = requestAnimationFrame(updateNarrative)
+}
+
+function setSystemReducedMotion(event: MediaQueryListEvent | MediaQueryList) {
+  systemReducedMotion.value = event.matches
+}
+
+function toggleMotion() {
+  if (systemReducedMotion.value) return
+  manualMotionPaused.value = !manualMotionPaused.value
+  try {
+    window.localStorage.setItem(MOTION_PAUSE_KEY, manualMotionPaused.value ? '1' : '0')
+  } catch {
+    // Storage can be unavailable in privacy-restricted contexts.
+  }
+}
+
+onMounted(() => {
+  void loadHomeContent()
+  try {
+    manualMotionPaused.value = window.localStorage.getItem(MOTION_PAUSE_KEY) === '1'
+  } catch {
+    manualMotionPaused.value = false
+  }
+  reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+  setSystemReducedMotion(reducedMotionQuery)
+  reducedMotionQuery.addEventListener('change', setSystemReducedMotion)
+  updateNarrative()
+  window.addEventListener('scroll', scheduleNarrativeUpdate, { passive: true })
+  window.addEventListener('resize', scheduleNarrativeUpdate, { passive: true })
+  if (home.value) {
+    resizeObserver = new ResizeObserver(scheduleNarrativeUpdate)
+    resizeObserver.observe(home.value)
+  }
+})
+
+onBeforeUnmount(() => {
+  if (scrollFrame) cancelAnimationFrame(scrollFrame)
+  window.removeEventListener('scroll', scheduleNarrativeUpdate)
+  window.removeEventListener('resize', scheduleNarrativeUpdate)
+  reducedMotionQuery?.removeEventListener('change', setSystemReducedMotion)
+  resizeObserver?.disconnect()
+})
 </script>
 
 <template>
-  <div class="home">
+  <div
+    ref="home"
+    class="home"
+    :data-stage="motionStage"
+    :data-motion-paused="motionPaused"
+    :style="{ '--story-progress': storyProgress }"
+  >
+    <div class="story-rail" aria-hidden="true">
+      <span class="story-rail__line"><i /></span>
+      <ol class="story-rail__stages">
+        <li data-stage-label="idea"><span>01</span> IDEA</li>
+        <li data-stage-label="writing"><span>02</span> NOTES</li>
+        <li data-stage-label="projects"><span>03</span> WORK</li>
+        <li data-stage-label="signal"><span>04</span> SIGNAL</li>
+      </ol>
+    </div>
     <section class="hero page-shell" aria-labelledby="hero-title">
       <div class="hero-copy">
         <p class="hero-kicker"><span class="status-dot" /> {{ profile.availability }} <span>／</span> {{ profile.location }}</p>
@@ -47,12 +127,23 @@ onMounted(loadHomeContent)
         </div>
       </div>
       <div class="hero-visual">
-        <ImmersiveScene />
+        <ImmersiveScene :progress="storyProgress" :paused="motionPaused" />
         <span class="hero-signature">{{ profile.name }}</span>
       </div>
       <div class="hero-footnote">
         <span>01 — FIELD NOTES</span>
         <span>SOFTWARE / THINKING / MOTION</span>
+        <button
+          v-if="!systemReducedMotion"
+          type="button"
+          class="motion-toggle"
+          :aria-label="manualMotionPaused ? '恢复自动动效' : '暂停自动动效'"
+          :aria-pressed="manualMotionPaused"
+          @click="toggleMotion"
+        >
+          <span class="motion-toggle__icon" aria-hidden="true">{{ manualMotionPaused ? '▶' : 'Ⅱ' }}</span>
+          <span>{{ manualMotionPaused ? 'MOTION OFF' : 'MOTION ON' }}</span>
+        </button>
       </div>
     </section>
 
@@ -120,25 +211,27 @@ onMounted(loadHomeContent)
         </ScrollReveal>
         <div class="project-grid">
           <ScrollReveal v-for="(project, index) in projects" :key="project.number" :delay="index * 80">
-            <component
-              :is="project.external ? 'a' : 'router-link'"
-              v-bind="project.external ? { href: project.href, target: '_blank', rel: 'noreferrer' } : { to: project.href }"
-              class="project-card"
-              :class="`project-card--${project.accent}`"
-            >
-              <div class="project-topline"><span>{{ project.number }}</span><span>{{ project.type }}</span></div>
-              <div class="project-glyph" aria-hidden="true">
-                <span v-if="index === 0">▦</span>
-                <span v-else-if="index === 1">∿</span>
-                <span v-else>✳</span>
-              </div>
-              <div class="project-bottom">
-                <h3>{{ project.title }}</h3>
-                <p>{{ project.description }}</p>
-                <div class="project-stack"><span v-for="item in project.stack" :key="item">{{ item }}</span></div>
-              </div>
-              <span class="project-arrow" aria-hidden="true">↗</span>
-            </component>
+            <ProjectCardMotion :accent="project.accent">
+              <component
+                :is="project.external ? 'a' : 'router-link'"
+                v-bind="project.external ? { href: project.href, target: '_blank', rel: 'noreferrer' } : { to: project.href }"
+                class="project-card"
+                :class="`project-card--${project.accent}`"
+              >
+                <div class="project-topline"><span>{{ project.number }}</span><span>{{ project.type }}</span></div>
+                <div class="project-glyph" aria-hidden="true">
+                  <span v-if="index === 0">▦</span>
+                  <span v-else-if="index === 1">∿</span>
+                  <span v-else>✳</span>
+                </div>
+                <div class="project-bottom">
+                  <h3>{{ project.title }}</h3>
+                  <p>{{ project.description }}</p>
+                  <div class="project-stack"><span v-for="item in project.stack" :key="item">{{ item }}</span></div>
+                </div>
+                <span class="project-arrow" aria-hidden="true">↗</span>
+              </component>
+            </ProjectCardMotion>
           </ScrollReveal>
         </div>
       </div>
@@ -181,7 +274,135 @@ onMounted(loadHomeContent)
 </template>
 
 <style scoped>
-.home { overflow: clip; }
+.home { position: relative; overflow-x: clip; }
+.story-rail {
+  position: fixed;
+  z-index: 20;
+  top: 50%;
+  right: clamp(8px, calc((100vw - var(--page-width)) / 2 - 12px), 34px);
+  display: grid;
+  grid-template-columns: 18px auto;
+  align-items: center;
+  gap: 12px;
+  color: var(--ink);
+  font: 0.56rem var(--mono-font);
+  letter-spacing: 0.08em;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+.motion-toggle {
+  display: inline-flex;
+  justify-self: end;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--ink);
+  background: rgba(244, 241, 234, 0.92);
+  color: var(--ink);
+  box-shadow: 3px 3px 0 rgba(17, 17, 17, 0.12);
+  font: 700 0.58rem var(--mono-font);
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  transition: background-color 180ms ease, transform 180ms ease;
+}
+.motion-toggle:hover { background: var(--acid); transform: translateY(-2px); }
+.motion-toggle:active { transform: translateY(0); }
+.motion-toggle__icon { display: grid; place-items: center; width: 16px; height: 16px; font: 0.55rem var(--mono-font); }
+.story-rail__line {
+  position: relative;
+  display: block;
+  width: 1px;
+  height: 164px;
+  background: rgba(17, 17, 17, 0.24);
+  overflow: hidden;
+}
+.story-rail__line i {
+  position: absolute;
+  inset: 0;
+  background: var(--electric-blue);
+  transform: scaleY(var(--story-progress));
+  transform-origin: top;
+}
+.story-rail__stages {
+  display: grid;
+  gap: 25px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.story-rail__stages li {
+  position: relative;
+  display: flex;
+  gap: 7px;
+  opacity: 0.46;
+  transition: color 240ms ease, opacity 240ms ease, transform 240ms ease;
+}
+.story-rail__stages li::before {
+  position: absolute;
+  top: 50%;
+  left: -16px;
+  width: 5px;
+  height: 5px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  background: var(--paper);
+  content: '';
+  transform: translate(-50%, -50%);
+}
+.story-rail__stages li span { color: inherit; opacity: 0.62; }
+.home[data-stage='projects'] .story-rail,
+.home[data-stage='signal'] .story-rail { color: rgba(244, 241, 234, 0.74); }
+.home[data-stage='projects'] .story-rail__line,
+.home[data-stage='signal'] .story-rail__line { background: rgba(244, 241, 234, 0.25); }
+.home[data-stage='projects'] .story-rail__line i,
+.home[data-stage='signal'] .story-rail__line i { background: var(--acid); }
+.home[data-stage='projects'] [data-stage-label='projects'],
+.home[data-stage='signal'] [data-stage-label='signal'] { color: var(--paper); }
+.home[data-stage='projects'] [data-stage-label='projects']::before,
+.home[data-stage='signal'] [data-stage-label='signal']::before { border-color: var(--acid); background: var(--acid); box-shadow: 0 0 0 3px rgba(199, 255, 46, 0.16); }
+.home[data-stage='projects'] .story-rail__stages li::before,
+.home[data-stage='signal'] .story-rail__stages li::before { background: var(--ink); }
+.home[data-stage='idea'] [data-stage-label='idea'],
+.home[data-stage='writing'] [data-stage-label='writing'],
+.home[data-stage='projects'] [data-stage-label='projects'],
+.home[data-stage='signal'] [data-stage-label='signal'] {
+  color: var(--ink);
+  opacity: 1;
+  transform: translateX(-4px);
+}
+.home[data-stage='idea'] [data-stage-label='idea']::before,
+.home[data-stage='writing'] [data-stage-label='writing']::before,
+.home[data-stage='projects'] [data-stage-label='projects']::before,
+.home[data-stage='signal'] [data-stage-label='signal']::before {
+  border-color: var(--electric-blue);
+  background: var(--electric-blue);
+  box-shadow: 0 0 0 3px rgba(55, 103, 255, 0.16);
+}
+.home[data-stage='projects'] [data-stage-label='projects'],
+.home[data-stage='signal'] [data-stage-label='signal'] { color: var(--paper); }
+.home[data-motion-paused='true'] .marquee-track,
+.home[data-motion-paused='true'] .loading-lines span,
+.home[data-motion-paused='true'] :deep(.scene-orbit),
+.home[data-motion-paused='true'] :deep(.poster-core) { animation-play-state: paused; }
+.home[data-motion-paused='true'] :deep(.scroll-reveal) { transition: none; }
+.projects-section { isolation: isolate; }
+.projects-section::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background:
+    radial-gradient(circle at 82% 18%, rgba(55, 103, 255, 0.15), transparent 28%),
+    linear-gradient(115deg, transparent 55%, rgba(199, 255, 46, 0.035));
+  content: '';
+  opacity: 0.45;
+  pointer-events: none;
+  transform: scale(1.08);
+  transition: opacity 900ms ease, transform 1200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.home[data-stage='projects'] .projects-section::before,
+.home[data-stage='signal'] .projects-section::before { opacity: 1; transform: scale(1); }
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 0.92fr) minmax(360px, 1.08fr);
@@ -218,7 +439,7 @@ h1 em, .section-heading em { color: var(--electric-blue); font-weight: 400; }
 .hero-visual { position: relative; min-width: 0; min-height: 480px; }
 .hero-visual :deep(.immersive-scene) { height: min(680px, 72vh); }
 .hero-signature { position: absolute; right: 10%; bottom: 18%; z-index: 1; color: rgba(17, 17, 17, 0.1); font: 800 clamp(3rem, 7vw, 7rem) var(--display-font); letter-spacing: -0.05em; pointer-events: none; }
-.hero-footnote { grid-column: 1 / -1; display: flex; justify-content: space-between; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font: 0.58rem var(--mono-font); letter-spacing: 0.07em; }
+.hero-footnote { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font: 0.58rem var(--mono-font); letter-spacing: 0.07em; }
 .marquee { overflow: hidden; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); background: var(--acid); }
 .marquee-track { display: flex; width: max-content; animation: marquee 24s linear infinite; }
 .marquee-track span { display: block; padding: 13px 0; font: 0.72rem var(--mono-font); letter-spacing: 0.12em; white-space: nowrap; }
@@ -240,7 +461,7 @@ h1 em, .section-heading em { color: var(--electric-blue); font-weight: 400; }
 .loading-lines { display: grid; gap: 1px; }
 .loading-lines span { display: block; height: 122px; background: linear-gradient(90deg, var(--paper-soft), rgba(255,255,255,0.42), var(--paper-soft)); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-top: 1px solid var(--line); }
 @keyframes shimmer { to { background-position: -200% 0; } }
-.projects-section { margin-top: var(--section-space); padding: var(--section-space) 0; background: var(--ink); color: var(--paper); }
+.projects-section { position: relative; margin-top: var(--section-space); padding: var(--section-space) 0; background: var(--ink); color: var(--paper); }
 .section-title-row--light .section-kicker, .projects-note { color: #9ca09e; }
 .section-title-row--light .section-heading em { color: var(--acid); }
 .projects-note { max-width: 260px; text-align: right; font-size: 0.82rem; }
@@ -257,7 +478,7 @@ h1 em, .section-heading em { color: var(--electric-blue); font-weight: 400; }
   text-decoration: none;
   transition: transform 250ms ease, border-color 250ms ease;
 }
-.project-card:hover { transform: translateY(-8px); border-color: var(--acid); }
+.project-card:hover, .project-card:focus-visible { border-color: var(--acid); }
 .project-card--lime { background: #1c280b; }
 .project-card--blue { background: #101d50; }
 .project-card--paper { background: #242424; }
@@ -271,7 +492,7 @@ h1 em, .section-heading em { color: var(--electric-blue); font-weight: 400; }
 .project-stack { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 19px; }
 .project-stack span { padding: 3px 7px; border: 1px solid rgba(244, 241, 234, 0.27); color: #d4d8d4; font: 0.57rem var(--mono-font); }
 .project-arrow { position: absolute; top: 55px; right: 22px; font-size: 1.4rem; transition: transform 220ms ease; }
-.project-card:hover .project-arrow { transform: rotate(45deg); }
+.project-card:hover .project-arrow, .project-card:focus-visible .project-arrow { transform: rotate(45deg); }
 .principle-section { display: grid; grid-template-columns: minmax(260px, 0.7fr) minmax(0, 1fr); gap: clamp(40px, 8vw, 130px); padding-top: var(--section-space); }
 .principle-intro > p:last-child { max-width: 330px; color: var(--muted); font-size: 0.9rem; }
 .principle-row { display: grid; grid-template-columns: 42px minmax(0, 0.8fr) minmax(0, 1fr); gap: 22px; padding: 23px 0; border-top: 1px solid var(--line); }
@@ -287,7 +508,11 @@ h1 em, .section-heading em { color: var(--electric-blue); font-weight: 400; }
 .resource-card h3 { margin-top: 52px; font: 400 2rem/1 var(--display-font); letter-spacing: -0.04em; }
 .resource-card p { max-width: 260px; margin-top: 14px; color: var(--muted); font-size: 0.8rem; }
 .resource-arrow { position: absolute; right: 20px; bottom: 20px; font-size: 1.2rem; }
-@media (max-width: 1000px) {
+@media (max-width: 1679px) {
+  .story-rail { right: 8px; grid-template-columns: 1fr; gap: 0; }
+  .story-rail__stages { display: none; }
+}
+@media (max-width: 1200px) {
   .hero { grid-template-columns: 1fr 0.95fr; }
   .hero-visual :deep(.immersive-scene) { min-height: 420px; }
   .project-grid { grid-template-columns: 1fr 1fr; }
@@ -300,7 +525,7 @@ h1 em, .section-heading em { color: var(--electric-blue); font-weight: 400; }
   h1 { font-size: clamp(4.8rem, 20vw, 7.5rem); }
   .hero-visual { min-height: auto; }
   .hero-visual :deep(.immersive-scene) { height: 430px; min-height: 430px; }
-  .hero-footnote { margin-top: 6px; font-size: 0.53rem; }
+  .hero-footnote { flex-wrap: wrap; margin-top: 6px; font-size: 0.53rem; }
   .writing-grid, .principle-section { grid-template-columns: 1fr; gap: 42px; }
   .section-title-row { display: block; }
   .section-link { margin-top: 25px; }
@@ -311,10 +536,13 @@ h1 em, .section-heading em { color: var(--electric-blue); font-weight: 400; }
   .principle-row { grid-template-columns: 30px 1fr; gap: 14px; }
   .principle-row p { grid-column: 2; }
   .resource-card { min-height: 230px; }
+  .story-rail { right: 8px; }
+  .story-rail__line { height: 108px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .marquee-track { animation: none; }
   .loading-lines span { animation: none; }
-  .project-card:hover { transform: none; }
+  .motion-toggle { display: none; }
+  .story-rail__line i, .story-rail__stages li, .projects-section::before { transition: none; }
 }
 </style>

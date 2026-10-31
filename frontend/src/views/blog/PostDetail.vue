@@ -80,7 +80,7 @@ async function handleSubmitComment() {
     return
   }
   if (!userStore.isLoggedIn) {
-    router.push({ name: 'Login', query: { redirect: route.fullPath } })
+    router.push({ name: 'AdminLogin', query: { redirect: route.fullPath } })
     return
   }
   if (!post.value) return
@@ -270,9 +270,8 @@ onBeforeUnmount(() => {
         <div class="discussion-grid">
           <div class="comment-form-wrap">
             <div v-if="!canComment" class="login-prompt">
-              <span>加入讨论</span>
-              <p>登录后可以发表评论和回复。</p>
-              <router-link :to="{ name: 'Login', query: { redirect: route.fullPath } }" class="editorial-button editorial-button--acid">登录后评论 ↗</router-link>
+              <span>评论区暂未开放</span>
+              <p>当前仅展示已有讨论。公开博客不提供登录或注册入口。</p>
             </div>
             <form v-else class="comment-form" @submit.prevent="handleSubmitComment">
               <div class="form-heading">

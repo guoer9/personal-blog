@@ -1,19 +1,32 @@
 import {
+  AdditiveBlending,
+  BufferAttribute,
   BufferGeometry,
   IcosahedronGeometry,
   Mesh,
   PerspectiveCamera,
+  Points,
   Scene,
   ShaderMaterial,
   WebGLRenderer,
 } from 'three'
-import { clamp, damp } from './motion'
-import { flowFragmentShader, flowVertexShader } from './shaders'
+import { clamp, damp, qualityProfile, resolveMotionStage, sceneMood } from './motion'
+import {
+  flowFragmentShader,
+  flowVertexShader,
+  particleFragmentShader,
+  particleVertexShader,
+} from './shaders'
 
 export interface SceneInput {
   pointerX: number
   pointerY: number
   scroll: number
+}
+
+export interface SceneQuality {
+  width: number
+  hardwareConcurrency?: number
 }
 
 export interface LiquidSceneController {
@@ -23,7 +36,31 @@ export interface LiquidSceneController {
   dispose(): void
 }
 
-export function createLiquidScene(canvas: HTMLCanvasElement, initialState: SceneInput): LiquidSceneController {
+function createParticles(count: number) {
+  const geometry = new BufferGeometry()
+  const positions = new Float32Array(count * 3)
+  const seeds = new Float32Array(count)
+  const sizes = new Float32Array(count)
+  for (let index = 0; index < count; index += 1) {
+    const angle = index * 2.399963
+    const radius = 1.55 + (index % 11) * 0.075
+    positions[index * 3] = Math.cos(angle) * radius
+    positions[index * 3 + 1] = ((index * 13) % 97) / 97 * 2.7 - 1.35
+    positions[index * 3 + 2] = Math.sin(angle) * radius
+    seeds[index] = (index * 0.61803398875) % 1
+    sizes[index] = 0.55 + seeds[index] * 1.2
+  }
+  geometry.setAttribute('position', new BufferAttribute(positions, 3))
+  geometry.setAttribute('aSeed', new BufferAttribute(seeds, 1))
+  geometry.setAttribute('aSize', new BufferAttribute(sizes, 1))
+  return geometry
+}
+
+export function createLiquidScene(
+  canvas: HTMLCanvasElement,
+  initialState: SceneInput,
+  quality = qualityProfile(window.innerWidth, navigator.hardwareConcurrency || 4),
+): LiquidSceneController {
   const renderer = new WebGLRenderer({
     canvas,
     alpha: true,
@@ -35,7 +72,7 @@ export function createLiquidScene(canvas: HTMLCanvasElement, initialState: Scene
 
   const scene = new Scene()
   const camera = new PerspectiveCamera(38, 1, 0.1, 100)
-  camera.position.set(0, 0, 4.8)
+  camera.position.set(0, 0, 5.15)
 
   const uniforms = {
     uTime: { value: 0 },
@@ -43,11 +80,12 @@ export function createLiquidScene(canvas: HTMLCanvasElement, initialState: Scene
     uPointerY: { value: 0 },
     uScroll: { value: 0 },
   }
-  const geometry = new IcosahedronGeometry(1.52, 5)
+  const geometry = new IcosahedronGeometry(1.48, quality.detail)
   const material = new ShaderMaterial({
     vertexShader: flowVertexShader,
     fragmentShader: flowFragmentShader,
     uniforms,
+    transparent: true,
   })
   const mesh = new Mesh(geometry, material)
   scene.add(mesh)
@@ -57,53 +95,84 @@ export function createLiquidScene(canvas: HTMLCanvasElement, initialState: Scene
   wireGeometry.setIndex(geometry.getIndex()?.clone() ?? null)
   const wireMaterial = new ShaderMaterial({
     vertexShader: flowVertexShader,
-    fragmentShader: 'void main(){ gl_FragColor = vec4(0.015, 0.02, 0.025, 0.22); }',
+    fragmentShader: 'void main(){ gl_FragColor = vec4(0.015, 0.02, 0.025, 0.16); }',
     wireframe: true,
     transparent: true,
+    depthWrite: false,
     uniforms,
   })
   const wireMesh = new Mesh(wireGeometry, wireMaterial)
   scene.add(wireMesh)
 
+  const particleGeometry = createParticles(quality.particleCount)
+  const particleMaterial = new ShaderMaterial({
+    vertexShader: particleVertexShader,
+    fragmentShader: particleFragmentShader,
+    uniforms: {
+      uTime: uniforms.uTime,
+      uScroll: uniforms.uScroll,
+      uPixelRatio: { value: 1 },
+    },
+    transparent: true,
+    depthWrite: false,
+    blending: AdditiveBlending,
+  })
+  const particles = new Points(particleGeometry, particleMaterial)
+  scene.add(particles)
+
   const target: SceneInput = { ...initialState }
   const current: SceneInput = { ...initialState }
   let lastTime = 0
   let disposed = false
+  let previousStage = resolveMotionStage(initialState.scroll)
 
   return {
     resize(width, height, dpr) {
       if (width <= 0 || height <= 0 || disposed) return
-      renderer.setPixelRatio(clamp(dpr, 1, 1.75))
+      const pixelRatio = clamp(dpr, 1, quality.pixelRatioCap)
+      renderer.setPixelRatio(pixelRatio)
       renderer.setSize(width, height, false)
+      particleMaterial.uniforms.uPixelRatio.value = pixelRatio
       camera.aspect = width / height
       camera.updateProjectionMatrix()
     },
     setInput(input) {
       target.pointerX = clamp(input.pointerX, -1, 1)
       target.pointerY = clamp(input.pointerY, -1, 1)
-      target.scroll = clamp(input.scroll, 0, 1.5)
+      target.scroll = clamp(input.scroll, 0, 1)
     },
     render(time) {
       if (disposed) return
       const seconds = time / 1000
       const delta = lastTime > 0 ? clamp(seconds - lastTime, 0, 0.05) : 1 / 60
       lastTime = seconds
-      current.pointerX = damp(current.pointerX, target.pointerX, 6, delta)
-      current.pointerY = damp(current.pointerY, target.pointerY, 6, delta)
-      current.scroll = damp(current.scroll, target.scroll, 5, delta)
+      current.pointerX = damp(current.pointerX, target.pointerX, 5.5, delta)
+      current.pointerY = damp(current.pointerY, target.pointerY, 5.5, delta)
+      current.scroll = damp(current.scroll, target.scroll, 4.2, delta)
 
-      const rotationX = -0.1 + current.pointerY * 0.24 + current.scroll * 0.75
-      const rotationY = 0.35 + current.pointerX * 0.32 + current.scroll * 0.5
-      const rotationZ = -0.08 + current.scroll * 0.3
-      const scale = 0.94 + Math.sin(seconds * 0.58) * 0.025
-      const offsetY = Math.sin(seconds * 0.5) * 0.06
-
-      for (const object of [mesh, wireMesh]) {
-        object.rotation.set(rotationX, rotationY, rotationZ)
-        object.position.y = offsetY
+      const stage = resolveMotionStage(current.scroll)
+      const mood = sceneMood(stage)
+      if (stage !== previousStage) {
+        previousStage = stage
+        canvas.dataset.motionStage = stage
       }
+      const rotationX = -0.06 + current.pointerY * 0.18 + current.scroll * (0.9 + mood.rotationSpeed)
+      const rotationY = 0.25 + current.pointerX * 0.23 - current.scroll * (0.65 + mood.rotationSpeed)
+      const rotationZ = -0.04 + current.scroll * (0.8 + mood.rotationSpeed)
+      const viewportScale = window.innerWidth < 760 ? 0.82 : 1
+      const scale = (0.94 + Math.sin(seconds * 0.55) * 0.018 + current.scroll * 0.16) * mood.scale * viewportScale
+      const offsetY = Math.sin(seconds * 0.45 * (0.4 + mood.rotationSpeed)) * 0.04
+
+      mesh.rotation.set(rotationX, rotationY, rotationZ)
+      wireMesh.rotation.set(rotationX, rotationY, rotationZ)
+      mesh.position.y = offsetY
+      wireMesh.position.y = offsetY
       mesh.scale.setScalar(scale)
-      wireMesh.scale.setScalar(scale * 1.012)
+      wireMesh.scale.setScalar(scale * 1.008)
+
+      particles.rotation.set(rotationX * 0.35, -rotationY * 0.3 + seconds * 0.018, rotationZ * 0.24)
+      particles.position.y = offsetY * 0.8 + mood.particleLift * 0.1
+      material.opacity = mood.lightness
 
       uniforms.uTime.value = seconds
       uniforms.uPointerX.value = current.pointerX
@@ -117,8 +186,10 @@ export function createLiquidScene(canvas: HTMLCanvasElement, initialState: Scene
       scene.clear()
       geometry.dispose()
       wireGeometry.dispose()
+      particleGeometry.dispose()
       material.dispose()
       wireMaterial.dispose()
+      particleMaterial.dispose()
       renderer.dispose()
       renderer.forceContextLoss()
     },

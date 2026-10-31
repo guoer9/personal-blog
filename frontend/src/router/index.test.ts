@@ -1,0 +1,32 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { describe, expect, it } from 'vitest'
+
+const sourceRoot = resolve(__dirname, '..')
+const readSource = (file: string) => readFileSync(resolve(sourceRoot, file), 'utf8')
+
+describe('public blog access boundary', () => {
+  it('keeps authentication in the private admin area', () => {
+    const router = readSource('router/index.ts')
+    expect(router).toMatch(/path:\s*['"]\/admin\/login['"][\s\S]*?name:\s*['"]AdminLogin['"]/)
+    expect(router).not.toMatch(/path:\s*['"]\/login['"]/)
+    expect(router).toMatch(/return next\(\{\s*name:\s*['"]AdminLogin['"]/)
+  })
+
+  it('redirects expired sessions only from private admin routes', () => {
+    const request = readSource('utils/request.ts')
+    expect(request.match(/startsWith\('\/admin'\)/g)).toHaveLength(2)
+  })
+
+  it('does not link public pages to login or register', () => {
+    for (const file of [
+      'components/navigation/SiteHeader.vue',
+      'layouts/MainLayout.vue',
+      'views/blog/PostDetail.vue',
+    ]) {
+      expect(readSource(file)).not.toMatch(
+        /(?:to|name):\s*['"](?:\/login|Login|Register|\/register)['"]/,
+      )
+    }
+  })
+})

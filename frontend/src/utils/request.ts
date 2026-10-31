@@ -48,11 +48,15 @@ request.interceptors.response.use(
               return request(error.config)
             } catch {
               userStore.logout()
-              router.push('/login')
+              if (router.currentRoute.value.path.startsWith('/admin')) {
+                router.push('/admin/login')
+              }
             }
           } else {
             userStore.logout()
-            router.push('/login')
+            if (router.currentRoute.value.path.startsWith('/admin')) {
+              router.push('/admin/login')
+            }
           }
           break
         case 403:
