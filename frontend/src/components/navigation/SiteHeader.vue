@@ -11,6 +11,7 @@ const menuOpen = ref(false)
 const searchOpen = ref(false)
 const searchKeyword = ref('')
 const searchInput = ref<HTMLInputElement | null>(null)
+const searchToggle = ref<HTMLButtonElement | null>(null)
 const isDark = computed(() => ['PostDetail'].includes(String(route.name)))
 
 function submitSearch() {
@@ -36,10 +37,12 @@ function isActive(to: string) {
 }
 
 function closeOnEscape(event: KeyboardEvent) {
-  if (event.key === 'Escape') {
-    menuOpen.value = false
-    searchOpen.value = false
-  }
+  if (event.key !== 'Escape') return
+
+  const shouldRestoreSearchFocus = searchOpen.value
+  menuOpen.value = false
+  searchOpen.value = false
+  if (shouldRestoreSearchFocus) searchToggle.value?.focus()
 }
 
 onMounted(() => document.addEventListener('keydown', closeOnEscape))
@@ -68,7 +71,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', closeOnEscape))
       </nav>
 
       <div class="header-actions">
-        <button class="icon-button search-toggle" type="button" :aria-expanded="searchOpen" aria-controls="site-search" @click="toggleSearch">
+        <button ref="searchToggle" class="icon-button search-toggle" type="button" :aria-expanded="searchOpen" aria-controls="site-search" @click="toggleSearch">
           <span class="sr-only">搜索文章</span>
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.7" cy="10.7" r="6.7" /><path d="m16 16 5 5" /></svg>
         </button>

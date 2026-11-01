@@ -42,3 +42,9 @@ output/playwright/
 /lusion.co-ddw/
 .playwright-cli/
 frontend/coverage/
+
+output/research-scheduler/
+
+# Research runtime and root tooling dependencies
+output/research-runtime/
+/node_modules/

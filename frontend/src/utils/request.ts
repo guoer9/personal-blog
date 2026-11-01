@@ -33,7 +33,8 @@ request.interceptors.response.use(
   },
   async (error) => {
     const { response } = error
-    
+    const suppressErrorToast = error.config?.suppressErrorToast === true
+
     if (response) {
       const { status, data } = response
       
@@ -59,19 +60,17 @@ request.interceptors.response.use(
             }
           }
           break
-        case 403:
-          ElMessage.error(data.detail || '没有权限')
-          break
-        case 404:
-          ElMessage.error(data.detail || '资源不存在')
-          break
-        case 422:
-          ElMessage.error('请求参数错误')
-          break
         default:
-          ElMessage.error(data.detail || '服务器错误')
+          if (!suppressErrorToast) {
+            const messages: Record<number, string> = {
+              403: data.detail || '没有权限',
+              404: data.detail || '资源不存在',
+              422: '请求参数错误',
+            }
+            ElMessage.error(messages[status] || data.detail || '服务器错误')
+          }
       }
-    } else {
+    } else if (!suppressErrorToast) {
       ElMessage.error('网络错误，请检查网络连接')
     }
     

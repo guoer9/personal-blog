@@ -51,14 +51,19 @@ export function getPosts(params?: { page?: number; page_size?: number; tag?: str
   return request.get<PaginatedResponse<Post>>('/posts', { params })
 }
 
-// 搜索文章
+// 搜索文章。搜索页已提供固定的页面内错误状态，避免与全局 toast 重复通知。
 export function searchPosts(params: { q: string; page?: number; page_size?: number }) {
-  return request.get<PaginatedResponse<Post>>('/posts/search', { params })
+  return request.get<PaginatedResponse<Post>>('/posts/search', {
+    params,
+    suppressErrorToast: true,
+  })
 }
 
-// 获取文章详情
+// 获取文章详情。详情页已提供固定的页面内错误状态，避免与全局 toast 重复通知。
 export function getPost(slug: string) {
-  return request.get<Post>(`/posts/${slug}`)
+  return request.get<Post>(`/posts/${slug}`, {
+    suppressErrorToast: true,
+  })
 }
 
 // 管理员按 ID 获取文章（包含草稿）

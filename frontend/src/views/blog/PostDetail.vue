@@ -38,6 +38,7 @@ let requestSequence = 0
 
 async function fetchPost() {
   const sequence = ++requestSequence
+  let loaded = false
   loading.value = true
   notFound.value = false
   loadError.value = false
@@ -50,12 +51,18 @@ async function fetchPost() {
     post.value = response.data
     document.title = `${response.data.title} · GUOER`
     fetchComments()
+    loaded = true
   } catch (error: any) {
     if (sequence !== requestSequence) return
     notFound.value = error?.response?.status === 404
     loadError.value = !notFound.value
   } finally {
     if (sequence === requestSequence) loading.value = false
+  }
+
+  if (loaded && sequence === requestSequence && route.hash === '#discussion') {
+    await nextTick()
+    focusDiscussionDeepLink()
   }
 }
 
@@ -131,6 +138,20 @@ async function handleReply(comment: Comment) {
 function canDeleteComment(comment: Comment): boolean {
   if (!userStore.isLoggedIn || !userStore.userInfo) return false
   return userStore.isAdmin || comment.user.id === userStore.userInfo.id
+}
+
+function focusDiscussion() {
+  document.querySelector<HTMLElement>('#discussion')?.focus()
+}
+
+function focusDiscussionDeepLink() {
+  const discussion = document.querySelector<HTMLElement>('#discussion')
+  if (!discussion) return
+  discussion.focus({ preventScroll: true })
+  discussion.scrollIntoView({
+    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+    block: 'start',
+  })
 }
 
 async function copyArticleLink() {
@@ -239,7 +260,7 @@ onBeforeUnmount(() => {
             <b>{{ String(post.id).padStart(3, '0') }}</b>
           </div>
           <button type="button" @click="copyArticleLink">复制链接 <span>↗</span></button>
-          <a href="#discussion">参与讨论 <span>↓</span></a>
+          <a href="#discussion" @click="focusDiscussion">参与讨论 <span>↓</span></a>
         </aside>
 
         <article class="article-main">
@@ -258,7 +279,7 @@ onBeforeUnmount(() => {
         </article>
       </div>
 
-      <section id="discussion" class="discussion page-shell" aria-labelledby="discussion-title">
+      <section id="discussion" class="discussion page-shell" tabindex="-1" aria-labelledby="discussion-title">
         <header class="discussion-header">
           <div>
             <p class="section-kicker">Discussion / {{ String(comments.length).padStart(2, '0') }}</p>
@@ -289,11 +310,11 @@ onBeforeUnmount(() => {
             </form>
           </div>
 
-          <div class="comments-list" aria-live="polite">
+          <div class="comments-list" role="region" aria-labelledby="discussion-title">
             <div v-if="commentsLoading" class="comments-loading">
               <span v-for="index in 3" :key="index" />
             </div>
-            <div v-else-if="commentsError" class="comments-error">
+            <div v-else-if="commentsError" class="comments-error" role="alert">
               <p>评论暂时没有加载成功。</p>
               <button type="button" class="text-action" @click="fetchComments">重新加载 ↗</button>
             </div>
@@ -330,7 +351,7 @@ onBeforeUnmount(() => {
                 </div>
               </article>
             </div>
-            <div v-else class="comments-empty">
+            <div v-else class="comments-empty" role="status" aria-live="polite">
               <span>00</span>
               <p>还没有评论。第一条想法会从这里开始。</p>
             </div>
@@ -415,6 +436,7 @@ onBeforeUnmount(() => {
 .next-link { display: flex; justify-content: space-between; margin-top: 50px; padding: 21px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); color: var(--ink); font-size: .9rem; text-decoration: none; }
 .next-link:hover { padding-right: 8px; padding-left: 8px; background: var(--acid); }
 .discussion { margin-top: 125px; }
+.discussion:focus { outline: none; }
 .discussion-header { display: grid; grid-template-columns: 1fr 330px; gap: 60px; align-items: end; padding-bottom: 44px; border-bottom: 1px solid var(--ink); }
 .discussion-header h2 { margin: 0; font: 400 clamp(3.7rem, 8vw, 7rem)/.87 var(--display-font); letter-spacing: -.06em; }
 .discussion-header h2 em { color: var(--electric-blue); font-weight: 400; }

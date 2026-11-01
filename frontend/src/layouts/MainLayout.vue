@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import SiteHeader from '@/components/navigation/SiteHeader.vue'
 import { profile } from '@/data/portfolio'
+
+function focusMainContent() {
+  document.querySelector<HTMLElement>('#main-content')?.focus()
+}
 </script>
 
 <template>
   <div class="main-layout">
-    <a class="skip-link" href="#main-content">跳到正文</a>
+    <a class="skip-link" href="#main-content" @click="focusMainContent">跳到正文</a>
     <SiteHeader />
-    <main id="main-content" class="site-main">
+    <main id="main-content" class="site-main" tabindex="-1">
       <router-view v-slot="{ Component }">
         <transition name="page" mode="out-in">
           <component :is="Component" />

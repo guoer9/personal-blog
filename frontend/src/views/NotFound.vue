@@ -1,17 +1,21 @@
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
 const route = useRoute()
+
+function focusLostContent() {
+  document.querySelector<HTMLElement>('#lost-content')?.focus()
+}
 </script>
 
 <template>
   <main class="not-found">
-    <a class="skip-link" href="#lost-content">跳到正文</a>
+    <a class="skip-link" href="#lost-content" @click="focusLostContent">跳到正文</a>
     <header class="error-header">
       <router-link to="/" class="error-brand">G/ <span>GUOER</span></router-link>
       <p>Error / route not found</p>
       <router-link to="/" class="return-link">返回首页 ↗</router-link>
     </header>
-    <div id="lost-content" class="error-stage">
+    <div id="lost-content" class="error-stage" tabindex="-1">
       <div class="error-orbit" aria-hidden="true">
         <span />
         <span />

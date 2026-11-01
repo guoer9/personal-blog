@@ -24,7 +24,9 @@ export interface CommentCreate {
 
 // 获取文章评论
 export function getComments(postId: number) {
-  return request.get<Comment[]>(`/comments/post/${postId}`)
+  return request.get<Comment[]>(`/comments/post/${postId}`, {
+    suppressErrorToast: true,
+  })
 }
 
 // 发表评论
