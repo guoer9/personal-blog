@@ -17,6 +17,7 @@ import {
   particleFragmentShader,
   particleVertexShader,
 } from './shaders'
+import type { QualityTier } from './quality'
 
 export interface SceneInput {
   pointerX: number
@@ -32,6 +33,7 @@ export interface SceneQuality {
 export interface LiquidSceneController {
   resize(width: number, height: number, dpr: number): void
   setInput(input: Readonly<SceneInput>): void
+  setQualityTier(tier: QualityTier): void
   render(time: number): void
   dispose(): void
 }
@@ -122,17 +124,42 @@ export function createLiquidScene(
 
   const target: SceneInput = { ...initialState }
   const current: SceneInput = { ...initialState }
+  const deviceDprCap = quality.pixelRatioCap
+  const maxParticleCount = quality.particleCount
+  let viewportWidth = 0
+  let viewportHeight = 0
+  let rawDpr = 1
+  let currentQualityTier: QualityTier = 'high'
   let lastTime = 0
   let disposed = false
   let previousStage = resolveMotionStage(initialState.scroll)
 
+  function applyQualityTier(tier: QualityTier) {
+    currentQualityTier = tier
+    const particleCount = tier === 'high'
+      ? maxParticleCount
+      : tier === 'balanced'
+        ? Math.min(maxParticleCount, Math.max(42, Math.round(maxParticleCount * 0.75)))
+        : Math.min(maxParticleCount, 42)
+    const tierDprCap = tier === 'high' ? deviceDprCap : tier === 'balanced' ? 1.4 : 1.15
+    const dprCap = Math.max(1, Math.min(deviceDprCap, tierDprCap, rawDpr))
+    const pixelRatio = clamp(rawDpr, 1, dprCap)
+    particleGeometry.setDrawRange(0, particleCount)
+    particleMaterial.uniforms.uPixelRatio.value = pixelRatio
+    if (viewportWidth <= 0 || viewportHeight <= 0 || disposed) return
+    renderer.setPixelRatio(pixelRatio)
+    renderer.setSize(viewportWidth, viewportHeight, false)
+  }
+
+  applyQualityTier('high')
+
   return {
     resize(width, height, dpr) {
       if (width <= 0 || height <= 0 || disposed) return
-      const pixelRatio = clamp(dpr, 1, quality.pixelRatioCap)
-      renderer.setPixelRatio(pixelRatio)
-      renderer.setSize(width, height, false)
-      particleMaterial.uniforms.uPixelRatio.value = pixelRatio
+      viewportWidth = width
+      viewportHeight = height
+      rawDpr = Number.isFinite(dpr) && dpr > 0 ? dpr : 1
+      applyQualityTier(currentQualityTier)
       camera.aspect = width / height
       camera.updateProjectionMatrix()
     },
@@ -140,6 +167,10 @@ export function createLiquidScene(
       target.pointerX = clamp(input.pointerX, -1, 1)
       target.pointerY = clamp(input.pointerY, -1, 1)
       target.scroll = clamp(input.scroll, 0, 1)
+    },
+    setQualityTier(tier) {
+      if (disposed || tier === currentQualityTier) return
+      applyQualityTier(tier)
     },
     render(time) {
       if (disposed) return

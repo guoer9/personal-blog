@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { LiquidSceneController } from '@/graphics/liquidScene'
 import { pointerToNdc } from '@/graphics/motion'
+import { frameTimeEma, resolveQualityState, type QualityState, type QualityTier } from '@/graphics/quality'
 
 const props = withDefaults(defineProps<{ alt?: string; progress?: number; paused?: boolean }>(), {
   alt: '跟随指针与滚动的抽象虹彩几何体',
@@ -19,6 +20,8 @@ const pointerX = ref(0)
 const pointerY = ref(0)
 const scroll = ref(props.progress)
 const renderState = ref<'booting' | 'playing' | 'paused' | 'static'>('booting')
+const qualityTier = ref<QualityTier>('high')
+const qualityUpdates = ref(0)
 const showPoster = computed(() => fallback.value || reducedMotion.value || (props.paused && !ready.value))
 const renderLabel = computed(() => {
   if (props.paused && !reducedMotion.value) return 'PAUSED / MANUAL'
@@ -37,6 +40,58 @@ let resizeObserver: ResizeObserver | null = null
 let visibilityObserver: IntersectionObserver | null = null
 let mediaQuery: MediaQueryList | null = null
 let cleanupListeners: Array<() => void> = []
+let qualityState: QualityState = { tier: 'high', slowFrames: 0, fastFrames: 0 }
+let frameTimeEmaMs = 16.67
+let lastFrameTime = 0
+let forcedFrameTimeMs: number | null = null
+let debugFrameTimeSetter: ((value: number | null) => void) | null = null
+
+type SceneDebugWindow = Window & {
+  __setSceneFrameTime?: (value: number | null) => void
+}
+
+function resetQualityState() {
+  qualityState = { tier: 'high', slowFrames: 0, fastFrames: 0 }
+  frameTimeEmaMs = 16.67
+  lastFrameTime = 0
+  qualityTier.value = 'high'
+  qualityUpdates.value = 0
+}
+
+function installDebugFrameTimeSetter() {
+  if (!import.meta.env.DEV) return
+  const debugWindow = window as SceneDebugWindow
+  debugFrameTimeSetter = (value) => {
+    forcedFrameTimeMs = value === null || !Number.isFinite(value) || value < 0 ? null : value
+  }
+  debugWindow.__setSceneFrameTime = debugFrameTimeSetter
+}
+
+function removeDebugFrameTimeSetter() {
+  if (!import.meta.env.DEV || !debugFrameTimeSetter) return
+  const debugWindow = window as SceneDebugWindow
+  if (debugWindow.__setSceneFrameTime === debugFrameTimeSetter) delete debugWindow.__setSceneFrameTime
+  debugFrameTimeSetter = null
+  forcedFrameTimeMs = null
+}
+
+function sampleFrameTime(time: number): number {
+  const sample = forcedFrameTimeMs ?? (lastFrameTime > 0 ? time - lastFrameTime : 16.67)
+  lastFrameTime = time
+  return Math.max(0, sample)
+}
+
+function updateQuality(time: number) {
+  if (!controller || !isVisible || document.hidden || props.paused || reducedMotion.value || fallback.value) return
+  frameTimeEmaMs = frameTimeEma(frameTimeEmaMs, sampleFrameTime(time))
+  const nextState = resolveQualityState(qualityState, frameTimeEmaMs)
+  if (nextState.tier !== qualityState.tier) {
+    controller.setQualityTier(nextState.tier)
+    qualityTier.value = nextState.tier
+    qualityUpdates.value += 1
+  }
+  qualityState = nextState
+}
 
 function markSceneInput() {
   if (!import.meta.env.DEV || !canvas.value) return
@@ -63,6 +118,7 @@ function renderLoop(time: number) {
   renderState.value = 'playing'
   controller.setInput({ pointerX: pointerX.value, pointerY: pointerY.value, scroll: scroll.value })
   markSceneInput()
+  updateQuality(time)
   controller.render(time)
   markSceneFrame()
   frame = requestAnimationFrame(renderLoop)
@@ -71,6 +127,7 @@ function renderLoop(time: number) {
 function stopLoop() {
   if (frame) cancelAnimationFrame(frame)
   frame = 0
+  lastFrameTime = 0
   if (controller) renderState.value = fallback.value || reducedMotion.value ? 'static' : 'paused'
 }
 
@@ -145,6 +202,7 @@ async function initialize() {
     const { createLiquidScene } = await import('@/graphics/liquidScene')
     if (!mounted || disposed || reducedMotion.value || !canvas.value) return
     controller = createLiquidScene(canvas.value, { pointerX: 0, pointerY: 0, scroll: props.progress })
+    resetQualityState()
     if (import.meta.env.DEV) {
       canvas.value.dataset.sceneFrame = '0'
       markSceneInput()
@@ -183,6 +241,7 @@ watch(() => props.paused, (isPaused) => {
 
 onMounted(async () => {
   mounted = true
+  installDebugFrameTimeSetter()
   mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
   setReducedMotion(mediaQuery)
   mediaQuery.addEventListener('change', setReducedMotion)
@@ -217,6 +276,7 @@ onBeforeUnmount(() => {
   stopLoop()
   cleanupListeners.forEach((cleanup) => cleanup())
   cleanupListeners = []
+  removeDebugFrameTimeSetter()
   resizeObserver?.disconnect()
   resizeObserver = null
   visibilityObserver?.disconnect()
@@ -233,6 +293,8 @@ onBeforeUnmount(() => {
     role="img"
     :aria-label="alt"
     :data-render-state="renderState"
+    :data-quality-tier="qualityTier"
+    :data-quality-updates="qualityUpdates"
     :data-motion-stage="fallback ? undefined : scroll < 0.18 ? 'idea' : scroll < 0.48 ? 'writing' : scroll < 0.78 ? 'projects' : 'signal'"
     :style="{ '--scene-progress': scroll }"
   >
