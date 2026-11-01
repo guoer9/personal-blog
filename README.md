@@ -124,6 +124,9 @@ npm --prefix frontend run test
 # 前端类型检查与生产构建
 npm --prefix frontend run build
 
+# 公共入口包体积门禁
+npm --prefix frontend run check:bundle
+
 # 后端编译与测试
 python3 -m compileall -q backend/app
 python3 -m pytest -q
@@ -137,13 +140,13 @@ git diff --check
 
 ## 已验证结果
 
-- v1.2 基线计划见 [2026-11-01-blog-v1.2.md](docs/superpowers/plans/2026-11-01-blog-v1.2.md)；当前冻结基线记录见 [16-v1.2-baseline-freeze.md](docs/research/16-v1.2-baseline-freeze.md)。
-- 前端单元测试 `10` 个文件、`45` 项通过；类型检查与生产构建通过。后端使用仓库虚拟环境测试为 `13` 项通过。
-- 当前生产构建包体积：公共主 JS `1,067.83 kB`（gzip `353.17 kB`）、全局 CSS `355.64 kB`（gzip `49.24 kB`）、`liquidScene` `526.43 kB`（gzip `131.99 kB`）。这些是 v1.2 前优化基线，不是发布门禁通过结果。
-- 1440×900 真实 Chromium 全页逐帧滚动：p95 `16.9 ms`，超过 `25 ms` 的帧为 `0`，新增长任务为 `0`，终点实际到达 `signal`。
-- 1000–1920px 桌面宽度与 390px 移动宽度无横向溢出；iPhone 13 触控模拟关闭卡片倾斜。
-- 减动设置、WebGL 失败、手动暂停、离屏停帧和键盘焦点路径均已验证。
-- 当前主包仍是性能瓶颈：Element Plus 全局注册造成约 `1.07 MB`（gzip `353 kB`）启动块。这是一项独立的后续改造成本，尚未在本轮拆包。
+- v1.2 基线计划见 [2026-11-01-blog-v1.2.md](docs/superpowers/plans/2026-11-01-blog-v1.2.md)；冻结基线见 [16-v1.2-baseline-freeze.md](docs/research/16-v1.2-baseline-freeze.md)，最终验收见 [23-v1.2-release-acceptance.md](docs/research/23-v1.2-release-acceptance.md)。
+- 前端单元测试 `13` 个文件、`56` 项通过；类型检查、生产构建和公共入口包体积门禁通过。后端使用仓库虚拟环境测试为 `13` 项通过。
+- 当前生产构建包体积：公共主 JS `154,473 B`（gzip `60,299 B`）、全局 CSS `6,226 B`（gzip `2,253 B`）、`liquidScene` `526,771 B`（gzip `132.18 kB`）。公共主 JS 原始体积与 Task 5 基线相同，gzip 保留 `+1 B` 的严格零增长残余风险。
+- 最终本地性能复测使用桌面/移动各 3 次冷上下文样本：LCP 中位数分别为 `1,296 ms`、`1,276 ms`，INP candidate 中位数分别为 `64 ms`、`56 ms`，帧间隔 p95 中位数为 `16.7 ms`。
+- 发布验收覆盖 `10` 条公共路线 × `3` 种动态偏好，共 `30/30` 个场景；横向溢出和非预期错误均为 `0`，公共路线没有加载 Element Plus 资源。后台菜单、上传、删除确认、认证和退出登录均已复测。
+- 减少动态效果、WebGL 失败、手动暂停、离屏停帧、合成隐藏事件、路由卸载和键盘焦点路径均已验证；真实后台标签页功耗、Safari/Firefox、真实设备和生产网络仍未验证。
+- v1.2 发布判断为 `PASS WITH RESIDUAL RISK`：本地验收证据完整，但不把本地预览性能写成生产承诺，也不隐藏 `+1 B` 包体积风险。
 
 ## 项目结构
 
