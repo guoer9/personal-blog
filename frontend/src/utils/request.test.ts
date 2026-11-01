@@ -55,5 +55,22 @@ describe('request error notifications', () => {
     })
     expect(messageError).not.toHaveBeenCalled()
   })
-})
 
+  it.each([404, 503])('preserves the HTTP %s error when feedback cannot load', async (status) => {
+    messageError.mockRejectedValueOnce(new Error('UI chunk unavailable'))
+    const originalError = { response: { status, data: { detail: 'original failure' } } }
+
+    await expect(request.get('/posts', {
+      adapter: () => Promise.reject(originalError),
+    })).rejects.toBe(originalError)
+  })
+
+  it('preserves the network error when feedback cannot load', async () => {
+    messageError.mockRejectedValueOnce(new Error('UI installer unavailable'))
+    const originalError = new Error('Network Error')
+
+    await expect(request.get('/posts', {
+      adapter: () => Promise.reject(originalError),
+    })).rejects.toBe(originalError)
+  })
+})

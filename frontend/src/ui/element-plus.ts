@@ -46,25 +46,14 @@ export async function installElementPlus(app?: ElementPlusApp): Promise<void> {
   if (installPromise) return installPromise
 
   installPromise = (async () => {
-    const [{ default: ElementPlus }, , { default: zhCn }, icons] = await Promise.all([
+    const [{ default: ElementPlus }, , { default: zhCn }, { default: icons }] = await Promise.all([
       import('element-plus'),
       import('element-plus/dist/index.css'),
       import('element-plus/es/locale/lang/zh-cn'),
-      import('@element-plus/icons-vue'),
+      import('./admin-icons'),
     ])
-    const iconNames = [
-      'ArrowLeft',
-      'ChatDotRound',
-      'DataBoard',
-      'Document',
-      'FolderOpened',
-      'Plus',
-      'PriceTag',
-      'Upload',
-      'View',
-    ] as const
-    for (const name of iconNames) {
-      target.component(name, icons[name])
+    for (const [name, icon] of Object.entries(icons)) {
+      target.component(name, icon)
     }
     target.use(ElementPlus, { locale: zhCn })
   })()

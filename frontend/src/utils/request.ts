@@ -67,11 +67,19 @@ request.interceptors.response.use(
               404: data.detail || '资源不存在',
               422: '请求参数错误',
             }
-            await showError(messages[status] || data.detail || '服务器错误')
+            try {
+              await showError(messages[status] || data.detail || '服务器错误')
+            } catch {
+              // A failed UI chunk must not replace the original request error.
+            }
           }
       }
     } else if (!suppressErrorToast) {
-      await showError('网络错误，请检查网络连接')
+      try {
+        await showError('网络错误，请检查网络连接')
+      } catch {
+        // Preserve the network error even when notification loading fails.
+      }
     }
     
     return Promise.reject(error)
