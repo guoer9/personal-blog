@@ -38,6 +38,22 @@ let visibilityObserver: IntersectionObserver | null = null
 let mediaQuery: MediaQueryList | null = null
 let cleanupListeners: Array<() => void> = []
 
+function markSceneInput() {
+  if (!import.meta.env.DEV || !canvas.value) return
+  canvas.value.dataset.sceneInput = [
+    pointerX.value.toFixed(3),
+    pointerY.value.toFixed(3),
+    scroll.value.toFixed(3),
+    Math.round(performance.now()),
+  ].join(',')
+}
+
+function markSceneFrame() {
+  if (!import.meta.env.DEV || !canvas.value) return
+  const previousFrame = Number(canvas.value.dataset.sceneFrame || 0)
+  canvas.value.dataset.sceneFrame = String(previousFrame + 1)
+}
+
 function renderLoop(time: number) {
   frame = 0
   if (!mounted || disposed || !controller || !isVisible || document.hidden || props.paused) {
@@ -46,7 +62,9 @@ function renderLoop(time: number) {
   }
   renderState.value = 'playing'
   controller.setInput({ pointerX: pointerX.value, pointerY: pointerY.value, scroll: scroll.value })
+  markSceneInput()
   controller.render(time)
+  markSceneFrame()
   frame = requestAnimationFrame(renderLoop)
 }
 
@@ -127,6 +145,10 @@ async function initialize() {
     const { createLiquidScene } = await import('@/graphics/liquidScene')
     if (!mounted || disposed || reducedMotion.value || !canvas.value) return
     controller = createLiquidScene(canvas.value, { pointerX: 0, pointerY: 0, scroll: props.progress })
+    if (import.meta.env.DEV) {
+      canvas.value.dataset.sceneFrame = '0'
+      markSceneInput()
+    }
     resize()
     updateScroll()
     ready.value = true
