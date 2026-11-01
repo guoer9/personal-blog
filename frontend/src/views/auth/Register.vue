@@ -2,7 +2,7 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { ElMessage } from 'element-plus'
+import { showError, showSuccess } from '@/ui/feedback'
 import type { FormInstance, FormRules } from 'element-plus'
 
 const router = useRouter()
@@ -56,10 +56,10 @@ async function handleSubmit() {
       email: form.email,
       password: form.password,
     })
-    ElMessage.success('注册成功，请前往后台登录')
+    await showSuccess('注册成功，请前往后台登录')
     router.push('/admin/login')
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.detail || '注册失败')
+    await showError(error.response?.data?.detail || '注册失败')
   } finally {
     loading.value = false
   }

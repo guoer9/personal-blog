@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { installElementPlusForRoute } from '@/ui/element-plus'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -126,6 +127,7 @@ router.afterEach((to) => {
 
 // 路由守卫
 router.beforeEach(async (to, _from, next) => {
+  await installElementPlusForRoute(to.path)
   const userStore = useUserStore()
   
   // 如果需要认证

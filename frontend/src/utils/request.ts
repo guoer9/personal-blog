@@ -1,7 +1,7 @@
 import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
-import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import router from '@/router'
+import { showError } from '@/ui/feedback'
 
 // 创建 axios 实例
 const request: AxiosInstance = axios.create({
@@ -67,11 +67,11 @@ request.interceptors.response.use(
               404: data.detail || '资源不存在',
               422: '请求参数错误',
             }
-            ElMessage.error(messages[status] || data.detail || '服务器错误')
+            await showError(messages[status] || data.detail || '服务器错误')
           }
       }
     } else if (!suppressErrorToast) {
-      ElMessage.error('网络错误，请检查网络连接')
+      await showError('网络错误，请检查网络连接')
     }
     
     return Promise.reject(error)

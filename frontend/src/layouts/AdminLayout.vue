@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { ElMessage } from 'element-plus'
+import { showSuccess } from '@/ui/feedback'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 
-function handleLogout() {
+async function handleLogout() {
   userStore.logout()
-  ElMessage.success('已退出登录')
+  await showSuccess('已退出登录')
   router.push('/')
 }
 </script>

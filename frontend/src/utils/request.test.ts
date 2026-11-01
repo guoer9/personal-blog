@@ -5,8 +5,8 @@ import request from './request'
 
 const messageError = vi.fn()
 
-vi.mock('element-plus', () => ({
-  ElMessage: { error: (...args: unknown[]) => messageError(...args) },
+vi.mock('@/ui/feedback', () => ({
+  showError: (...args: unknown[]) => messageError(...args),
 }))
 
 vi.mock('@/stores/user', () => ({

@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getPosts, deletePost, type Post } from '@/api/posts'
 import { formatDate } from '@/utils/format'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { confirmAction, showError, showSuccess } from '@/ui/feedback'
 
 const router = useRouter()
 const posts = ref<Post[]>([])
@@ -30,23 +30,13 @@ async function fetchPosts() {
 
 async function handleDelete(post: Post) {
   try {
-    await ElMessageBox.confirm(
-      `确定要删除文章《${post.title}》吗？此操作不可恢复。`,
-      '删除确认',
-      {
-        confirmButtonText: '确定删除',
-        cancelButtonText: '取消',
-        type: 'warning',
-      }
-    )
+    if (!await confirmAction(`确定要删除文章《${post.title}》吗？此操作不可恢复。`, '删除确认')) return
     
     await deletePost(post.id)
-    ElMessage.success('删除成功')
+    await showSuccess('删除成功')
     fetchPosts()
   } catch (error: any) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除失败')
-    }
+    await showError('删除失败')
   }
 }
 

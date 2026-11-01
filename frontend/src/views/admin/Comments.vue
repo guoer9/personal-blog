@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue'
 import { getPosts } from '@/api/posts'
 import { getComments, deleteComment, type Comment } from '@/api/comments'
 import { formatDate } from '@/utils/format'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { confirmAction, showError, showSuccess } from '@/ui/feedback'
 
 interface PostWithComments {
   id: number
@@ -48,19 +48,13 @@ async function fetchData() {
 
 async function handleDelete(comment: Comment) {
   try {
-    await ElMessageBox.confirm('确定要删除这条评论吗？', '删除确认', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning',
-    })
+    if (!await confirmAction('确定要删除这条评论吗？', '删除确认')) return
     
     await deleteComment(comment.id)
-    ElMessage.success('删除成功')
+    await showSuccess('删除成功')
     fetchData()
   } catch (error: any) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除失败')
-    }
+    await showError('删除失败')
   }
 }
 

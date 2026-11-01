@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { getTags, createTag, deleteTag, type Tag } from '@/api/tags'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { confirmAction, showError, showSuccess, showWarning } from '@/ui/feedback'
 
 const tags = ref<Tag[]>([])
 const loading = ref(false)
@@ -22,18 +22,18 @@ async function fetchTags() {
 
 async function handleCreate() {
   if (!newTagName.value.trim()) {
-    ElMessage.warning('请输入标签名称')
+    await showWarning('请输入标签名称')
     return
   }
   
   creating.value = true
   try {
     await createTag({ name: newTagName.value.trim() })
-    ElMessage.success('创建成功')
+    await showSuccess('创建成功')
     newTagName.value = ''
     fetchTags()
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.detail || '创建失败')
+    await showError(error.response?.data?.detail || '创建失败')
   } finally {
     creating.value = false
   }
@@ -41,23 +41,13 @@ async function handleCreate() {
 
 async function handleDelete(tag: Tag) {
   try {
-    await ElMessageBox.confirm(
-      `确定要删除标签"${tag.name}"吗？`,
-      '删除确认',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning',
-      }
-    )
+    if (!await confirmAction(`确定要删除标签"${tag.name}"吗？`, '删除确认')) return
     
     await deleteTag(tag.id)
-    ElMessage.success('删除成功')
+    await showSuccess('删除成功')
     fetchTags()
   } catch (error: any) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除失败')
-    }
+    await showError('删除失败')
   }
 }
 

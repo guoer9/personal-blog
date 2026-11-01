@@ -6,6 +6,21 @@ const sourceRoot = resolve(__dirname, '..')
 const readSource = (file: string) => readFileSync(resolve(sourceRoot, file), 'utf8')
 
 describe('public blog access boundary', () => {
+  it('keeps Element Plus out of the public entry and public views', () => {
+    expect(readSource('main.ts')).not.toMatch(/(?:from|import)\s+['"](?:element-plus|element-plus\/dist\/index\.css|element-plus\/es\/locale)/)
+    for (const file of [
+      'layouts/MainLayout.vue',
+      'components/navigation/SiteHeader.vue',
+      'views/blog/Home.vue',
+      'views/blog/Archive.vue',
+      'views/blog/Search.vue',
+      'views/blog/TagPosts.vue',
+      'views/blog/PostDetail.vue',
+    ]) {
+      expect(readSource(file)).not.toMatch(/from ['"](?:element-plus|@element-plus\/icons-vue)/)
+    }
+  })
+
   it('keeps authentication in the private admin area', () => {
     const router = readSource('router/index.ts')
     expect(router).toMatch(/path:\s*['"]\/admin\/login['"][\s\S]*?name:\s*['"]AdminLogin['"]/)

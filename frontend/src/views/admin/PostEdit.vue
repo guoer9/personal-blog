@@ -6,7 +6,7 @@ import 'md-editor-v3/lib/style.css'
 import { getPostById, createPost, updatePost, type PostCreate, type PostUpdate } from '@/api/posts'
 import { getTags, type Tag } from '@/api/tags'
 import { uploadFile } from '@/api/files'
-import { ElMessage } from 'element-plus'
+import { showError, showSuccess } from '@/ui/feedback'
 import type { FormInstance, FormRules } from 'element-plus'
 
 const route = useRoute()
@@ -49,7 +49,7 @@ async function fetchPost() {
       tag_ids: response.data.tags.map(t => t.id),
     }
   } catch (error) {
-    ElMessage.error('获取文章失败')
+    await showError('获取文章失败')
     router.push('/admin/posts')
   } finally {
     loading.value = false
@@ -74,7 +74,7 @@ async function handleUpload(files: File[], callback: (urls: string[]) => void) {
     }
     callback(urls)
   } catch (error) {
-    ElMessage.error('上传失败')
+    await showError('上传失败')
   }
 }
 
@@ -86,14 +86,14 @@ async function handleSubmit() {
   try {
     if (isEdit.value) {
       await updatePost(parseInt(postId.value!), form.value as PostUpdate)
-      ElMessage.success('更新成功')
+      await showSuccess('更新成功')
     } else {
       await createPost(form.value)
-      ElMessage.success('创建成功')
+      await showSuccess('创建成功')
     }
     router.push('/admin/posts')
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.detail || '保存失败')
+    await showError(error.response?.data?.detail || '保存失败')
   } finally {
     saving.value = false
   }

@@ -7,7 +7,7 @@ import { getPost, type Post } from '@/api/posts'
 import { getComments, createComment, deleteComment, type Comment } from '@/api/comments'
 import { useUserStore } from '@/stores/user'
 import { formatDate } from '@/utils/format'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { confirmAction, showError, showInfo, showSuccess, showWarning } from '@/ui/feedback'
 
 const route = useRoute()
 const router = useRouter()
@@ -83,7 +83,7 @@ async function fetchComments() {
 
 async function handleSubmitComment() {
   if (!newComment.value.trim()) {
-    ElMessage.warning('请输入评论内容')
+    await showWarning('请输入评论内容')
     return
   }
   if (!userStore.isLoggedIn) {
@@ -99,12 +99,12 @@ async function handleSubmitComment() {
       post_id: post.value.id,
       parent_id: replyTo.value?.id,
     })
-    ElMessage.success('评论已发布')
+    await showSuccess('评论已发布')
     newComment.value = ''
     replyTo.value = null
     await fetchComments()
   } catch (error: any) {
-    if (!error?.response) ElMessage.error('评论发布失败，请稍后重试')
+    if (!error?.response) await showError('评论发布失败，请稍后重试')
   } finally {
     commentLoading.value = false
   }
@@ -112,16 +112,12 @@ async function handleSubmitComment() {
 
 async function handleDeleteComment(comment: Comment) {
   try {
-    await ElMessageBox.confirm('删除后无法恢复，确定继续吗？', '删除评论', {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
-      type: 'warning',
-    })
+    if (!await confirmAction('删除后无法恢复，确定继续吗？', '删除评论')) return
     await deleteComment(comment.id)
     await fetchComments()
-    ElMessage.success('评论已删除')
+    await showSuccess('评论已删除')
   } catch (error) {
-    if (error !== 'cancel' && error !== 'close') ElMessage.error('删除失败，请稍后重试')
+    await showError('删除失败，请稍后重试')
   }
 }
 
@@ -157,9 +153,9 @@ function focusDiscussionDeepLink() {
 async function copyArticleLink() {
   try {
     await navigator.clipboard.writeText(window.location.href)
-    ElMessage.success('文章链接已复制')
+    await showSuccess('文章链接已复制')
   } catch {
-    ElMessage.info(window.location.href)
+    await showInfo(window.location.href)
   }
 }
 

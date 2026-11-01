@@ -108,3 +108,43 @@ Vite 构建输出是后续对照的包体积口径；Resource Timing 的 `encode
 ### 下一轮唯一优先假设
 
 先拆分 Element Plus 公共入口，再用包体积门禁和公共/后台浏览器网络矩阵验证拆分没有破坏认证、后台和反馈交互。
+
+## Task 5 拆分复测（2026-11-01）
+
+### 变更范围
+
+- `frontend/src/ui/element-plus.ts`：持有 Vue app、异步安装 Promise、9 个后台图标和路由级安装入口。
+- `frontend/src/ui/feedback.ts`：消息/确认反馈桥；反馈桥和 Element Plus 模块均按需动态加载，并共享并发安装 Promise。
+- `frontend/src/main.ts`：只绑定 app，不再静态导入 Element Plus、中文语言包或后台图标。
+- `frontend/src/router/index.ts`：进入 `/admin/*` 或 `/register` 前等待 UI 安装。
+- `frontend/src/utils/request.ts`、公共文章详情和后台/注册页面：通过反馈桥保留现有提示文案和确认流程。
+- `frontend/scripts/check-bundle-budget.mjs`：从 `dist/index.html` 解析公共入口并检查 gzip 门禁。
+
+### E1：包体积门禁
+
+使用 `npm --prefix frontend run build` 后执行 `npm --prefix frontend run check:bundle`，当前公共入口为：
+
+| 资源 | 原始体积 | gzip | 门禁 | 结果 |
+| --- | ---: | ---: | ---: | --- |
+| `index-BNljhvTx.js` | `154,473 B` | `60,298 B`（约 `60.30 kB`） | `≤ 235,520 B` | PASS |
+| `index-DoVfhEOC.css` | `6,226 B` | `2,253 B`（约 `2.25 kB`） | `≤ 20,480 B` | PASS |
+
+Element Plus 主体、中文语言包、图标和 UI CSS 被拆到路由安装使用的异步资源；它们不再属于 `index.html` 的公共首屏入口。
+
+### E1：生产预览网络与 DOM 矩阵
+
+- 原始证据：`output/playwright/v1.2-20261101/task5-public-admin.json`。
+- 公共路径：`/`、`/writing`、`/search?q=fixture`、`/tag/fixture-lab`、`/post/perf-fixture`、`/about`、`/missing-task5`。
+- 公共场景：桌面 `1280x720` DPR 1 normal-motion、移动 `390x844` DPR 2 reduced-motion，共 `14` 个结果。
+- 受保护场景：`/admin/login`、`/register`、带原创认证夹具的 `/admin`，共 `3` 个结果。
+- 公共 14/14：横向溢出 `0`、console error `0`、Element Plus 资源集合为空；首页和所有公共页面首次 Tab 均进入公开内容路径。
+- 受保护 3/3：均加载 `index-Qa03cjL0.js`、`index-jBeOU-A2.js`、`zh-cn-Dy_9ICUN.js` 和 `index-Ckocv65N.css`；后台首页渲染成功，点击“文章管理”后到达 `/admin/posts`。
+- API 仍由本地原创夹具即时拦截；本轮验证的是资源边界和页面行为，不代表真实后端延迟。
+
+### Task 5 复测结论
+
+公共入口拆分满足包体积门禁，并保持公共路线的 DOM、移动布局、减少动态效果和后台入口行为。阶段 1 的性能原始基线仍保留在本记录前半部分；Task 8 需要用同一性能协议重新采样，确认 LCP、INP candidate 和长任务是否达到发布目标。
+
+### 下一轮唯一优先假设
+
+在不改动公共内容语义的前提下，继续完成 DDW 的“输入 → 场景状态 → 绘制”和“离屏/隐藏/卸载 → 资源释放”两条本地结构证据链，再决定是否进入自适应画质实验。

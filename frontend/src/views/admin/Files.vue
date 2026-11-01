@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { getFiles, uploadFile, deleteFile, type FileInfo } from '@/api/files'
 import { formatDate, formatFileSize } from '@/utils/format'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { confirmAction, showError, showSuccess } from '@/ui/feedback'
 import type { UploadProps } from 'element-plus'
 
 const files = ref<FileInfo[]>([])
@@ -32,10 +32,10 @@ const handleUpload: UploadProps['beforeUpload'] = async (file) => {
   uploading.value = true
   try {
     await uploadFile(file)
-    ElMessage.success('上传成功')
+    await showSuccess('上传成功')
     fetchFiles()
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.detail || '上传失败')
+    await showError(error.response?.data?.detail || '上传失败')
   } finally {
     uploading.value = false
   }
@@ -44,30 +44,20 @@ const handleUpload: UploadProps['beforeUpload'] = async (file) => {
 
 async function handleDelete(file: FileInfo) {
   try {
-    await ElMessageBox.confirm(
-      `确定要删除文件 "${file.original_name}" 吗？`,
-      '删除确认',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning',
-      }
-    )
+    if (!await confirmAction(`确定要删除文件 "${file.original_name}" 吗？`, '删除确认')) return
     
     await deleteFile(file.id)
-    ElMessage.success('删除成功')
+    await showSuccess('删除成功')
     fetchFiles()
   } catch (error: any) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除失败')
-    }
+    await showError('删除失败')
   }
 }
 
 function copyUrl(file: FileInfo) {
   const url = `/uploads/${file.filename}`
   navigator.clipboard.writeText(url)
-  ElMessage.success('已复制到剪贴板')
+  void showSuccess('已复制到剪贴板')
 }
 
 function handlePageChange(page: number) {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { showError, showSuccess } from '@/ui/feedback'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 
@@ -26,17 +26,17 @@ async function handleSubmit() {
     await userStore.login(form)
     if (!userStore.isAdmin) {
       userStore.logout()
-      ElMessage.error('该账号没有后台访问权限')
+      await showError('该账号没有后台访问权限')
       return
     }
 
-    ElMessage.success('已进入内容控制台')
+    await showSuccess('已进入内容控制台')
     const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/admin')
       ? route.query.redirect
       : '/admin'
     await router.replace(redirect)
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.detail || '登录失败，请检查账号与密码')
+    await showError(error.response?.data?.detail || '登录失败，请检查账号与密码')
   } finally {
     loading.value = false
   }
