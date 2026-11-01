@@ -172,4 +172,15 @@ describe('Post detail discussion deep link', () => {
 
     wrapper.unmount()
   })
+
+  it('keeps the not-found state for a 404 discussion deep link', async () => {
+    getPost.mockRejectedValue({ response: { status: 404 } })
+    const wrapper = await mountPost('/post/round404#discussion')
+
+    expect(wrapper.text()).toContain('这篇文章不在档案里')
+    expect(wrapper.find('#discussion').exists()).toBe(false)
+    expect(document.activeElement).toBe(document.body)
+
+    wrapper.unmount()
+  })
 })
