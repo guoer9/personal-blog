@@ -18,21 +18,43 @@ async def get_comment_by_id(db: AsyncSession, comment_id: int) -> Optional[Comme
 
 async def get_comments_by_post(
     db: AsyncSession, post_id: int
-) -> List[Comment]:
-    """获取文章的所有评论（只获取顶级评论，嵌套通过关系加载）"""
+) -> list[dict]:
+    return await get_article_comments(db, post_id=post_id)
+
+
+def comment_response(comment: Comment) -> dict:
+    return {
+        "id": comment.id,
+        "content": comment.content,
+        "post_id": comment.post_id,
+        "notion_document_id": comment.notion_document_id,
+        "user": comment.user,
+        "parent_id": comment.parent_id,
+        "created_at": comment.created_at,
+        "replies": [],
+    }
+
+
+async def get_article_comments(
+    db: AsyncSession, *, post_id: int | None = None, notion_document_id: int | None = None
+) -> list[dict]:
+    """Load the whole discussion once, then build its reply tree without lazy SQL."""
+    target = Comment.post_id == post_id if post_id is not None else Comment.notion_document_id == notion_document_id
     result = await db.execute(
         select(Comment)
-        .options(
-            selectinload(Comment.user),
-            selectinload(Comment.replies).selectinload(Comment.user)
-        )
-        .where(
-            Comment.post_id == post_id,
-            Comment.parent_id == None  # 只获取顶级评论
-        )
+        .options(selectinload(Comment.user))
+        .where(target)
         .order_by(Comment.created_at.desc())
     )
-    return list(result.scalars().all())
+    rows = {comment.id: comment_response(comment) for comment in result.scalars()}
+    roots = []
+    for row in rows.values():
+        parent = rows.get(row["parent_id"])
+        if parent is not None:
+            parent["replies"].append(row)
+        else:
+            roots.append(row)
+    return roots
 
 
 async def create_comment(
@@ -42,6 +64,7 @@ async def create_comment(
     comment = Comment(
         content=comment_in.content,
         post_id=comment_in.post_id,
+        notion_document_id=comment_in.notion_document_id,
         user_id=user_id,
         parent_id=comment_in.parent_id,
     )

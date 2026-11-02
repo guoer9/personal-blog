@@ -1,127 +1,129 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getPosts, deletePost, type Post } from '@/api/posts'
+import { getAdminArticles, unpublishAdminArticle, type AdminArticle } from '@/api/articles'
 import { formatDate } from '@/utils/format'
 import { confirmAction, showError, showSuccess } from '@/ui/feedback'
 
 const router = useRouter()
-const posts = ref<Post[]>([])
+const articles = ref<AdminArticle[]>([])
 const loading = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
 
-async function fetchPosts() {
+const statusLabels: Record<AdminArticle['status'], string> = {
+  published: '已发布',
+  draft: '草稿',
+  isolated: '已隔离',
+  archived: '已下架',
+}
+
+function statusType(status: AdminArticle['status']) {
+  if (status === 'published') return 'success'
+  if (status === 'draft') return 'info'
+  return 'warning'
+}
+
+function statusLabel(status: unknown) {
+  return statusLabels[status as AdminArticle['status']] || '未知状态'
+}
+
+async function fetchArticles() {
   loading.value = true
   try {
-    const response = await getPosts({
-      page: currentPage.value,
-      page_size: pageSize.value,
-    })
-    posts.value = response.data.items
+    const response = await getAdminArticles({ page: currentPage.value, page_size: pageSize.value })
+    articles.value = response.data.items
     total.value = response.data.total
   } catch (error) {
-    console.error('获取文章列表失败', error)
+    console.error('获取统一文章列表失败', error)
   } finally {
     loading.value = false
   }
 }
 
-async function handleDelete(post: Post) {
+async function handleUnpublish(article: AdminArticle) {
   try {
-    if (!await confirmAction(`确定要删除文章《${post.title}》吗？此操作不可恢复。`, '删除确认')) return
-    
-    await deletePost(post.id)
-    await showSuccess('删除成功')
-    fetchPosts()
-  } catch (error: any) {
-    await showError('删除失败')
+    if (!await confirmAction(`确定要下架《${article.title}》吗？下架后公开页面将无法访问。`, '下架确认')) return
+    await unpublishAdminArticle(article.kind, article.id)
+    await showSuccess('文章已下架')
+    await fetchArticles()
+  } catch (error) {
+    console.error('下架文章失败', error)
+    await showError('下架失败')
   }
 }
 
 function handlePageChange(page: number) {
   currentPage.value = page
-  fetchPosts()
+  fetchArticles()
 }
 
-onMounted(() => {
-  fetchPosts()
-})
+onMounted(fetchArticles)
 </script>
 
 <template>
   <div class="posts-page">
     <div class="page-header">
-      <h1 class="page-title">文章管理</h1>
+      <div>
+        <h1 class="page-title">文章管理</h1>
+        <p class="page-lede">手动文章和 Notion 文章共用一张管理表，保留各自的来源链接。</p>
+      </div>
       <el-button type="primary" @click="router.push('/admin/posts/new')">
         <el-icon><Plus /></el-icon>
         写文章
       </el-button>
     </div>
-    
+
     <el-card shadow="never">
-      <el-table :data="posts" v-loading="loading" stripe>
-        <el-table-column prop="title" label="标题" min-width="200">
+      <el-table :data="articles" v-loading="loading" stripe row-key="key">
+        <el-table-column label="文章" min-width="250">
           <template #default="{ row }">
-            <router-link :to="`/post/${row.slug}`" target="_blank">
-              {{ row.title }}
-            </router-link>
+            <a v-if="row.is_published" :href="row.public_url" target="_blank" rel="noopener noreferrer" class="article-link">
+              {{ row.title }} ↗
+            </a>
+            <span v-else class="article-title">{{ row.title }}</span>
+            <div class="article-source">
+              <el-tag size="small" effect="plain">{{ row.kind === 'notion' ? 'Notion' : '手动' }}</el-tag>
+              <span>{{ row.source_label }}</span>
+              <a v-if="row.kind === 'notion' && row.external_url" :href="row.external_url" target="_blank" rel="noopener noreferrer">在 Notion 打开 ↗</a>
+            </div>
           </template>
         </el-table-column>
-        
-        <el-table-column prop="is_published" label="状态" width="100">
+
+        <el-table-column label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.is_published ? 'success' : 'info'" size="small">
-              {{ row.is_published ? '已发布' : '草稿' }}
-            </el-tag>
+            <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        
-        <el-table-column prop="view_count" label="阅读" width="80" />
-        
-        <el-table-column prop="tags" label="标签" width="200">
+
+        <el-table-column label="作者" width="120">
+          <template #default="{ row }">{{ row.author?.username || row.author_label }}</template>
+        </el-table-column>
+
+        <el-table-column label="标签" min-width="170">
           <template #default="{ row }">
-            <el-tag
-              v-for="tag in row.tags"
-              :key="tag.id"
-              size="small"
-              class="tag-item"
-            >
-              {{ tag.name }}
-            </el-tag>
-            <span v-if="!row.tags.length" class="no-tags">-</span>
+            <el-tag v-for="tag in row.tags" :key="tag" size="small" class="tag-item">{{ tag }}</el-tag>
+            <span v-if="!row.tags.length" class="no-tags">暂无标签</span>
           </template>
         </el-table-column>
-        
-        <el-table-column prop="created_at" label="创建时间" width="150">
-          <template #default="{ row }">
-            {{ formatDate(row.created_at) }}
-          </template>
+
+        <el-table-column label="评论" width="80"><template #default="{ row }"><router-link :to="'/admin/comments'">{{ row.comment_count }}</router-link></template></el-table-column>
+        <el-table-column label="阅读" width="80" prop="view_count" />
+
+        <el-table-column label="更新时间" width="155">
+          <template #default="{ row }">{{ formatDate(row.updated_at) }}</template>
         </el-table-column>
-        
-        <el-table-column label="操作" width="150" fixed="right">
+
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
-            <el-button
-              text
-              type="primary"
-              size="small"
-              @click="router.push(`/admin/posts/${row.id}/edit`)"
-            >
-              编辑
-            </el-button>
-            <el-button
-              text
-              type="danger"
-              size="small"
-              @click="handleDelete(row)"
-            >
-              删除
-            </el-button>
+            <el-button v-if="row.kind === 'post'" text type="primary" size="small" @click="router.push(`/admin/posts/${row.id}/edit`)">编辑</el-button>
+            <el-button v-if="row.is_published" text type="danger" size="small" @click="handleUnpublish(row)">下架</el-button>
+            <span v-else class="operation-state">{{ statusLabel(row.status) }}</span>
           </template>
         </el-table-column>
       </el-table>
-      
+
       <div class="pagination">
         <el-pagination
           v-model:current-page="currentPage"
@@ -136,35 +138,17 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.posts-page {
-  max-width: 1200px;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-}
-
-.page-title {
-  font-size: 24px;
-  font-weight: 600;
-  color: #303133;
-}
-
-.tag-item {
-  margin-right: 4px;
-  margin-bottom: 4px;
-}
-
-.no-tags {
-  color: #909399;
-}
-
-.pagination {
-  margin-top: 20px;
-  display: flex;
-  justify-content: flex-end;
-}
+.posts-page { max-width: 1400px; }
+.page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 24px; }
+.page-title { font-size: 24px; font-weight: 600; color: #303133; margin: 0; }
+.page-lede { color: #606266; margin: 8px 0 0; }
+.article-link { color: #2455b8; font-weight: 600; text-decoration: none; }
+.article-link:hover { text-decoration: underline; }
+.article-title { font-weight: 600; color: #303133; }
+.article-source { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; color: #909399; font-size: 12px; }
+.article-source a { color: #2455b8; text-decoration: none; }
+.tag-item { margin: 0 4px 4px 0; }
+.no-tags, .operation-state { color: #909399; }
+.pagination { margin-top: 20px; display: flex; justify-content: flex-end; }
+@media (max-width: 700px) { .page-header { flex-direction: column; } }
 </style>

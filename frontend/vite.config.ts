@@ -13,11 +13,14 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        // The isolated local template exposes FastAPI on 8001. Keep the
+        // environment override for other deployments, but make the default
+        // match the documented local startup path.
+        target: process.env.BLOG_API_PROXY || 'http://127.0.0.1:8001',
         changeOrigin: true,
       },
       '/uploads': {
-        target: 'http://localhost:8000',
+        target: process.env.BLOG_API_PROXY || 'http://127.0.0.1:8001',
         changeOrigin: true,
       },
     },

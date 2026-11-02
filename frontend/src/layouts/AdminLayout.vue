@@ -1,13 +1,21 @@
 <script setup lang="ts">
 import { useRouter, useRoute } from 'vue-router'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { showSuccess } from '@/ui/feedback'
+import { closePreviewSession } from '@/api/works'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
+const isMobile = ref(false)
+let mediaQuery: MediaQueryList | null = null
+function setMobile() { isMobile.value = mediaQuery?.matches ?? false }
+onMounted(() => { mediaQuery = window.matchMedia('(max-width: 760px)'); setMobile(); mediaQuery.addEventListener('change', setMobile) })
+onBeforeUnmount(() => mediaQuery?.removeEventListener('change', setMobile))
 
 async function handleLogout() {
+  await closePreviewSession().catch(() => undefined)
   userStore.logout()
   await showSuccess('已退出登录')
   router.push('/')
@@ -18,11 +26,14 @@ async function handleLogout() {
   <el-container class="admin-layout">
     <!-- 侧边栏 -->
     <el-aside width="220px" class="sidebar">
+      <nav aria-label="后台导航">
       <div class="sidebar-header">
-        <h2 @click="router.push('/')">博客管理</h2>
+        <router-link to="/" class="sidebar-brand">博客管理</router-link>
       </div>
       
       <el-menu
+        :mode="isMobile ? 'horizontal' : 'vertical'"
+        :ellipsis="false"
         :default-active="route.path"
         router
         class="sidebar-menu"
@@ -35,19 +46,32 @@ async function handleLogout() {
           <el-icon><Document /></el-icon>
           <span>文章管理</span>
         </el-menu-item>
+        <el-menu-item index="/admin/notion">
+          <el-icon><Document /></el-icon>
+          <span>Notion 连接与资料库</span>
+        </el-menu-item>
         <el-menu-item index="/admin/comments">
           <el-icon><ChatDotRound /></el-icon>
           <span>评论管理</span>
         </el-menu-item>
         <el-menu-item index="/admin/files">
           <el-icon><FolderOpened /></el-icon>
-          <span>文件管理</span>
+          <span>公开文章附件</span>
+        </el-menu-item>
+        <el-menu-item index="/admin/library">
+          <el-icon><FolderOpened /></el-icon>
+          <span>私有文件库</span>
+        </el-menu-item>
+        <el-menu-item index="/admin/works">
+          <el-icon><Document /></el-icon>
+          <span>作品管理</span>
         </el-menu-item>
         <el-menu-item index="/admin/tags">
           <el-icon><PriceTag /></el-icon>
           <span>标签管理</span>
         </el-menu-item>
       </el-menu>
+      </nav>
     </el-aside>
     
     <!-- 主内容区 -->
@@ -106,11 +130,12 @@ async function handleLogout() {
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.sidebar-header h2 {
+.sidebar-brand {
   color: #fff;
   font-size: 18px;
   font-weight: 600;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .sidebar-menu {
@@ -151,5 +176,16 @@ async function handleLogout() {
 .admin-main {
   background: #f0f2f5;
   padding: 24px;
+}
+:global(.el-message--success) { --el-message-text-color: #245a35; }
+@media (max-width: 760px) {
+  .admin-layout { flex-direction: column; }
+  .sidebar { width: 100% !important; }
+  .sidebar-header { height: 48px; }
+  .sidebar-menu { overflow-x: auto; }
+  .sidebar-menu :deep(.el-menu-item) { padding: 0 14px; }
+  .admin-header { padding: 0 16px; }
+  .admin-main { padding: 18px; }
+  .username { display: none; }
 }
 </style>

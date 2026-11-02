@@ -9,7 +9,7 @@ from alembic import context
 
 # 导入模型和配置
 from app.db.session import Base
-from app.models import User, Post, Tag, Comment, File
+from app.models import User, Post, Tag, Comment, File, NotionSource, NotionDocument, NotionLibrarySyncState
 from app.core.config import settings
 
 # Alembic 配置对象

@@ -57,7 +57,7 @@ async function handleSubmit() {
     <section class="login-panel" aria-labelledby="admin-login-title">
       <p class="eyebrow">Administration / 01</p>
       <h1 id="admin-login-title">内容<br /><em>控制台.</em></h1>
-      <p class="intro">此入口仅用于维护文章、评论、标签与文件。访客无需登录即可阅读全部公开内容。</p>
+      <p class="intro">维护文章与作品集，管理私有文件和创作素材。访客无需登录即可浏览已发布的内容。</p>
 
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @submit.prevent="handleSubmit">
         <el-form-item label="账号" prop="username">

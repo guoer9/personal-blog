@@ -9,7 +9,8 @@ export interface CommentUser {
 export interface Comment {
   id: number
   content: string
-  post_id: number
+  post_id: number | null
+  notion_document_id?: number | null
   user: CommentUser
   parent_id?: number
   created_at: string
@@ -18,7 +19,8 @@ export interface Comment {
 
 export interface CommentCreate {
   content: string
-  post_id: number
+  post_id?: number
+  notion_document_id?: number
   parent_id?: number
 }
 
@@ -27,6 +29,10 @@ export function getComments(postId: number) {
   return request.get<Comment[]>(`/comments/post/${postId}`, {
     suppressErrorToast: true,
   })
+}
+
+export function getNotionComments(documentId: number) {
+  return request.get<Comment[]>(`/comments/notion/${documentId}`, { suppressErrorToast: true })
 }
 
 // 发表评论

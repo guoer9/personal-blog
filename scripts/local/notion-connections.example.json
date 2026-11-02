@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "connections": [
+    {
+      "id": "journal",
+      "label": "My journal connection",
+      "token": "PASTE_A_NEW_ROTATED_NOTION_TOKEN_HERE"
+    },
+    {
+      "id": "deployment",
+      "label": "Deployment docs connection",
+      "token": "PASTE_A_NEW_ROTATED_NOTION_TOKEN_HERE"
+    }
+  ]
+}

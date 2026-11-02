@@ -48,6 +48,10 @@ async function fetchPost() {
   try {
     const response = await getPost(slug.value)
     if (sequence !== requestSequence) return
+    if ('categories' in response.data) {
+      await router.replace({ name: 'DocumentDetail', params: { slug: response.data.slug } })
+      return
+    }
     post.value = response.data
     document.title = `${response.data.title} · GUOER`
     fetchComments()

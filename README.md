@@ -2,6 +2,19 @@
 
 一个基于 Vue 3 + FastAPI + PostgreSQL 的个人博客与内容管理系统。本次二次开发保留了原有文章、标签、搜索、评论、认证、上传和后台能力，并重新划分公共展示、动效与内容系统之间的边界。
 
+当前版本 **v1.3.0**，沿用 `codex/blog-v1.2` 分支开发。完整跟进内容见 [CHANGELOG.md](CHANGELOG.md)。
+
+## v1.3 更新
+
+- 多工作区 Notion 连接：在后台填写连接名称和密钥，浏览有权限的页面与数据库，预览、确认导入并手动同步。
+- 公开资料库：列表、搜索、分类、分页和详情，保留常用 Notion 内容块格式与稳定图片快照。
+- 统一文章管理：手写与 Notion 文章共同展示作者、标签、评论数、阅读量、公开链接和原文链接，支持下架。
+- 共用评论表：两种文章均支持评论和回复；同步保留统计和评论，管理员可管理下架文章的评论。
+- 作品发布与私有文件库：素材上传、续传、草稿、预览、发布更新、下架和回收恢复。
+- 访客临时传输、搜索改进，以及本地浏览器、可访问性和构建质量检查脚本。
+
+新版本优先使用独立本地环境：API `127.0.0.1:8001`、数据库 `127.0.0.1:5544`，启动和验收步骤见 [scripts/local/README.md](scripts/local/README.md)，Notion 接入见 [scripts/local/NOTION.md](scripts/local/NOTION.md)。本地密钥、数据库、私有媒体与验收截图不随源码发布。
+
 ## 你会看到什么
 
 - 原创暖纸色、墨黑、酸橙绿和电蓝视觉系统。
@@ -75,7 +88,7 @@ REST API (FastAPI) → PostgreSQL
 ### 环境要求
 
 - Python 3.11+
-- Node.js 18+
+- Node.js 22.19+（含本地质量工具）
 - PostgreSQL 14+，或使用仓库内的 Docker Compose
 
 ### 启动数据库
@@ -138,7 +151,15 @@ python3 -m pytest -q
 git diff --check
 ```
 
-## 已验证结果
+## v1.3 验证结果
+
+- 前端 30 个测试文件、230 项通过；后端 246 项通过、41 项跳过。跳过项不计为通过。
+- TypeScript、生产构建和入口体积预算通过；大型懒加载 chunk 提示仍存在。
+- 真实 Notion 重新同步、统一文章管理、评论与回复、桌面和手机布局以及图片解码已在本地 Chrome 验收。测试创建的数据已清理。
+- 当前迁移版本为 `comment_targets_v7`。更新已有实例前备份数据库与文件目录，再使用目标实例环境执行 `alembic upgrade head`。
+- 详细证据与限制见 [统一文章与评论验收](docs/research/35-unified-article-comments-acceptance.md) 和 [Notion 工作区与格式验收](docs/research/34-notion-workspace-ui-acceptance.md)。
+
+## v1.2 历史验证结果
 
 - v1.2 基线计划见 [2026-11-01-blog-v1.2.md](docs/superpowers/plans/2026-11-01-blog-v1.2.md)；冻结基线见 [16-v1.2-baseline-freeze.md](docs/research/16-v1.2-baseline-freeze.md)，最终验收见 [23-v1.2-release-acceptance.md](docs/research/23-v1.2-release-acceptance.md)。
 - 前端单元测试 `13` 个文件、`59` 项通过；类型检查、生产构建和公共入口包体积门禁通过。后端使用仓库虚拟环境测试为 `13` 项通过。

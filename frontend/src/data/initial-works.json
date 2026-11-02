@@ -1,0 +1,171 @@
+{
+  "items": [
+    {
+      "slug": "money-agent",
+      "title": "Money Agent",
+      "category": "code",
+      "caption": "AI / Quantitative research",
+      "description": "用 LLM 与遗传规划探索量化因子，串起挖掘、筛选与基于 Qlib 的多模型回测。",
+      "tags": [
+        "Python",
+        "LLM",
+        "Qlib"
+      ],
+      "accent": "lime",
+      "repository": "https://github.com/guoer9/money-agent",
+      "notes": [
+        "项目介绍依据公开仓库及 README 整理。实现细节与运行方式请见仓库文档。"
+      ],
+      "featured": true,
+      "sort_order": 0,
+      "media_files": {}
+    },
+    {
+      "slug": "financial-reports",
+      "title": "财报智能问数",
+      "category": "code",
+      "caption": "AI / Financial documents",
+      "description": "围绕上市公司财报，将 PDF 模板解析、Semantic IR / NL2SQL 与 RAG 归因对齐组织成问数流程。",
+      "tags": [
+        "Python",
+        "NL2SQL",
+        "RAG"
+      ],
+      "accent": "blue",
+      "repository": "https://github.com/guoer9/27-B-",
+      "notes": [
+        "项目介绍依据公开仓库及 README 整理。实现细节与运行方式请见仓库文档。"
+      ],
+      "featured": true,
+      "sort_order": 1,
+      "media_files": {}
+    },
+    {
+      "slug": "personal-blog",
+      "title": "Personal Blog",
+      "category": "code",
+      "caption": "Web / This space",
+      "description": "你正在浏览的个人站点。以 Vue、原创 Three.js 场景和 FastAPI，连接文章、项目与创作作品。",
+      "tags": [
+        "Vue 3",
+        "Three.js",
+        "FastAPI"
+      ],
+      "accent": "paper",
+      "repository": "https://github.com/guoer9/personal-blog",
+      "notes": [
+        "这个站点的代码也作为作品开放。阅读文章、浏览作品与后台内容管理，使用同一套应用基础。"
+      ],
+      "featured": true,
+      "sort_order": 2,
+      "media_files": {}
+    },
+    {
+      "slug": "transport-optimization",
+      "title": "化肥运输优化",
+      "category": "code",
+      "caption": "Modelling / Operations research",
+      "description": "把运输方案写成多目标优化问题，比较词典序、加权和与 ε 约束三种求解思路。",
+      "tags": [
+        "Python",
+        "Optimization",
+        "Modelling"
+      ],
+      "accent": "paper",
+      "repository": "https://github.com/guoer9/math_M2025",
+      "notes": [
+        "公开仓库包含建模说明、求解代码与结果目录。"
+      ],
+      "featured": false,
+      "sort_order": 3,
+      "media_files": {}
+    },
+    {
+      "slug": "line-time-01",
+      "title": "线条时光 第一集",
+      "category": "film",
+      "caption": "Line time / Episode 01",
+      "description": "把生活的片段连成一条时间线。线条时光，第一集。",
+      "tags": [
+        "Vlog",
+        "生活记录"
+      ],
+      "accent": "paper",
+      "notes": [
+        "小果的个人 Vlog。可在这里完整观看，也可以去 Bilibili 主页浏览更多影像。"
+      ],
+      "featured": true,
+      "sort_order": 4,
+      "media_files": {
+        "cover": "line-time-01/cover.jpg",
+        "video": "line-time-01/playback.mp4"
+      }
+    },
+    {
+      "slug": "line-time-02",
+      "title": "线条时光 第二集",
+      "category": "film",
+      "caption": "Line time / Episode 02",
+      "description": "沿着时间继续记录。线条时光的第二段影像。",
+      "tags": [
+        "Vlog",
+        "生活记录"
+      ],
+      "accent": "blue",
+      "externalWatch": "https://www.bilibili.com/video/BV1bcnVzQErf",
+      "notes": [
+        "系列第二集。留下一段生活，也留下一段可以回看的时间。"
+      ],
+      "featured": false,
+      "sort_order": 5,
+      "media_files": {
+        "cover": "line-time-02/cover.jpg",
+        "video": "line-time-02/playback.mp4"
+      }
+    },
+    {
+      "slug": "i-want-to-drop-out",
+      "title": "我也想辍学",
+      "category": "music",
+      "caption": "Original music / Freestyle",
+      "description": "小果的音乐作品。可以只听声音，也可以切换到影像版。",
+      "tags": [
+        "音乐作品",
+        "Freestyle"
+      ],
+      "accent": "lime",
+      "externalWatch": "https://www.bilibili.com/video/BV1GLdZB9Eu5",
+      "notes": [
+        "把声音与影像放在同一页。选择适合此刻的听法。"
+      ],
+      "featured": false,
+      "sort_order": 6,
+      "media_files": {
+        "cover": "i-want-to-drop-out/cover.jpg",
+        "video": "i-want-to-drop-out/playback.mp4",
+        "audio": "i-want-to-drop-out/audio.m4a"
+      }
+    },
+    {
+      "slug": "rain-at-dawn",
+      "title": "凌晨的雨",
+      "category": "music",
+      "caption": "Original music / Rain at dawn",
+      "description": "一段名为《凌晨的雨》的音乐作品。戴上耳机，听一会儿。",
+      "tags": [
+        "音乐作品"
+      ],
+      "accent": "blue",
+      "notes": [
+        "支持纯音频播放与影像版切换。"
+      ],
+      "featured": true,
+      "sort_order": 7,
+      "media_files": {
+        "cover": "rain-at-dawn/cover.jpg",
+        "video": "rain-at-dawn/playback.mp4",
+        "audio": "rain-at-dawn/audio.m4a"
+      }
+    }
+  ]
+}

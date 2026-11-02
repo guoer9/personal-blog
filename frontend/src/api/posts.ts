@@ -1,4 +1,5 @@
 import request from '@/utils/request'
+import type { PublicDocument } from './documents'
 
 export interface Tag {
   id: number
@@ -51,6 +52,11 @@ export function getPosts(params?: { page?: number; page_size?: number; tag?: str
   return request.get<PaginatedResponse<Post>>('/posts', { params })
 }
 
+// 管理员文章列表（包含草稿），与公开列表分开。
+export function getAdminPosts(params?: { page?: number; page_size?: number }) {
+  return request.get<PaginatedResponse<Post>>('/posts/admin/list', { params })
+}
+
 // 搜索文章。搜索页已提供固定的页面内错误状态，避免与全局 toast 重复通知。
 export function searchPosts(params: { q: string; page?: number; page_size?: number }) {
   return request.get<PaginatedResponse<Post>>('/posts/search', {
@@ -61,7 +67,7 @@ export function searchPosts(params: { q: string; page?: number; page_size?: numb
 
 // 获取文章详情。详情页已提供固定的页面内错误状态，避免与全局 toast 重复通知。
 export function getPost(slug: string) {
-  return request.get<Post>(`/posts/${slug}`, {
+  return request.get<Post | PublicDocument>(`/posts/${encodeURIComponent(slug)}`, {
     suppressErrorToast: true,
   })
 }

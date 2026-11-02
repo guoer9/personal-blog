@@ -4,6 +4,7 @@ import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, describe, expect, it } from 'vitest'
 import SiteHeader from './SiteHeader.vue'
+import { useUserStore } from '@/stores/user'
 
 const routes = ['/', '/writing', '/about', '/search'].map((path) => ({
   path,
@@ -11,6 +12,17 @@ const routes = ['/', '/writing', '/about', '/search'].map((path) => ({
 }))
 
 describe('SiteHeader search panel', () => {
+  it('keeps admin destinations out of public navigation even for an administrator', async () => {
+    const router = createRouter({ history: createMemoryHistory(), routes })
+    await router.push('/')
+    const pinia = createPinia()
+    const store = useUserStore(pinia)
+    store.userInfo = { id: 1, username: 'admin', is_admin: true } as typeof store.userInfo
+    const wrapper = mount(SiteHeader, { global: { plugins: [pinia, router] } })
+    expect(wrapper.findAll('a').some((link) => link.attributes('href')?.startsWith('/admin'))).toBe(false)
+    expect(wrapper.text()).not.toContain('控制台')
+    wrapper.unmount()
+  })
   afterEach(() => {
     document.body.innerHTML = ''
   })

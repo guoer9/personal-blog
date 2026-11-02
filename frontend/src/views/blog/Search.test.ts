@@ -2,7 +2,8 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Post } from '@/api/posts'
 import Search from './Search.vue'
 
 const searchPosts = vi.fn()
@@ -264,5 +265,227 @@ describe('Search results focus', () => {
     expect(window.history.state.searchReturnFocus).toBeUndefined()
 
     wrapper.unmount()
+  })
+})
+
+function article(id: number, title: string): Post {
+  return {
+    id,
+    title,
+    slug: 'article-' + id,
+    summary: 'Search summary',
+    is_published: true,
+    view_count: 0,
+    author: { id: 1, username: 'tester' },
+    tags: [],
+    created_at: '2026-10-30T12:00:00Z',
+    updated_at: '2026-10-30T12:00:00Z',
+  }
+}
+
+function result(items: Post[], total = items.length) {
+  return { data: { items, total, page: 1, page_size: 12, total_pages: Math.ceil(total / 12) } }
+}
+
+function deferred() {
+  let resolve!: (value: ReturnType<typeof result>) => void
+  let reject!: (reason: Error) => void
+  const promise = new Promise<ReturnType<typeof result>>((yes, no) => {
+    resolve = yes
+    reject = no
+  })
+  return { promise, resolve, reject }
+}
+
+describe('Search request lifecycle and query contract', () => {
+  let wrapper: ReturnType<typeof mount> | undefined
+
+  async function open(url = '/search?q=alpha') {
+    const router = createRouter({ history: createMemoryHistory(), routes })
+    await router.push(url)
+    await router.isReady()
+    wrapper = mount(Search, { attachTo: document.body, global: { plugins: [router] } })
+    await flushPromises()
+    return { router, view: wrapper }
+  }
+
+  beforeEach(() => {
+    searchPosts.mockReset()
+    searchPosts.mockResolvedValue(result([]))
+    document.body.innerHTML = ''
+    window.history.replaceState({}, '')
+  })
+
+  afterEach(() => {
+    wrapper?.unmount()
+    wrapper = undefined
+    vi.restoreAllMocks()
+  })
+
+  it('keeps the latest results when an older success arrives last', async () => {
+    const oldRequest = deferred()
+    const newRequest = deferred()
+    searchPosts.mockReturnValueOnce(oldRequest.promise).mockReturnValueOnce(newRequest.promise)
+    const { router, view } = await open()
+    await router.push('/search?q=beta')
+    await flushPromises()
+
+    newRequest.resolve(result([article(2, 'Latest result')], 13))
+    await flushPromises()
+    const input = view.get('#search-query').element as HTMLInputElement
+    input.focus()
+    oldRequest.resolve(result([article(1, 'Obsolete result')]))
+    await flushPromises()
+
+    expect(view.get('.article-link').text()).toContain('Latest result')
+    expect(view.get('.search-summary').text()).toContain('13 RESULTS')
+    expect(document.activeElement).toBe(input)
+  })
+
+  it.each(['success', 'failure'])('keeps loading and focus when an older %s finishes first', async (outcome) => {
+    const oldRequest = deferred()
+    const newRequest = deferred()
+    searchPosts.mockReturnValueOnce(oldRequest.promise).mockReturnValueOnce(newRequest.promise)
+    const { router, view } = await open()
+    await router.push('/search?q=beta')
+    await flushPromises()
+    const input = view.get('#search-query').element as HTMLInputElement
+    input.focus()
+
+    if (outcome === 'success') oldRequest.resolve(result([article(1, 'Obsolete result')]))
+    else oldRequest.reject(new Error('old request failed'))
+    await flushPromises()
+
+    expect(view.find('[aria-label="正在搜索"]').exists()).toBe(true)
+    expect(view.find('[role="alert"]').exists()).toBe(false)
+    expect(view.find('.article-link').exists()).toBe(false)
+    expect(document.activeElement).toBe(input)
+
+    newRequest.resolve(result([article(2, 'Latest result')]))
+    await flushPromises()
+    expect(view.get('.article-link').text()).toContain('Latest result')
+    expect(document.activeElement).toBe(view.get('.search-summary').element)
+  })
+
+  it('ignores an obsolete failure after the current query succeeds', async () => {
+    const oldRequest = deferred()
+    searchPosts.mockReturnValueOnce(oldRequest.promise).mockResolvedValueOnce(result([article(2, 'Latest result')]))
+    const { router, view } = await open()
+    await router.push('/search?q=beta')
+    await flushPromises()
+    oldRequest.reject(new Error('obsolete network failure'))
+    await flushPromises()
+
+    expect(view.find('.inline-error').exists()).toBe(false)
+    expect(view.get('.article-link').text()).toContain('Latest result')
+  })
+
+  it.each(['success', 'failure'])('clears pending state and ignores an old %s after the query is removed', async (outcome) => {
+    const pending = deferred()
+    searchPosts.mockReturnValueOnce(pending.promise)
+    const { router, view } = await open()
+    await router.push('/search')
+    await flushPromises()
+
+    expect(view.find('[aria-label="正在搜索"]').exists()).toBe(false)
+    expect(view.text()).toContain('输入一个关键词')
+    if (outcome === 'success') pending.resolve(result([article(1, 'Obsolete result')]))
+    else pending.reject(new Error('obsolete failure'))
+    await flushPromises()
+
+    expect(view.find('.article-link').exists()).toBe(false)
+    expect(view.find('.inline-error').exists()).toBe(false)
+    expect(view.text()).toContain('输入一个关键词')
+  })
+
+  it('keeps the latest page when an older pagination response arrives last', async () => {
+    const secondPage = deferred()
+    const thirdPage = deferred()
+    searchPosts.mockResolvedValueOnce(result([article(1, 'First page')], 25))
+      .mockReturnValueOnce(secondPage.promise).mockReturnValueOnce(thirdPage.promise)
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    const { router, view } = await open()
+    await view.get('button[aria-label="下一页"]').trigger('click')
+    await flushPromises()
+    await router.push('/search?q=alpha&page=3')
+    await flushPromises()
+
+    thirdPage.resolve(result([article(25, 'Third page')], 25))
+    await flushPromises()
+    secondPage.resolve(result([article(13, 'Second page')], 25))
+    await flushPromises()
+
+    expect(view.get('.search-summary').text()).toContain('PAGE 3 / 3')
+    expect(view.get('.article-link').text()).toContain('Third page')
+    expect(view.get('button[aria-label="下一页"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('resets both the URL page and results when the same query is resubmitted', async () => {
+    searchPosts.mockImplementation(({ page }: { page: number }) => Promise.resolve(result([
+      article(page, page === 1 ? 'First page' : 'Second page'),
+    ], 13)))
+    const { router, view } = await open('/search?q=alpha&page=2')
+    await view.get('.search-form').trigger('submit')
+    await flushPromises()
+
+    expect(router.currentRoute.value.query).toEqual({ q: 'alpha' })
+    expect(view.get('.article-link').text()).toContain('First page')
+    expect(view.get('.search-summary').text()).toContain('PAGE 1 / 2')
+  })
+
+  it('honors the URL page when query and page change together', async () => {
+    searchPosts.mockImplementation(({ page }: { page: number }) => Promise.resolve(result([
+      article(page, page === 2 ? 'Second page' : 'First page'),
+    ], 13)))
+    const { router, view } = await open('/search?q=alpha')
+    await router.push('/search?q=beta&page=2')
+    await flushPromises()
+
+    expect(view.get('.article-link').text()).toContain('Second page')
+    expect(view.get('.search-summary').text()).toContain('PAGE 2 / 2')
+  })
+
+  it('normalizes fullwidth text and whitespace on keyboard form submission', async () => {
+    searchPosts.mockImplementation(({ q }: { q: string }) => Promise.resolve(result(
+      q === 'Python cache' ? [article(1, 'Normalized query match')] : [],
+    )))
+    const { router, view } = await open('/search')
+    await view.get('#search-query').setValue('  Ｐｙｔｈｏｎ　　cache  ')
+    await view.get('.search-form').trigger('submit')
+    await flushPromises()
+
+    expect(router.currentRoute.value.query.q).toBe('Python cache')
+    expect(view.get('.article-link').text()).toContain('Normalized query match')
+    expect(view.get('#search-query').attributes('aria-describedby')).toContain('search-help')
+  })
+
+  it.each(['x'.repeat(121), 'a b c d e f g h i', 'a A a A a A a A a'])('gives useful feedback for oversized input without sending it', async (query) => {
+    const { view } = await open('/search')
+    await view.get('#search-query').setValue(query)
+    await view.get('.search-form').trigger('submit')
+    await flushPromises()
+
+    expect(searchPosts).not.toHaveBeenCalled()
+    expect(view.get('[role="alert"]').text()).toMatch(/120|8/)
+    expect(view.get('#search-query').attributes('aria-invalid')).toBe('true')
+    expect(document.activeElement).toBe(view.get('#search-query').element)
+  })
+
+  it('rejects an oversized search URL without sending a request', async () => {
+    const { view } = await open('/search?q=a+b+c+d+e+f+g+h+i')
+
+    expect(searchPosts).not.toHaveBeenCalled()
+    expect(view.get('[role="alert"]').text()).toContain('8')
+    expect(view.find('[aria-label="正在搜索"]').exists()).toBe(false)
+  })
+
+  it('keeps backend relevance order instead of sorting by date in the page', async () => {
+    searchPosts.mockResolvedValue(result([
+      { ...article(1, 'Title match'), created_at: '2020-01-01T00:00:00Z' },
+      article(2, 'Body match'),
+    ]))
+    const { view } = await open()
+
+    expect(view.findAll('.article-link h3').map((title) => title.text())).toEqual(['Title match', 'Body match'])
   })
 })

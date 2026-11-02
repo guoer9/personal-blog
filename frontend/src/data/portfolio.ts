@@ -9,17 +9,6 @@ export interface Profile {
   principles: Array<{ title: string; body: string }>
 }
 
-export interface Project {
-  number: string
-  title: string
-  type: string
-  description: string
-  stack: string[]
-  href: string
-  external?: boolean
-  accent: 'lime' | 'blue' | 'paper'
-}
-
 export interface Resource {
   index: string
   title: string
@@ -31,9 +20,9 @@ export interface Resource {
 export const profile: Profile = {
   name: 'GUOER',
   monogram: 'G/',
-  role: 'Software builder · Writer',
+  role: 'Code · Film · Music',
   headline: 'Thinking\nin motion.',
-  intro: '我在写代码，也在整理思考。这里记录软件系统、AI 工程与那些值得反复推敲的问题。',
+  intro: '我是小果，也叫 GUOER。写代码，拍下生活，也把一些心情写进音乐。这里收集我的项目、影像、声音与一路留下的思考。',
   location: 'Shanghai, CN',
   availability: 'Building in public',
   principles: [
@@ -51,36 +40,6 @@ export const profile: Profile = {
     },
   ],
 }
-
-export const projects: Project[] = [
-  {
-    number: '01',
-    title: 'Personal Field Notes',
-    type: 'Product / 2026',
-    description: '一个把长文、作品与技术笔记放在同一套内容系统里的个人站点。前台保持安静，后台保留完整的编辑与发布能力。',
-    stack: ['Vue 3', 'FastAPI', 'PostgreSQL'],
-    href: '/writing',
-    accent: 'lime',
-  },
-  {
-    number: '02',
-    title: 'Motion Architecture',
-    type: 'Experiment / 2026',
-    description: '从滚动、空间与视觉同步中提炼出的轻量 WebGL 动效层。图形跟随阅读，却从不接管阅读。',
-    stack: ['Three.js', 'GLSL', 'Vue'],
-    href: '/#motion',
-    accent: 'blue',
-  },
-  {
-    number: '03',
-    title: 'AI Systems Notebook',
-    type: 'Research log / Ongoing',
-    description: '关于模型推理、vLLM 与工程实践的学习档案。把零散结论变成可以检索、复用的知识。',
-    stack: ['vLLM', 'Python', 'Systems'],
-    href: '/writing',
-    accent: 'paper',
-  },
-]
 
 export const resources: Resource[] = [
   {
@@ -104,10 +63,18 @@ export const resources: Resource[] = [
     kind: 'QUERY',
     href: '/search',
   },
+  {
+    index: 'D',
+    title: 'Temporary transfer',
+    description: '上传文件并分享一个限时取件码。',
+    kind: 'SHARE',
+    href: '/transfer',
+  },
 ]
 
 export const navigation = [
   { label: '文章', caption: 'Writing', to: '/writing' },
-  { label: '项目', caption: 'Projects', to: '/#projects' },
+  { label: '作品', caption: 'Works', to: '/works' },
+  { label: '资料库', caption: 'Documents', to: '/documents' },
   { label: '关于', caption: 'About', to: '/about' },
 ]

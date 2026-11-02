@@ -16,6 +16,8 @@ const routes: RouteRecordRaw[] = [
   { path: '/writing', component: { template: '<div />' } },
   { path: '/about', component: { template: '<div />' } },
   { path: '/search', component: { template: '<div />' } },
+  { path: '/works', component: { template: '<div />' } },
+  { path: '/transfer', component: { template: '<div />' } },
 ]
 const router = createRouter({ history: createMemoryHistory(), routes })
 
@@ -44,4 +46,15 @@ describe('MainLayout skip link', () => {
 
     wrapper.unmount()
   })
+  it('includes the public temporary transfer link in the footer', async () => {
+    await router.push('/')
+    await router.isReady()
+    const wrapper = mount(MainLayout, {
+      attachTo: document.body,
+      global: { plugins: [createPinia(), router] },
+    })
+    expect(wrapper.get('footer a[href="/transfer"]').text()).toContain('临时传输')
+    wrapper.unmount()
+  })
+
 })

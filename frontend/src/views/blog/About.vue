@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { profile, projects } from '@/data/portfolio'
+import { profile } from '@/data/portfolio'
 import MagneticLink from '@/components/immersive/MagneticLink.vue'
 import ScrollReveal from '@/components/immersive/ScrollReveal.vue'
+import SocialLinks from '@/components/portfolio/SocialLinks.vue'
 
 const sections = [
   { id: 'approach', index: '01', label: '工作方式' },
@@ -97,7 +98,7 @@ onBeforeUnmount(() => observer?.disconnect())
             <b>31.2304° N<br />121.4737° E</b>
           </div>
           <h1>A builder<br />collecting <em>clarity.</em></h1>
-          <p class="about-intro">我是 {{ profile.name }}，一名软件开发者与写作者。这个网站既是一份公开笔记，也是把思考、作品与实践过程放在一起的长期档案。</p>
+          <p class="about-intro">我是小果，{{ profile.name }}，在 Bilibili 也叫小果Fruit。写代码、拍 Vlog、做音乐，把不同形式的表达留在同一个地方。</p>
           <div class="about-meta">
             <span>BASED IN {{ profile.location }}</span>
             <span>{{ profile.role }}</span>
@@ -155,11 +156,12 @@ onBeforeUnmount(() => observer?.disconnect())
             <p>这个站点使用 Vue 3、FastAPI 与 PostgreSQL 构建；视觉动效来自原创 Three.js 场景，并为低性能设备、减少动态效果与 WebGL 不可用场景提供静态后备。</p>
             <div class="now-actions">
               <MagneticLink href="/writing">阅读文章</MagneticLink>
-              <router-link :to="projects[0].href" class="editorial-button editorial-button--acid">查看项目 <span aria-hidden="true">→</span></router-link>
+              <router-link to="/works" class="editorial-button editorial-button--acid">查看作品 <span aria-hidden="true">→</span></router-link>
             </div>
           </div>
         </section>
 
+        <SocialLinks />
         <footer class="about-end">
           <p>END / {{ new Date().getFullYear() }}</p>
           <h2>Thanks for<br /><em>reading.</em></h2>

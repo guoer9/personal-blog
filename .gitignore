@@ -1,4 +1,5 @@
 # Local secrets and environment files
+.secrets/
 .env
 .env.*
 !.env.example
@@ -19,6 +20,11 @@ htmlcov/
 
 # Runtime data
 backend/uploads/
+backend/private-storage/
+backend/private-library/
+backend/public-media/
+/visitor-transfers/
+/backend/visitor-transfers/
 *.sqlite3
 *.db
 
@@ -47,4 +53,7 @@ output/research-scheduler/
 
 # Research runtime and root tooling dependencies
 output/research-runtime/
+output/quality/
+output/research-profile/
+output/spikes/
 /node_modules/

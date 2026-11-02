@@ -15,7 +15,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     avatar = Column(String(255), nullable=True)
     bio = Column(String(500), nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     
     # 关系
     posts = relationship("Post", back_populates="author", lazy="selectin")

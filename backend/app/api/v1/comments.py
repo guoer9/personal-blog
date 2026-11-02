@@ -1,15 +1,17 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.db.session import get_db
 from app.schemas.comment import CommentCreate, CommentResponse
 from app.crud.comment import (
-    get_comments_by_post, create_comment, get_comment_by_id, delete_comment
+    get_comments_by_post, get_article_comments, comment_response, create_comment, get_comment_by_id, delete_comment
 )
 from app.crud.post import get_post_by_id
 from app.api.deps import get_current_user_required, get_current_admin
 from app.models.user import User
+from app.models.notion_library import NotionDocument
 
 router = APIRouter()
 
@@ -31,6 +33,18 @@ async def list_comments(
     return comments
 
 
+@router.get("/notion/{document_id}", response_model=List[CommentResponse])
+async def list_notion_comments(document_id: int, db: AsyncSession = Depends(get_db)):
+    document = await db.scalar(select(NotionDocument).where(
+        NotionDocument.id == document_id,
+        NotionDocument.status == "published",
+        NotionDocument.manual_unpublished.is_(False),
+    ))
+    if document is None:
+        raise HTTPException(404, "文章不存在")
+    return await get_article_comments(db, notion_document_id=document_id)
+
+
 @router.post("", response_model=CommentResponse, status_code=status.HTTP_201_CREATED)
 async def create_new_comment(
     comment_in: CommentCreate,
@@ -39,8 +53,15 @@ async def create_new_comment(
 ):
     """发表评论（需登录）"""
     # 检查文章是否存在
-    post = await get_post_by_id(db, comment_in.post_id)
-    if not post:
+    if comment_in.post_id is not None:
+        article = await get_post_by_id(db, comment_in.post_id)
+    else:
+        article = await db.scalar(select(NotionDocument).where(
+            NotionDocument.id == comment_in.notion_document_id,
+            NotionDocument.status == "published",
+            NotionDocument.manual_unpublished.is_(False),
+        ))
+    if article is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="文章不存在"
@@ -55,14 +76,14 @@ async def create_new_comment(
                 detail="父评论不存在"
             )
         # 确保父评论属于同一篇文章
-        if parent.post_id != comment_in.post_id:
+        if (parent.post_id, parent.notion_document_id) != (comment_in.post_id, comment_in.notion_document_id):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="父评论不属于该文章"
             )
     
     comment = await create_comment(db, comment_in, current_user.id)
-    return comment
+    return comment_response(comment)
 
 
 @router.delete("/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)

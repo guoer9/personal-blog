@@ -2,7 +2,10 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { getPosts, type Post } from '@/api/posts'
 import { getTags, type Tag } from '@/api/tags'
-import { profile, projects, resources } from '@/data/portfolio'
+import { profile, resources } from '@/data/portfolio'
+import { getWorks } from '@/api/works'
+import type { Work } from '@/data/works'
+import WorkCard from '@/components/works/WorkCard.vue'
 import ImmersiveScene from '@/components/immersive/ImmersiveScene.vue'
 import MagneticLink from '@/components/immersive/MagneticLink.vue'
 import ProjectCardMotion from '@/components/immersive/ProjectCardMotion.vue'
@@ -12,6 +15,22 @@ import StatePanel from '@/components/blog/StatePanel.vue'
 import { narrativeProgress, resolveMotionStage } from '@/graphics/motion'
 
 const posts = ref<Post[]>([])
+const featuredWorks = ref<Work[]>([])
+const worksError = ref(false)
+const worksLoading = ref(true)
+let worksController: AbortController | null = null
+const projects = computed(() => featuredWorks.value.filter((item) => item.category === 'code').slice(0, 3).map((item, index) => ({ ...item, number: String(index + 1).padStart(2, '0'), type: item.caption, href: `/works/${item.slug}`, external: false, stack: item.tags })))
+const mediaWorks = computed(() => featuredWorks.value.filter((item) => item.category !== 'code').slice(0, 2))
+async function loadWorks() {
+  worksController?.abort()
+  const current = new AbortController()
+  worksController = current
+  worksLoading.value = true
+  worksError.value = false
+  try { const response = await getWorks({ featured: true }, current.signal); if (!current.signal.aborted) featuredWorks.value = response.data.items }
+  catch { if (!current.signal.aborted) worksError.value = true }
+  finally { if (!current.signal.aborted) worksLoading.value = false }
+}
 const tags = ref<Tag[]>([])
 const loading = ref(true)
 const error = ref(false)
@@ -70,6 +89,7 @@ function toggleMotion() {
 
 onMounted(() => {
   void loadHomeContent()
+  void loadWorks()
   try {
     manualMotionPaused.value = window.localStorage.getItem(MOTION_PAUSE_KEY) === '1'
   } catch {
@@ -88,6 +108,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  worksController?.abort()
   if (scrollFrame) cancelAnimationFrame(scrollFrame)
   window.removeEventListener('scroll', scheduleNarrativeUpdate)
   window.removeEventListener('resize', scheduleNarrativeUpdate)
@@ -122,8 +143,8 @@ onBeforeUnmount(() => {
         </h1>
         <p class="hero-intro">{{ profile.intro }}</p>
         <div class="hero-actions">
-          <router-link to="/writing" class="editorial-button editorial-button--acid">阅读文章 <span aria-hidden="true">↗</span></router-link>
-          <MagneticLink href="#projects">查看项目</MagneticLink>
+          <router-link to="/works" class="editorial-button editorial-button--acid">浏览作品 <span aria-hidden="true">↗</span></router-link>
+          <MagneticLink href="#writing">最新文章</MagneticLink>
         </div>
       </div>
       <div class="hero-visual">
@@ -206,7 +227,7 @@ onBeforeUnmount(() => {
               <p class="section-kicker">02 / Selected work</p>
               <h2 id="projects-title" class="section-heading">Made to<br /><em>be used.</em></h2>
             </div>
-            <p class="projects-note">一些正在积累的作品，<br />以及仍在进行中的实验。</p>
+            <router-link to="/works?type=code" class="projects-note">全部代码作品 ↗</router-link>
           </div>
         </ScrollReveal>
         <div class="project-grid">
@@ -234,7 +255,15 @@ onBeforeUnmount(() => {
             </ProjectCardMotion>
           </ScrollReveal>
         </div>
+        <div v-if="worksError" class="featured-state" role="status"><p>暂时无法读取精选作品。</p><button type="button" class="text-action" @click="loadWorks">重新读取 ↗</button></div>
+        <p v-else-if="worksLoading" class="featured-state" role="status">正在读取精选作品…</p>
+        <p v-else-if="!projects.length" class="featured-state">新作品将在发布后出现在这里。</p>
       </div>
+    </section>
+
+    <section v-if="mediaWorks.length" class="media-section page-shell" aria-labelledby="media-title">
+      <div class="section-title-row"><div><p class="section-kicker">Film & Music / 小果Fruit</p><h2 id="media-title" class="section-heading">Life, in<br /><em>other forms.</em></h2></div><router-link to="/works" class="section-link">全部作品 ↗</router-link></div>
+      <div class="media-grid"><WorkCard v-for="(work, index) in mediaWorks" :key="work.slug" :work="work" :index="index" heading-tag="h3" /></div>
     </section>
 
     <section id="motion" class="principle-section page-shell" aria-labelledby="principles-title">
@@ -275,6 +304,10 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .home { position: relative; overflow-x: clip; }
+.featured-state { padding: 30px 0; color: var(--paper); font-size: .85rem; }
+.media-section { padding-top: var(--section-space); }
+.media-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; }
+@media (max-width: 700px) { .media-grid { grid-template-columns: 1fr; gap: 36px; } }
 .story-rail {
   position: fixed;
   z-index: 20;

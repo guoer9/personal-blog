@@ -13,38 +13,56 @@ const error = ref(false)
 const total = ref(0)
 const currentPage = ref(parsePage(route.query.page))
 const pageSize = 12
-const keyword = computed(() => String(route.query.q || '').trim())
+const maxQueryLength = 120
+const maxQueryTokens = 8
+const keyword = computed(() => normalizeQuery(String(route.query.q || '')))
 const totalPages = computed(() => Math.ceil(total.value / pageSize))
 const searchValue = ref('')
 const shouldFocusResults = ref(Boolean(route.query.q))
 const pageChangeRequested = ref(false)
 const statusRegion = ref<HTMLElement | null>(null)
 const articleList = ref<HTMLElement | null>(null)
+const queryInput = ref<HTMLInputElement | null>(null)
+const queryError = ref('')
+let latestRequestId = 0
+
+function normalizeQuery(value: string) {
+  return value.normalize('NFKC').trim().replace(/\s+/gu, ' ')
+}
+
+function validateQuery(value: string) {
+  if (Array.from(value).length > maxQueryLength) return '搜索最多输入 120 个字符，请缩短后重试。'
+  if (value.split(' ').length > maxQueryTokens) return '搜索最多使用 8 个词，请减少后重试。'
+  return ''
+}
 
 function parsePage(value: unknown) {
   const page = Number(Array.isArray(value) ? value[0] : value)
   return Number.isInteger(page) && page > 0 ? page : 1
 }
 
-async function focusResults() {
+async function focusResults(requestId = latestRequestId) {
   await nextTick()
+  if (requestId !== latestRequestId) return
   statusRegion.value?.focus({ preventScroll: true })
 }
 
-async function restoreReturnFocus() {
+async function restoreReturnFocus(requestId: number) {
   const target = String(window.history.state?.searchReturnFocus || '')
   if (!target) {
-    await focusResults()
+    await focusResults(requestId)
     return
   }
   await nextTick()
+  if (requestId !== latestRequestId) return
   const link = Array.from(articleList.value?.querySelectorAll<HTMLAnchorElement>('a[href^="/post/"]') || [])
     .find((candidate) => candidate.getAttribute('href') === target)
   if (link) {
     link.focus({ preventScroll: true })
   } else {
-    await focusResults()
+    await focusResults(requestId)
   }
+  if (requestId !== latestRequestId) return
   window.history.replaceState(
     { ...window.history.state, searchReturnFocus: undefined },
     '',
@@ -52,40 +70,55 @@ async function restoreReturnFocus() {
 }
 
 async function loadResults(page = 1) {
+  const requestId = ++latestRequestId
+  const query = keyword.value
   currentPage.value = page
-  if (!keyword.value) {
+  queryError.value = validateQuery(query)
+  if (!query || queryError.value) {
     posts.value = []
     total.value = 0
     error.value = false
+    loading.value = false
+    shouldFocusResults.value = false
+    pageChangeRequested.value = false
     return
   }
   loading.value = true
   error.value = false
   try {
-    const response = await searchPosts({ q: keyword.value, page: currentPage.value, page_size: pageSize })
+    const response = await searchPosts({ q: query, page, page_size: pageSize })
+    if (requestId !== latestRequestId) return
     posts.value = response.data.items
     total.value = response.data.total
   } catch {
+    if (requestId !== latestRequestId) return
     error.value = true
   } finally {
+    if (requestId !== latestRequestId) return
     loading.value = false
+    const focusRequested = shouldFocusResults.value || pageChangeRequested.value
+    shouldFocusResults.value = false
+    pageChangeRequested.value = false
     if (window.history.state?.searchReturnFocus && currentPage.value === parsePage(route.query.page)) {
-      await restoreReturnFocus()
-    } else if (shouldFocusResults.value) {
-      shouldFocusResults.value = false
-      await focusResults()
-    } else if (pageChangeRequested.value) {
-      pageChangeRequested.value = false
-      await focusResults()
+      await restoreReturnFocus(requestId)
+    } else if (focusRequested) {
+      await focusResults(requestId)
     }
   }
 }
 
 async function submit() {
-  const value = searchValue.value.trim()
+  const value = normalizeQuery(searchValue.value)
+  queryError.value = validateQuery(value)
+  if (queryError.value) {
+    await nextTick()
+    queryInput.value?.focus()
+    return
+  }
   if (!value) return
+  searchValue.value = value
   shouldFocusResults.value = true
-  if (value === keyword.value) {
+  if (value === keyword.value && parsePage(route.query.page) === 1) {
     await loadResults()
     return
   }
@@ -122,12 +155,12 @@ watch(
   () => [keyword.value, parsePage(route.query.page)] as const,
   ([nextKeyword], previous) => {
     if (!previous || nextKeyword !== previous[0]) {
-      currentPage.value = 1
       searchValue.value = nextKeyword
+      shouldFocusResults.value = Boolean(nextKeyword)
     } else {
-      currentPage.value = parsePage(route.query.page)
       pageChangeRequested.value = true
     }
+    currentPage.value = parsePage(route.query.page)
     loadResults(currentPage.value)
   },
 )
@@ -139,6 +172,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  latestRequestId += 1
   window.removeEventListener('click', rememberReturnFocus, true)
 })
 </script>
@@ -153,9 +187,11 @@ onBeforeUnmount(() => {
         <form class="search-form" role="search" @submit.prevent="submit">
           <label for="search-query">搜索文章</label>
           <div class="search-input-row">
-            <input id="search-query" v-model="searchValue" name="q" type="search" placeholder="标题、主题或代码片段" autocomplete="off" />
+            <input id="search-query" ref="queryInput" v-model="searchValue" name="q" type="search" placeholder="标题、摘要、标签或正文" autocomplete="off" :aria-describedby="queryError ? 'search-help search-query-error' : 'search-help'" :aria-invalid="queryError ? 'true' : undefined" @input="queryError = ''" />
             <button type="submit" class="editorial-button editorial-button--acid" :disabled="!searchValue.trim()">SEARCH ↗</button>
           </div>
+          <p id="search-help" class="search-help">空格分隔多个词，每个词都需在标题、标签、摘要或正文中匹配。按相关度排序：标题优先，其次标签、摘要、正文；同级按日期从新到旧。最多 120 字、8 个词。</p>
+          <p v-if="queryError" id="search-query-error" class="query-error" role="alert">{{ queryError }}</p>
         </form>
       </header>
 
@@ -188,7 +224,7 @@ onBeforeUnmount(() => {
           v-else
           eyebrow="START WITH A WORD"
           title="输入一个关键词。"
-          description="搜索会覆盖已发布文章的标题与正文内容。"
+          description="搜索已发布文章的标题、摘要、标签与正文；多个词用空格分隔。"
         />
         <div v-if="totalPages > 1" class="pagination-bar">
           <span>PAGE {{ currentPage }} / {{ totalPages }}</span>
@@ -209,6 +245,8 @@ onBeforeUnmount(() => {
 .search-input-row { display: flex; align-items: stretch; gap: 12px; }
 .search-input-row input { width: 100%; min-width: 0; padding: 0 0 12px; border: 0; border-bottom: 1px solid var(--ink); border-radius: 0; background: transparent; color: var(--ink); font: clamp(1.3rem, 3vw, 2.3rem) var(--display-font); outline: none; }
 .search-input-row input::placeholder { color: #aaa79f; }
+.search-help, .query-error { margin-top: 14px; color: var(--muted); font-size: 0.85rem; line-height: 1.7; }
+.query-error { color: var(--ink); }
 .search-results { padding-top: 34px; }
 .search-summary { display: flex; justify-content: space-between; gap: 18px; padding: 15px 0; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--line); color: var(--muted); font: 0.62rem var(--mono-font); letter-spacing: 0.05em; }
 .search-summary:focus { outline: none; }

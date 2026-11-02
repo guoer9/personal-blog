@@ -1,0 +1,13 @@
+.env
+.env.*
+venv
+uploads
+private-library
+private-storage
+public-media
+visitor-transfers
+__pycache__
+.pytest_cache
+tests
+*.db
+*.sqlite3

@@ -1,6 +1,7 @@
 import json
+from pathlib import Path
 from typing import List
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 
@@ -24,6 +25,25 @@ class Settings(BaseSettings):
     
     # 文件上传
     UPLOAD_DIR: str = "uploads"
+    PUBLIC_MEDIA_DIR: str = "public-media"
+    WORK_ASSET_QUOTA_BYTES: int = Field(default=10 * 1024**3, gt=0)
+    PRIVATE_STORAGE_DIR: str = "private-library"
+    LIBRARY_MAX_FILE_BYTES: int = Field(default=8 * 1024**3, gt=0)
+    LIBRARY_QUOTA_BYTES: int = Field(default=50 * 1024**3, gt=0)
+    LIBRARY_SESSION_TTL_SECONDS: int = Field(default=86400, gt=0)
+    # Temporary visitor transfers use an isolated, local POSIX volume.
+    TRANSFER_STORAGE_DIR: str = "visitor-transfers"
+    TRANSFER_MAX_FILE_BYTES: int = Field(default=10 * 1024**3, gt=0)
+    TRANSFER_CHUNK_BYTES: int = Field(default=8 * 1024**2, gt=0)
+    TRANSFER_RETENTION_SECONDS: int = Field(default=6 * 60 * 60, gt=0)
+    TRANSFER_QUOTA_BYTES: int = Field(default=50 * 1024**3, gt=0)
+    TRANSFER_MAX_ACTIVE_PER_SOURCE: int = Field(default=3, gt=0)
+    TRANSFER_CREATES_PER_HOUR: int = Field(default=10, gt=0)
+    TRANSFER_LOOKUPS_PER_MINUTE: int = Field(default=60, gt=0)
+    TRANSFER_MAX_TRACKED_SOURCES: int = Field(default=4096, gt=0)
+    TRANSFER_MAX_UPLOADS: int = Field(default=4096, gt=0)
+    TRANSFER_SOURCE_TTL_SECONDS: int = Field(default=86400, gt=0)
+    TRANSFER_DOWNLOAD_TICKET_SECONDS: int = Field(default=120, gt=0)
     MAX_UPLOAD_SIZE: int = 10485760  # 10MB
     ALLOWED_EXTENSIONS: List[str] = [
         ".jpg", ".jpeg", ".png", ".gif", ".webp",  # 图片
@@ -44,6 +64,20 @@ class Settings(BaseSettings):
         case_sensitive=True,
         extra="ignore",
     )
+
+    @model_validator(mode="after")
+    def validate_storage_paths(self) -> "Settings":
+        storage_paths = [
+            ("UPLOAD_DIR", Path(self.UPLOAD_DIR).expanduser().resolve()),
+            ("PUBLIC_MEDIA_DIR", Path(self.PUBLIC_MEDIA_DIR).expanduser().resolve()),
+            ("PRIVATE_STORAGE_DIR", Path(self.PRIVATE_STORAGE_DIR).expanduser().resolve()),
+            ("TRANSFER_STORAGE_DIR", Path(self.TRANSFER_STORAGE_DIR).expanduser().resolve()),
+        ]
+        for index, (first_name, first) in enumerate(storage_paths):
+            for second_name, second in storage_paths[index + 1:]:
+                if first == second or first in second.parents or second in first.parents:
+                    raise ValueError(f"{first_name} and {second_name} storage paths must not overlap")
+        return self
 
     @model_validator(mode="after")
     def validate_production_secret(self) -> "Settings":

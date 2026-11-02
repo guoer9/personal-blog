@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { getPosts } from '@/api/posts'
+import { getAdminPosts } from '@/api/posts'
 import { getTags } from '@/api/tags'
 import { getFiles } from '@/api/files'
 
@@ -13,7 +13,7 @@ const stats = ref({
 onMounted(async () => {
   try {
     const [postsRes, tagsRes, filesRes] = await Promise.all([
-      getPosts({ page: 1, page_size: 1 }),
+      getAdminPosts({ page: 1, page_size: 1 }),
       getTags(),
       getFiles({ page: 1, page_size: 1 }),
     ])

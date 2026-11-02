@@ -1,45 +1,38 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { getPosts } from '@/api/posts'
-import { getComments, deleteComment, type Comment } from '@/api/comments'
+import { getAdminArticles, getAdminArticleComments, type AdminArticle } from '@/api/articles'
+import { deleteComment, type Comment } from '@/api/comments'
 import { formatDate } from '@/utils/format'
 import { confirmAction, showError, showSuccess } from '@/ui/feedback'
 
-interface PostWithComments {
-  id: number
-  title: string
-  slug: string
+interface PostWithComments extends AdminArticle {
   comments: Comment[]
 }
 
 const postsWithComments = ref<PostWithComments[]>([])
 const loading = ref(false)
+const failed = ref(false)
 
 async function fetchData() {
   loading.value = true
+  failed.value = false
   try {
-    const postsRes = await getPosts({ page: 1, page_size: 100 })
-    const posts = postsRes.data.items
-    
     const result: PostWithComments[] = []
-    for (const post of posts) {
-      try {
-        const commentsRes = await getComments(post.id)
-        if (commentsRes.data.length > 0) {
-          result.push({
-            id: post.id,
-            title: post.title,
-            slug: post.slug,
-            comments: commentsRes.data,
-          })
-        }
-      } catch (error) {
-        console.error('获取评论失败', error)
-      }
-    }
-    
+    let page = 1
+    let totalPages = 1
+    do {
+      const response = await getAdminArticles({ page, page_size: 50 })
+      totalPages = response.data.total_pages
+      const groups = await Promise.all(response.data.items.filter(article => article.comment_count > 0).map(async article => {
+        const response = await getAdminArticleComments(article.kind, article.id)
+        return { ...article, comments: response.data }
+      }))
+      result.push(...groups)
+      page += 1
+    } while (page <= totalPages)
     postsWithComments.value = result
   } catch (error) {
+    failed.value = true
     console.error('获取数据失败', error)
   } finally {
     loading.value = false
@@ -63,7 +56,7 @@ function flattenComments(comments: Comment[]): Comment[] {
   for (const comment of comments) {
     result.push(comment)
     if (comment.replies?.length) {
-      result.push(...comment.replies)
+      result.push(...flattenComments(comment.replies))
     }
   }
   return result
@@ -79,19 +72,22 @@ onMounted(() => {
     <div class="page-header">
       <h1 class="page-title">评论管理</h1>
     </div>
+    <div v-if="failed" role="alert"><p>评论读取失败，请重试。</p><el-button @click="fetchData">重新加载</el-button></div>
     
     <div v-loading="loading">
       <el-card
         v-for="post in postsWithComments"
-        :key="post.id"
+        :key="post.key"
         shadow="never"
         class="post-card"
       >
         <template #header>
           <div class="post-header">
-            <router-link :to="`/post/${post.slug}`" target="_blank">
+            <router-link v-if="post.is_published" :to="`${post.public_url}#discussion`" target="_blank">
               {{ post.title }}
             </router-link>
+            <span v-else>{{ post.title }}（未公开）</span>
+            <el-tag size="small">{{ post.kind === 'notion' ? 'Notion' : '手动文章' }}</el-tag>
             <span class="comment-count">{{ flattenComments(post.comments).length }} 条评论</span>
           </div>
         </template>
@@ -124,7 +120,7 @@ onMounted(() => {
         </el-table>
       </el-card>
       
-      <el-empty v-if="!loading && postsWithComments.length === 0" description="暂无评论" />
+      <el-empty v-if="!loading && !failed && postsWithComments.length === 0" description="暂无评论" />
     </div>
   </div>
 </template>

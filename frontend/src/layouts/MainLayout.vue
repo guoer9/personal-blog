@@ -26,9 +26,13 @@ function focusMainContent() {
             <p class="footer-copy">{{ profile.role }} · {{ profile.location }}</p>
           </div>
           <div class="footer-links">
+            <router-link to="/works">作品集</router-link>
             <router-link to="/writing">文章归档</router-link>
             <router-link to="/about">关于</router-link>
             <router-link to="/search">搜索</router-link>
+            <router-link to="/transfer">临时传输</router-link>
+            <a href="https://github.com/guoer9" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
+            <a href="https://space.bilibili.com/693922070" target="_blank" rel="noopener noreferrer">Bilibili ↗</a>
           </div>
         </div>
         <p class="footer-legal">© {{ new Date().getFullYear() }} {{ profile.name }} · Built with curiosity and code.</p>

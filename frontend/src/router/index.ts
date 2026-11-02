@@ -42,9 +42,34 @@ const router = createRouter({
           component: () => import('@/views/blog/Search.vue'),
         },
         {
+          path: 'works',
+          name: 'Works',
+          component: () => import('@/views/blog/Works.vue'),
+        },
+        {
+          path: 'works/:slug',
+          name: 'WorkDetail',
+          component: () => import('@/views/blog/WorkDetail.vue'),
+        },
+        {
+          path: 'documents',
+          name: 'Documents',
+          component: () => import('@/views/blog/Documents.vue'),
+        },
+        {
+          path: 'documents/:slug',
+          name: 'DocumentDetail',
+          component: () => import('@/views/blog/DocumentDetail.vue'),
+        },
+        {
           path: 'about',
           name: 'About',
           component: () => import('@/views/blog/About.vue'),
+        },
+        {
+          path: 'transfer',
+          name: 'Transfer',
+          component: () => import('@/views/blog/Transfer.vue'),
         },
       ],
     },
@@ -95,6 +120,31 @@ const router = createRouter({
           component: () => import('@/views/admin/Files.vue'),
         },
         {
+          path: 'works',
+          name: 'AdminWorks',
+          component: () => import('@/views/admin/Works.vue'),
+        },
+        {
+          path: 'works/new',
+          name: 'AdminWorkCreate',
+          component: () => import('@/views/admin/WorkEdit.vue'),
+        },
+        {
+          path: 'works/:id/edit',
+          name: 'AdminWorkEdit',
+          component: () => import('@/views/admin/WorkEdit.vue'),
+        },
+        {
+          path: 'library',
+          name: 'AdminLibrary',
+          component: () => import('@/views/admin/Library.vue'),
+        },
+        {
+          path: 'notion',
+          name: 'AdminNotion',
+          component: () => import('@/views/admin/NotionSync.vue'),
+        },
+        {
           path: 'tags',
           name: 'AdminTags',
           component: () => import('@/views/admin/Tags.vue'),
@@ -113,12 +163,18 @@ const siteTitle = 'GUOER · Field Notes'
 const pageTitles: Record<string, string> = {
   Home: siteTitle,
   Archive: `文章归档 · ${siteTitle}`,
+  Works: `作品集 · ${siteTitle}`,
+  Documents: `公开资料库 · ${siteTitle}`,
+  DocumentDetail: `资料 · ${siteTitle}`,
+  WorkDetail: `作品 · ${siteTitle}`,
   About: `关于 · ${siteTitle}`,
+  Transfer: `临时传输 · ${siteTitle}`,
   Search: `搜索 · ${siteTitle}`,
   TagPosts: `标签 · ${siteTitle}`,
   PostDetail: siteTitle,
   NotFound: `页面未找到 · ${siteTitle}`,
   AdminLogin: `后台登录 · ${siteTitle}`,
+  AdminNotion: `Notion 连接与资料库 · ${siteTitle}`,
 }
 
 router.afterEach((to) => {

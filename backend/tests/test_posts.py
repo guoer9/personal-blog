@@ -1,6 +1,34 @@
 import httpx
 
 
+async def test_public_routes_never_show_drafts_even_to_admin(client, admin_token):
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    draft = (await client.post("/api/v1/posts", headers=headers, json={
+        "title": "Private diary", "content": "A private note", "is_published": False,
+    })).json()
+    for auth in ({}, headers):
+        assert (await client.get("/api/v1/posts", headers=auth)).json()["total"] == 0
+        assert (await client.get(f'/api/v1/posts/{draft["slug"]}', headers=auth)).status_code == 404
+        assert (await client.get("/api/v1/posts/search", params={"q": "Private"}, headers=auth)).json()["total"] == 0
+    assert (await client.get("/api/v1/posts/admin/list", headers=headers)).json()["total"] == 1
+    assert (await client.get("/api/v1/posts/admin/list")).status_code == 401
+
+
+async def test_title_edit_keeps_permalink_and_publication_can_be_withdrawn(client, admin_token):
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    created = await client.post("/api/v1/posts", headers=headers, json={
+        "title": "A stable link", "content": "# Markdown\n\nArticle body.", "is_published": True,
+    })
+    assert created.status_code == 201
+    post = created.json()
+    updated = await client.put(f'/api/v1/posts/{post["id"]}', headers=headers, json={"title": "A new title"})
+    assert updated.status_code == 200
+    assert updated.json()["slug"] == post["slug"]
+    assert (await client.get(f'/api/v1/posts/{post["slug"]}')).json()["title"] == "A new title"
+    await client.put(f'/api/v1/posts/{post["id"]}', headers=headers, json={"is_published": False})
+    assert (await client.get(f'/api/v1/posts/{post["slug"]}')).status_code == 404
+
+
 async def test_admin_can_publish_and_public_can_list_post(
     client: httpx.AsyncClient,
     admin_token: str,

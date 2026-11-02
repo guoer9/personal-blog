@@ -39,7 +39,9 @@ DAEMON_LOG_PATH = STATE_DIR / "daemon.log"
 QUEUE_DB_PATH = Path.home() / ".codex" / "queue_1.sqlite"
 PLIST_PATH = STATE_DIR / f"{LABEL}.plist"
 PROMPT = (
-    "夜间研究续跑（第 {round} 轮）。请读取 docs/research/00-research-plan.md 和最新阶段记录，"
+    "DDW 研究续跑（第 {round} 轮）。工作目录固定为 /Volumes/2tb/mydata/code/vllm/personal-blog；"
+    "所有读写都以该目录为根，先读取 docs/research/00-research-plan.md 和最新阶段记录，"
+    "并运行 git status 确认现有未提交改动，不得覆盖或回退其他并行工作。"
     "只推进当前门禁允许的一个可验证子任务，单轮聚焦约 30–35 分钟。"
     "把证据、实验、复测结果和下一步假设写入 docs/research/；若上一轮结论未复测，先补复测。"
     "不要创建研究目标，不要设置 token budget；不要复制 Lusion 的素材、着色器、模型、音频或文案。"
@@ -397,11 +399,14 @@ def cmd_start(args: argparse.Namespace) -> int:
         if check.returncode != 0:
             raise SystemExit(check.stderr.strip() or check.stdout.strip())
 
+    # Publish the running state before launchd starts the RunAtLoad daemon.
+    # Otherwise the daemon can observe the previous stopped state, exit 1, and
+    # leave launchd in a needless restart loop during startup.
+    state["caffeinate_pid"] = start_keep_awake(duration)
+    write_state(state)
     unload_agent()
     install_agent()
 
-    state["caffeinate_pid"] = start_keep_awake(duration)
-    write_state(state)
     state["daemon_pid"] = None
     write_state(state)
     log(

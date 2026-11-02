@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useUserStore } from '@/stores/user'
 import { navigation, profile } from '@/data/portfolio'
 
 const route = useRoute()
 const router = useRouter()
-const userStore = useUserStore()
 const menuOpen = ref(false)
 const searchOpen = ref(false)
 const searchKeyword = ref('')
@@ -33,6 +31,8 @@ async function toggleSearch() {
 function isActive(to: string) {
   if (to === '/writing') return String(route.name).includes('Archive') || route.path === '/writing'
   if (to === '/about') return route.path === '/about'
+  if (to === '/works') return route.path === '/works' || route.path.startsWith('/works/')
+  if (to === '/documents') return route.path === '/documents' || route.path.startsWith('/documents/')
   return false
 }
 
@@ -52,7 +52,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', closeOnEscape))
 <template>
   <header class="site-header" :class="{ 'site-header--dark': isDark, 'site-header--open': menuOpen }">
     <div class="header-inner">
-      <router-link to="/" class="brand" aria-label="返回首页">
+      <router-link to="/" class="brand" title="返回首页">
         <span class="brand-mark">{{ profile.monogram }}</span>
         <span class="brand-name">{{ profile.name }}</span>
       </router-link>
@@ -75,7 +75,6 @@ onBeforeUnmount(() => document.removeEventListener('keydown', closeOnEscape))
           <span class="sr-only">搜索文章</span>
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.7" cy="10.7" r="6.7" /><path d="m16 16 5 5" /></svg>
         </button>
-        <router-link v-if="userStore.isAdmin" to="/admin" class="admin-link">控制台</router-link>
         <button class="menu-toggle" type="button" :aria-expanded="menuOpen" aria-controls="mobile-navigation" :aria-label="menuOpen ? '关闭导航' : '打开导航'" @click="menuOpen = !menuOpen">
           <span class="bar" aria-hidden="true" />
           <span class="bar" aria-hidden="true" />
@@ -93,8 +92,6 @@ onBeforeUnmount(() => document.removeEventListener('keydown', closeOnEscape))
       <router-link v-for="(item, index) in navigation" :key="item.to" :to="item.to" @click="menuOpen = false">
         <span>{{ String(index + 1).padStart(2, '0') }}</span>{{ item.caption }}
       </router-link>
-      <router-link to="/writing" @click="menuOpen = false"><span>04</span>Archive</router-link>
-      <router-link v-if="userStore.isAdmin" to="/admin" @click="menuOpen = false"><span>05</span>Admin</router-link>
     </nav>
   </header>
 </template>
@@ -165,7 +162,6 @@ onBeforeUnmount(() => document.removeEventListener('keydown', closeOnEscape))
 .icon-button, .menu-toggle { border: 1px solid currentColor; background: transparent; color: inherit; cursor: pointer; }
 .icon-button { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; }
 .icon-button svg { width: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; }
-.admin-link { color: inherit; font: 0.68rem var(--mono-font); letter-spacing: 0.04em; text-decoration: none; }
 .menu-toggle { display: none; width: 36px; height: 36px; padding: 10px; }
 .menu-toggle > .bar { display: block; width: 100%; height: 1px; background: currentColor; margin: 5px 0; transition: transform 180ms ease; }
 .header-search {
@@ -184,7 +180,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', closeOnEscape))
 .mobile-navigation { display: none; }
 @media (max-width: 820px) {
   .header-inner { grid-template-columns: 1fr auto; min-height: 66px; }
-  .desktop-navigation, .admin-link { display: none; }
+  .desktop-navigation { display: none; }
   .menu-toggle { display: block; }
   .mobile-navigation { display: grid; width: var(--page-width); margin: 0 auto; padding: 10px 0 28px; border-top: 1px solid var(--line); }
   .mobile-navigation a { display: flex; align-items: baseline; gap: 14px; padding: 15px 0; border-bottom: 1px solid var(--line); color: inherit; font-family: var(--display-font); font-size: 2rem; letter-spacing: -0.04em; text-decoration: none; }

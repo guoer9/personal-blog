@@ -189,6 +189,7 @@ onMounted(() => {
                 active-text="发布"
                 inactive-text="草稿"
               />
+              <p class="publish-help">草稿只在后台可见；发布后会出现在公开文章列表，并拥有独立详情页。</p>
             </el-form-item>
             
             <el-button
@@ -198,7 +199,7 @@ onMounted(() => {
               style="width: 100%"
               @click="handleSubmit"
             >
-              {{ isEdit ? '保存修改' : '发布文章' }}
+              {{ isEdit ? '保存修改' : form.is_published ? '发布文章' : '保存草稿' }}
             </el-button>
           </el-card>
         </el-col>
@@ -231,6 +232,7 @@ onMounted(() => {
   position: sticky;
   top: 80px;
 }
+.publish-help { margin: 8px 0 0; color: #697386; font-size: 13px; line-height: 1.6; }
 
 @media (max-width: 992px) {
   .settings-card {

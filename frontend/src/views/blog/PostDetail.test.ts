@@ -34,6 +34,7 @@ vi.mock('md-editor-v3', () => ({
 const routes = [
   { path: '/', component: { template: '<div />' } },
   { path: '/post/:slug', name: 'PostDetail', component: PostDetail },
+  { path: '/documents/:slug', name: 'DocumentDetail', component: { template: '<div />' } },
   { path: '/writing', name: 'Archive', component: { template: '<div />' } },
   { path: '/admin/login', name: 'AdminLogin', component: { template: '<div />' } },
 ]
@@ -73,6 +74,15 @@ describe('Post detail loaded-state semantics', () => {
     getComments.mockResolvedValue({ data: [] })
     document.body.innerHTML = ''
     localStorage.clear()
+  })
+
+  it('replaces a migrated Notion post URL before touching blog author or comments', async () => {
+    getPost.mockResolvedValue({ data: { slug: 'document-note', title: '资料', categories: [], content: '正文', created_at: post.created_at, updated_at: post.updated_at } })
+    const wrapper = await mountPost()
+    const router = wrapper.vm.$router
+    expect(router.currentRoute.value.fullPath).toBe('/documents/document-note')
+    expect(getComments).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 
   it('moves focus into the named discussion when its in-page link is activated', async () => {

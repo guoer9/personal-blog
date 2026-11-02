@@ -1,6 +1,7 @@
+import unicodedata
 from typing import Optional, List, Tuple
 from slugify import slugify
-from sqlalchemy import select, func, or_
+from sqlalchemy import case, select, func, or_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.post import Post, Tag
@@ -135,10 +136,7 @@ async def update_post(
     """更新文章"""
     update_data = post_in.model_dump(exclude_unset=True, exclude={"tag_ids"})
     
-    # 如果标题改变，重新生成 slug
-    if "title" in update_data:
-        update_data["slug"] = await generate_unique_slug(db, update_data["title"], post.id)
-    
+    # Slugs are permanent public permalinks; changing a title must not break links.
     for field, value in update_data.items():
         setattr(post, field, value)
     
@@ -173,29 +171,56 @@ async def search_posts(
     page: int = 1,
     page_size: int = 10
 ) -> Tuple[List[Post], int]:
-    """搜索文章"""
-    search_pattern = f"%{keyword}%"
-    
+    """搜索已发布文章，按字段相关度稳定排序。"""
+    normalized_keyword = " ".join(unicodedata.normalize("NFKC", keyword).split())
+    if not normalized_keyword or len(normalized_keyword) > 120:
+        return [], 0
+
+    words = normalized_keyword.split(" ")
+    if len(words) > 8:
+        return [], 0
+    # ILIKE folds both operands using the database's rules. Python casefold
+    # alone would make even identical Unicode text unmatchable on SQLite.
+    tokens = list(dict.fromkeys(words))
+
+    def escape_like(value: str) -> str:
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+    token_matches = []
+    title_matches = []
+    tag_matches = []
+    summary_matches = []
+    content_matches = []
+    for token in tokens:
+        pattern = f"%{escape_like(token)}%"
+        title_match = Post.title.ilike(pattern, escape="\\")
+        tag_match = Post.tags.any(Tag.name.ilike(pattern, escape="\\"))
+        summary_match = Post.summary.ilike(pattern, escape="\\")
+        content_match = Post.content.ilike(pattern, escape="\\")
+        token_matches.append(or_(title_match, tag_match, summary_match, content_match))
+        title_matches.append(title_match)
+        tag_matches.append(tag_match)
+        summary_matches.append(summary_match)
+        content_matches.append(content_match)
+
+    match_conditions = [Post.is_published == True, *token_matches]
+    relevance = case(
+        (or_(*title_matches), 4),
+        (or_(*tag_matches), 3),
+        (or_(*summary_matches), 2),
+        (or_(*content_matches), 1),
+        else_=0,
+    )
     query = select(Post).options(
         selectinload(Post.author),
         selectinload(Post.tags)
-    ).where(
-        Post.is_published == True,
-        or_(
-            Post.title.ilike(search_pattern),
-            Post.content.ilike(search_pattern),
-            Post.summary.ilike(search_pattern)
-        )
-    ).order_by(Post.created_at.desc())
-    
-    count_query = select(func.count(Post.id)).where(
-        Post.is_published == True,
-        or_(
-            Post.title.ilike(search_pattern),
-            Post.content.ilike(search_pattern),
-            Post.summary.ilike(search_pattern)
-        )
+    ).where(*match_conditions).order_by(
+        relevance.desc(),
+        Post.created_at.desc(),
+        Post.id.desc(),
     )
+
+    count_query = select(func.count(Post.id)).where(*match_conditions)
     
     offset = (page - 1) * page_size
     query = query.offset(offset).limit(page_size)
