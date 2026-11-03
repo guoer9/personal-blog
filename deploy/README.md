@@ -51,6 +51,35 @@ systemctl status personal-blog.service personal-blog-backup.timer
 /srv/personal-blog/deploy/update-server.sh
 ```
 
+## 服务器 Mihomo 代理
+
+操作目标是 `root@39.96.212.169`，项目目录为 `/srv/personal-blog`。SSH 使用公网直连；服务器上的 Mihomo HTTP 代理为 `http://127.0.0.1:7890`。每次远程操作前，应说明 SSH 目标、SSH 是否经代理，以及本次 Git、镜像拉取和构建依赖各自使用的网络路径。不要在日志中输出订阅地址、密钥或环境文件内容。
+
+Git、宿主机 curl 等外网访问不通时，在服务器当前会话中显式设置代理，再执行部署或更新脚本：
+
+```bash
+export http_proxy=http://127.0.0.1:7890
+export https_proxy=http://127.0.0.1:7890
+export HTTP_PROXY="$http_proxy"
+export HTTPS_PROXY="$https_proxy"
+export no_proxy=localhost,127.0.0.1,::1,database,api,web
+export NO_PROXY="$no_proxy"
+cd /srv/personal-blog
+git ls-remote origin refs/heads/main
+./deploy/update-server.sh
+```
+
+Docker 构建不会自动继承 SSH 会话的代理。需要 apt、pip、npm 下载经 Mihomo 时，在服务器 `deploy/.env.production` 中设置：
+
+```dotenv
+BUILD_NETWORK=host
+BUILD_PROXY_URL=http://127.0.0.1:7890
+```
+
+这两项使 Linux 服务器的构建步骤通过宿主机网络访问仅监听回环地址的代理；代理作为 Docker 预定义构建参数传入，不写入应用运行环境。npm 仍使用 `registry.npmmirror.com`。停用构建代理时，将 `BUILD_NETWORK` 改回 `default` 并清空 `BUILD_PROXY_URL`。
+
+基础镜像拉取由 Docker daemon 独立处理，上述构建参数不控制镜像拉取。本服务器已配置镜像加速源；若镜像拉取也失败，应另查 daemon 代理配置，不能仅凭 `export` 就认定镜像拉取已走代理。不要将 `7890` 开放到公网。
+
 每日备份由 `personal-blog-backup.timer` 执行，保存数据库自定义格式导出和四个应用数据目录到 `/srv/backups/personal-blog/`，保留 14 天。备份不包含 Notion 密钥；Notion 连接可以在后台重新添加。
 
 ## 域名反向代理

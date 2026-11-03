@@ -34,6 +34,12 @@ services:
     build:
       context: ..
       dockerfile: backend/Dockerfile.production
+      network: ${BUILD_NETWORK:-default}
+      args: &build-proxy-args
+        HTTP_PROXY: ${BUILD_PROXY_URL:-}
+        HTTPS_PROXY: ${BUILD_PROXY_URL:-}
+        http_proxy: ${BUILD_PROXY_URL:-}
+        https_proxy: ${BUILD_PROXY_URL:-}
     restart: unless-stopped
     depends_on:
       database:
@@ -71,7 +77,9 @@ services:
     build:
       context: ..
       dockerfile: frontend/Dockerfile.production
+      network: ${BUILD_NETWORK:-default}
       args:
+        <<: *build-proxy-args
         VITE_API_BASE_URL: /api/v1
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
     restart: unless-stopped
