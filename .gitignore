@@ -1,5 +1,8 @@
 # Local secrets and environment files
 .secrets/
+deploy/.env.production
+deploy/data/
+deploy/secrets/
 .env
 .env.*
 !.env.example

@@ -1,0 +1,8 @@
+[Unit]
+Description=Personal Blog backup
+After=personal-blog.service
+Requires=personal-blog.service
+
+[Service]
+Type=oneshot
+ExecStart=/srv/personal-blog/deploy/backup-server.sh

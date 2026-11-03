@@ -198,7 +198,7 @@ personal-blog/
 │   │   ├── models/               # 数据模型
 │   │   └── schemas/              # Pydantic 模式
 │   └── alembic/                  # 数据库迁移
-├── deploy/                       # Nginx、Systemd 与部署脚本
+├── deploy/                       # Docker Compose、Nginx、Systemd 与部署脚本
 ├── docs/implementation/          # 本次重建的实现记录
 ├── docker-compose.yml
 └── README.md
@@ -206,21 +206,19 @@ personal-blog/
 
 ## 当前部署约定
 - 本地 PostgreSQL 由 `docker-compose.yml` 提供，主机端口是 `5433`。
-- 生产环境使用 Nginx + Systemd；生产环境变量由服务器上的 `/etc/personal-blog/blog-api.env` 提供。
-- `deploy/nginx.conf.template` 和 `deploy/deploy.sh` 不包含具体域名、证书或生产密钥。部署时通过 `DOMAIN` 和 `CERT_EMAIL` 注入当前有效域名。
-- 旧域名和旧证书不会作为项目配置保留。更换域名时，需要同步配置 DNS、CORS、前端 API 地址和 Certbot。
+- 生产环境使用 Docker Compose，PostgreSQL、FastAPI 和前端 Nginx 运行在同一台服务器；宿主机 Nginx 只负责后续域名反向代理。
+- 生产环境变量由服务器上的 `deploy/.env.production` 提供；数据库数据、私有资料、公开媒体、上传文件和临时传输目录保存在 `deploy/data/`。
+- PostgreSQL 通过服务器生成的证书启用 SSL，API 使用 `ssl=require` 连接；Notion 凭据保存在服务器 `deploy/secrets/notion-connections.json`，不会进入 Git 或数据库。
+- 当前部署方案、管理员初始化、更新、备份与域名反代步骤见 [`deploy/README.md`](deploy/README.md)。
 
 生产环境变量至少需要：
 
 ```dotenv
-DATABASE_URL=postgresql+asyncpg://bloguser:<password>@localhost:5432/blogdb
+POSTGRES_USER=blog
+POSTGRES_DB=personal_blog
+POSTGRES_PASSWORD=<服务器生成的随机密码>
 SECRET_KEY=<openssl rand -hex 32 生成的密钥>
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-REFRESH_TOKEN_EXPIRE_DAYS=7
-CORS_ORIGINS=["https://your-domain.example","https://www.your-domain.example"]
-UPLOAD_DIR=/var/www/blog/backend/uploads
-MAX_UPLOAD_SIZE=10485760
+CORS_ORIGINS=["http://39.96.212.169:8080","https://guoer9.me","https://www.guoer9.me"]
 ENVIRONMENT=production
 ```
 
@@ -233,34 +231,27 @@ ENVIRONMENT=production
 
 ### 部署步骤
 
-1. 配置域名解析，将域名 A 记录指向服务器 IP
+1. 配置域名解析，将域名 A 记录指向服务器 IP。当前 Docker 入口先使用 `http://39.96.212.169:8080`。
 
-2. 上传代码到服务器
+2. 在服务器部署 Docker Compose
 ```bash
-scp -r personal-blog/ user@your-server:/var/www/blog/
+mkdir -p /srv
+git clone --branch main --single-branch https://github.com/guoer9/personal-blog.git /srv/personal-blog
+cd /srv/personal-blog
+chmod +x deploy/*.sh
+./deploy/bootstrap-server.sh
 ```
 
-3. 修改配置文件
+3. 填写服务器管理员密码并初始化
 ```bash
-# 创建服务器管理的后端生产环境配置
-sudo install -d -m 750 /etc/personal-blog
-sudoedit /etc/personal-blog/blog-api.env
-
-# 设置当前有效域名和证书邮箱后执行部署脚本
-DOMAIN=your-domain.example CERT_EMAIL=admin@your-domain.example \
-  sudo -E ./deploy.sh
+sudoedit /srv/personal-blog/deploy/.env.production
+cd /srv/personal-blog
+docker compose --env-file deploy/.env.production \
+  -f deploy/compose.production.yml run --rm --no-deps api \
+  python -m app.production_admin
 ```
 
-4. 运行部署脚本
-```bash
-cd /var/www/blog/deploy
-chmod +x deploy.sh
-sudo ./deploy.sh
-```
-
-### 手动部署
-
-参考 `deploy/deploy.sh` 脚本中的步骤手动执行。
+4. 通过 [`deploy/README.md`](deploy/README.md) 的域名反代步骤接入 `guoer9.me`；HTTPS 证书在 DNS 和 80 端口确认后单独配置。
 
 ## 环境变量
 ### 后端 (.env)

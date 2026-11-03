@@ -1,0 +1,81 @@
+name: personal-blog
+
+services:
+  database:
+    build:
+      context: ..
+      dockerfile: deploy/postgres/Dockerfile
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/var/lib/postgresql/ssl/server.crt
+      - -c
+      - ssl_key_file=/var/lib/postgresql/ssl/server.key
+      - -c
+      - ssl_min_protocol_version=TLSv1.2
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./secrets/postgres:/run/postgres-certs:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  api:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile.production
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}?ssl=require
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      ENVIRONMENT: production
+      CORS_ORIGINS: '${CORS_ORIGINS:?CORS_ORIGINS is required}'
+      UPLOAD_DIR: /data/uploads
+      PUBLIC_MEDIA_DIR: /data/publication
+      PRIVATE_STORAGE_DIR: /data/private
+      TRANSFER_STORAGE_DIR: /data/transfers
+      NOTION_CONNECTIONS_FILE: /data/secrets/notion-connections.json
+      NOTION_SYNC_ENABLED: ${NOTION_SYNC_ENABLED:-false}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_UPDATE_PASSWORD: ${ADMIN_UPDATE_PASSWORD:-false}
+    volumes:
+      - ./data/private-library:/data/private
+      - ./data/public-media:/data/publication
+      - ./data/uploads:/data/uploads
+      - ./data/visitor-transfers:/data/transfers
+      - ./secrets:/data/secrets
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  web:
+    build:
+      context: ..
+      dockerfile: frontend/Dockerfile.production
+      args:
+        VITE_API_BASE_URL: /api/v1
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_BIND_ADDRESS:-0.0.0.0}:${WEB_PORT:-8080}:80"
