@@ -6,6 +6,7 @@ deploy/secrets/
 .env
 .env.*
 !.env.example
+!deploy/.env.production.example
 backend/.env
 backend/.env.*
 !backend/.env.example

@@ -2,6 +2,8 @@
 
 生产环境使用同一台云服务器上的 Docker Compose：PostgreSQL、FastAPI 和前端 Nginx 都由 Compose 管理。数据库数据和四类应用文件使用 `deploy/data/` 绑定目录持久化；PostgreSQL 通过服务器生成的自签名证书启用 SSL，API 使用 `ssl=require` 连接。
 
+前端镜像默认使用 `https://registry.npmmirror.com` 安装 npm 依赖；如服务器网络环境适合其他源，可在 `deploy/.env.production` 设置 `NPM_REGISTRY` 后重新构建。
+
 服务器首次部署前，确认阿里云安全组已放行 TCP `8080`。当前入口是：
 
 ```text

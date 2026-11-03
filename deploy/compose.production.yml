@@ -73,6 +73,7 @@ services:
       dockerfile: frontend/Dockerfile.production
       args:
         VITE_API_BASE_URL: /api/v1
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
     restart: unless-stopped
     depends_on:
       api:
