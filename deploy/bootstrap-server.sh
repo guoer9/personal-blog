@@ -45,7 +45,7 @@ fi
 
 install -d -m 0750 -o 10001 -g 10001 "$DEPLOY_DIR/deploy/secrets"
 install -d -m 0700 "$DEPLOY_DIR/deploy/secrets/postgres"
-install -d -m 0700 "$DEPLOY_DIR/deploy/data/postgres"
+install -d -m 0700 -o 70 -g 70 "$DEPLOY_DIR/deploy/data/postgres"
 for data_dir in private-library public-media uploads visitor-transfers; do
     install -d -m 0750 -o 10001 -g 10001 "$DEPLOY_DIR/deploy/data/$data_dir"
 done

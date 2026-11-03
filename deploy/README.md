@@ -20,7 +20,7 @@ chmod +x deploy/*.sh
 ./deploy/bootstrap-server.sh
 ```
 
-脚本会生成 `deploy/.env.production`、PostgreSQL SSL 证书和 Notion 连接文件。`.env.production`、`deploy/secrets/`、`deploy/data/` 都被 Git 忽略。脚本不会生成或打印管理员密码。
+脚本会生成 `deploy/.env.production`、PostgreSQL SSL 证书和 Notion 连接文件，并将 PostgreSQL 数据目录设为容器数据库用户可访问。`.env.production`、`deploy/secrets/`、`deploy/data/` 都被 Git 忽略。脚本不会生成或打印管理员密码。
 
 管理员密码只在服务器上填写：
 
