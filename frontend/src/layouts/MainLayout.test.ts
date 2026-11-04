@@ -18,6 +18,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/search', component: { template: '<div />' } },
   { path: '/works', component: { template: '<div />' } },
   { path: '/transfer', component: { template: '<div />' } },
+  { path: '/test-layout', component: { template: '<p>Home</p>' } },
 ]
 const router = createRouter({ history: createMemoryHistory(), routes })
 
@@ -27,7 +28,7 @@ describe('MainLayout skip link', () => {
   })
 
   it('moves keyboard focus to the main content when activated', async () => {
-    await router.push('/')
+    await router.push('/test-layout')
     await router.isReady()
     const wrapper = mount(MainLayout, {
       attachTo: document.body,
@@ -47,13 +48,27 @@ describe('MainLayout skip link', () => {
     wrapper.unmount()
   })
   it('includes the public temporary transfer link in the footer', async () => {
-    await router.push('/')
+    await router.push('/test-layout')
     await router.isReady()
     const wrapper = mount(MainLayout, {
       attachTo: document.body,
       global: { plugins: [createPinia(), router] },
     })
     expect(wrapper.get('footer a[href="/transfer"]').text()).toContain('临时传输')
+    wrapper.unmount()
+  })
+
+  it('owns one persistent visual canvas alongside the public layout', async () => {
+    await router.push('/test-layout')
+    await router.isReady()
+    const wrapper = mount(MainLayout, {
+      attachTo: document.body,
+      global: { plugins: [createPinia(), router] },
+    })
+    expect(wrapper.findAll('canvas')).toHaveLength(1)
+    expect(wrapper.get('canvas').attributes('aria-hidden')).toBe('true')
+    expect(wrapper.findAll('.skip-link')).toHaveLength(1)
+    expect(wrapper.findAll('footer')).toHaveLength(1)
     wrapper.unmount()
   })
 

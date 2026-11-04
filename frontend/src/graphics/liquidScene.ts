@@ -8,9 +8,8 @@ import {
   Points,
   Scene,
   ShaderMaterial,
-  WebGLRenderer,
 } from 'three'
-import { clamp, damp, qualityProfile, resolveMotionStage, sceneMood } from './motion'
+import { clamp, damp, MotionEnergy, qualityProfile, resolveMotionStage, sceneMood } from './motion'
 import {
   flowFragmentShader,
   flowVertexShader,
@@ -18,6 +17,7 @@ import {
   particleVertexShader,
 } from './shaders'
 import type { QualityTier } from './quality'
+import type { RendererAdapter } from './runtime/types'
 
 export interface SceneInput {
   pointerX: number
@@ -59,18 +59,17 @@ function createParticles(count: number) {
 }
 
 export function createLiquidScene(
-  canvas: HTMLCanvasElement,
+  renderer: RendererAdapter,
   initialState: SceneInput,
   quality = qualityProfile(window.innerWidth, navigator.hardwareConcurrency || 4),
 ): LiquidSceneController {
-  const renderer = new WebGLRenderer({
-    canvas,
-    alpha: true,
-    antialias: true,
-    powerPreference: 'high-performance',
-  })
-  renderer.setClearColor(0x000000, 0)
-  renderer.outputColorSpace = 'srgb'
+  const sharedRenderer = renderer as RendererAdapter & {
+    setClearColor?: (color: number, alpha: number) => void
+    outputColorSpace?: string
+  }
+  sharedRenderer.setClearColor?.(0x000000, 0)
+  sharedRenderer.outputColorSpace = 'srgb'
+  const canvas = renderer.domElement
 
   const scene = new Scene()
   const camera = new PerspectiveCamera(38, 1, 0.1, 100)
@@ -81,6 +80,7 @@ export function createLiquidScene(
     uPointerX: { value: 0 },
     uPointerY: { value: 0 },
     uScroll: { value: 0 },
+    uEnergy: { value: 0 },
   }
   const geometry = new IcosahedronGeometry(1.48, quality.detail)
   const material = new ShaderMaterial({
@@ -113,6 +113,7 @@ export function createLiquidScene(
     uniforms: {
       uTime: uniforms.uTime,
       uScroll: uniforms.uScroll,
+      uEnergy: uniforms.uEnergy,
       uPixelRatio: { value: 1 },
     },
     transparent: true,
@@ -124,6 +125,8 @@ export function createLiquidScene(
 
   const target: SceneInput = { ...initialState }
   const current: SceneInput = { ...initialState }
+  const motionEnergy = new MotionEnergy()
+  let lastInputTime = performance.now()
   const deviceDprCap = quality.pixelRatioCap
   const maxParticleCount = quality.particleCount
   let viewportWidth = 0
@@ -164,9 +167,21 @@ export function createLiquidScene(
       camera.updateProjectionMatrix()
     },
     setInput(input) {
-      target.pointerX = clamp(input.pointerX, -1, 1)
-      target.pointerY = clamp(input.pointerY, -1, 1)
-      target.scroll = clamp(input.scroll, 0, 1)
+      const nextPointerX = clamp(input.pointerX, -1, 1)
+      const nextPointerY = clamp(input.pointerY, -1, 1)
+      const nextScroll = clamp(input.scroll, 0, 1)
+      const now = performance.now()
+      const elapsedSeconds = (now - lastInputTime) / 1000
+      if (elapsedSeconds > 0) {
+        const pointerDistance = Math.hypot(nextPointerX - target.pointerX, nextPointerY - target.pointerY)
+        const scrollDistance = Math.abs(nextScroll - target.scroll)
+        motionEnergy.pulse(pointerDistance, elapsedSeconds, 2.4)
+        motionEnergy.pulse(scrollDistance, elapsedSeconds, 1.5)
+      }
+      lastInputTime = now
+      target.pointerX = nextPointerX
+      target.pointerY = nextPointerY
+      target.scroll = nextScroll
     },
     setQualityTier(tier) {
       if (disposed || tier === currentQualityTier) return
@@ -209,6 +224,7 @@ export function createLiquidScene(
       uniforms.uPointerX.value = current.pointerX
       uniforms.uPointerY.value = current.pointerY
       uniforms.uScroll.value = current.scroll
+      uniforms.uEnergy.value = motionEnergy.advance(time)
       renderer.render(scene, camera)
     },
     dispose() {
@@ -221,8 +237,6 @@ export function createLiquidScene(
       material.dispose()
       wireMaterial.dispose()
       particleMaterial.dispose()
-      renderer.dispose()
-      renderer.forceContextLoss()
     },
   }
 }

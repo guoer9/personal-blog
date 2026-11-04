@@ -77,7 +77,7 @@ export class PageTransitionCoordinator {
     if (!module || !this.isCurrent(this.sequence)) return
     this.preloaded = null
     module.mount(this.context)
-    module.enter(this.context, this.currentIdentity?.pageId)
+    module.enter(this.context, this.currentIdentity?.pageId ?? undefined)
     this.current = module
     this.currentIdentity = target
   }
@@ -86,12 +86,12 @@ export class PageTransitionCoordinator {
 
   updatePageState(pageId: string, state: unknown): void {
     this.pageStates.set(pageId, state)
-    if (this.current?.id === pageId) this.current.update(this.visualState, state)
+    if (this.current?.id === pageId) this.current.update(this.visualState, state as Readonly<Record<string, unknown>>)
   }
 
   updateFrame(state: VisualState): void {
     this.visualState = state
-    if (this.current) this.current.update(state, this.pageStates.get(this.current.id))
+    if (this.current) this.current.update(state, this.pageStates.get(this.current.id) as Readonly<Record<string, unknown>>)
   }
 
   resize(width: number, height: number, dpr: number): void { this.current?.resize(width, height, dpr) }

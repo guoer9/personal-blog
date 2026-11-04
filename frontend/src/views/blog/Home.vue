@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, inject, onBeforeUnmount, onMounted, provide, ref, watch, type Ref } from 'vue'
 import { getPosts, type Post } from '@/api/posts'
 import { getTags, type Tag } from '@/api/tags'
 import { profile, resources } from '@/data/portfolio'
@@ -7,6 +7,9 @@ import { getWorks } from '@/api/works'
 import type { Work } from '@/data/works'
 import WorkCard from '@/components/works/WorkCard.vue'
 import ImmersiveScene from '@/components/immersive/ImmersiveScene.vue'
+import { usePageSceneState } from '@/graphics/runtime/usePageSceneState'
+import { visualPageSceneBridgeKey, visualRuntimeKey, type VisualRuntimeHandle } from '@/graphics/runtime/visualRuntimeHandle'
+import type { HomePageState } from '@/graphics/scenes/pageStates'
 import MagneticLink from '@/components/immersive/MagneticLink.vue'
 import ProjectCardMotion from '@/components/immersive/ProjectCardMotion.vue'
 import ScrollReveal from '@/components/immersive/ScrollReveal.vue'
@@ -40,6 +43,15 @@ const manualMotionPaused = ref(false)
 const systemReducedMotion = ref(false)
 const motionPaused = computed(() => manualMotionPaused.value || systemReducedMotion.value)
 const motionStage = computed(() => resolveMotionStage(storyProgress.value))
+const runtime = inject<Ref<VisualRuntimeHandle | null>>(visualRuntimeKey, ref(null))
+const sceneBridge = usePageSceneState<HomePageState>({ paused: false })
+provide(visualPageSceneBridgeKey, sceneBridge)
+
+function publishSceneState() {
+  const state = { paused: motionPaused.value }
+  sceneBridge.setState(state)
+  runtime.value?.setPageState('home', state)
+}
 const MOTION_PAUSE_KEY = 'field-notes:motion-paused'
 let scrollFrame = 0
 let resizeObserver: ResizeObserver | null = null
@@ -105,7 +117,11 @@ onMounted(() => {
     resizeObserver = new ResizeObserver(scheduleNarrativeUpdate)
     resizeObserver.observe(home.value)
   }
+  publishSceneState()
 })
+
+watch(motionPaused, publishSceneState)
+watch(runtime, publishSceneState)
 
 onBeforeUnmount(() => {
   worksController?.abort()

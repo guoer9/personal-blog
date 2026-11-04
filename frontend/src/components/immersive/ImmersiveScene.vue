@@ -1,8 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { LiquidSceneController } from '@/graphics/liquidScene'
-import { pointerToNdc } from '@/graphics/motion'
-import { frameTimeEma, resolveQualityState, type QualityState, type QualityTier } from '@/graphics/quality'
+import { computed } from 'vue'
 
 const props = withDefaults(defineProps<{ alt?: string; progress?: number; paused?: boolean }>(), {
   alt: '跟随指针与滚动的抽象虹彩几何体',
@@ -10,279 +7,9 @@ const props = withDefaults(defineProps<{ alt?: string; progress?: number; paused
   paused: false,
 })
 
-const canvas = ref<HTMLCanvasElement | null>(null)
-const poster = ref<HTMLDivElement | null>(null)
-const root = ref<HTMLDivElement | null>(null)
-const ready = ref(false)
-const fallback = ref(false)
-const reducedMotion = ref(false)
-const pointerX = ref(0)
-const pointerY = ref(0)
-const scroll = ref(props.progress)
-const renderState = ref<'booting' | 'playing' | 'paused' | 'static'>('booting')
-const qualityTier = ref<QualityTier>('high')
-const qualityUpdates = ref(0)
-const showPoster = computed(() => fallback.value || reducedMotion.value || (props.paused && !ready.value))
+const showPoster = computed(() => props.paused)
 const renderLabel = computed(() => {
-  if (props.paused && !reducedMotion.value) return 'PAUSED / MANUAL'
-  if (fallback.value || reducedMotion.value) return 'STATIC / SIGNAL'
-  if (renderState.value === 'playing') return 'LIVE / WEBGL'
-  if (renderState.value === 'paused') return 'PAUSED / OFFSCREEN'
-  return 'STATIC / SIGNAL'
-})
-
-let controller: LiquidSceneController | null = null
-let frame = 0
-let mounted = false
-let disposed = false
-let isVisible = true
-let resizeObserver: ResizeObserver | null = null
-let visibilityObserver: IntersectionObserver | null = null
-let mediaQuery: MediaQueryList | null = null
-let cleanupListeners: Array<() => void> = []
-let qualityState: QualityState = { tier: 'high', slowFrames: 0, fastFrames: 0 }
-let frameTimeEmaMs = 16.67
-let lastFrameTime = 0
-let forcedFrameTimeMs: number | null = null
-let debugFrameTimeSetter: ((value: number | null) => void) | null = null
-
-type SceneDebugWindow = Window & {
-  __setSceneFrameTime?: (value: number | null) => void
-}
-
-function resetQualityState() {
-  qualityState = { tier: 'high', slowFrames: 0, fastFrames: 0 }
-  frameTimeEmaMs = 16.67
-  lastFrameTime = 0
-  qualityTier.value = 'high'
-  qualityUpdates.value = 0
-}
-
-function installDebugFrameTimeSetter() {
-  if (!import.meta.env.DEV) return
-  const debugWindow = window as SceneDebugWindow
-  debugFrameTimeSetter = (value) => {
-    forcedFrameTimeMs = value === null || !Number.isFinite(value) || value < 0 ? null : value
-  }
-  debugWindow.__setSceneFrameTime = debugFrameTimeSetter
-}
-
-function removeDebugFrameTimeSetter() {
-  if (!import.meta.env.DEV || !debugFrameTimeSetter) return
-  const debugWindow = window as SceneDebugWindow
-  if (debugWindow.__setSceneFrameTime === debugFrameTimeSetter) delete debugWindow.__setSceneFrameTime
-  debugFrameTimeSetter = null
-  forcedFrameTimeMs = null
-}
-
-function sampleFrameTime(time: number): number {
-  const sample = forcedFrameTimeMs ?? (lastFrameTime > 0 ? time - lastFrameTime : 16.67)
-  lastFrameTime = time
-  return Math.max(0, sample)
-}
-
-function updateQuality(time: number) {
-  if (!controller || !isVisible || document.hidden || props.paused || reducedMotion.value || fallback.value) return
-  frameTimeEmaMs = frameTimeEma(frameTimeEmaMs, sampleFrameTime(time))
-  const nextState = resolveQualityState(qualityState, frameTimeEmaMs)
-  if (nextState.tier !== qualityState.tier) {
-    controller.setQualityTier(nextState.tier)
-    qualityTier.value = nextState.tier
-    qualityUpdates.value += 1
-  }
-  qualityState = nextState
-}
-
-function markSceneInput() {
-  if (!import.meta.env.DEV || !canvas.value) return
-  canvas.value.dataset.sceneInput = [
-    pointerX.value.toFixed(3),
-    pointerY.value.toFixed(3),
-    scroll.value.toFixed(3),
-    Math.round(performance.now()),
-  ].join(',')
-}
-
-function markSceneFrame() {
-  if (!import.meta.env.DEV || !canvas.value) return
-  const previousFrame = Number(canvas.value.dataset.sceneFrame || 0)
-  canvas.value.dataset.sceneFrame = String(previousFrame + 1)
-}
-
-function renderLoop(time: number) {
-  frame = 0
-  if (!mounted || disposed || !controller || !isVisible || document.hidden || props.paused) {
-    renderState.value = props.paused || document.hidden || !isVisible ? 'paused' : 'static'
-    return
-  }
-  renderState.value = 'playing'
-  controller.setInput({ pointerX: pointerX.value, pointerY: pointerY.value, scroll: scroll.value })
-  markSceneInput()
-  updateQuality(time)
-  controller.render(time)
-  markSceneFrame()
-  frame = requestAnimationFrame(renderLoop)
-}
-
-function stopLoop() {
-  if (frame) cancelAnimationFrame(frame)
-  frame = 0
-  lastFrameTime = 0
-  if (controller) renderState.value = fallback.value || reducedMotion.value ? 'static' : 'paused'
-}
-
-function startLoop() {
-  if (!frame && mounted && controller && isVisible && !document.hidden && !props.paused) {
-    frame = requestAnimationFrame(renderLoop)
-  }
-}
-
-function resize() {
-  if (!root.value || !controller) return
-  const rect = root.value.getBoundingClientRect()
-  controller.resize(rect.width, rect.height, window.devicePixelRatio || 1)
-}
-
-function updateScroll() {
-  scroll.value = Math.min(Math.max(props.progress, 0), 1)
-}
-
-function onPointerMove(event: PointerEvent) {
-  if (!root.value) return
-  const point = pointerToNdc(event.clientX, event.clientY, root.value.getBoundingClientRect())
-  pointerX.value = point.x
-  pointerY.value = point.y
-  if (fallback.value && poster.value) {
-    poster.value.style.transform = `translate3d(${point.x * 7}px, ${-point.y * 7}px, 0)`
-  }
-}
-
-function resetPointer() {
-  pointerX.value = 0
-  pointerY.value = 0
-  if (fallback.value && poster.value) poster.value.style.transform = ''
-}
-
-function handleVisibility() {
-  if (document.hidden) stopLoop()
-  else startLoop()
-}
-
-function setReducedMotion(event: MediaQueryListEvent | MediaQueryList) {
-  reducedMotion.value = event.matches
-}
-
-function suspendScene() {
-  ready.value = false
-  stopLoop()
-  renderState.value = 'static'
-  if (controller) {
-    controller.dispose()
-    controller = null
-  }
-}
-
-function activatePoster() {
-  fallback.value = true
-  suspendScene()
-}
-
-let initializing = false
-
-async function initialize() {
-  if (initializing) return
-  if (!mounted || disposed || reducedMotion.value || props.paused) {
-    if (reducedMotion.value) suspendScene()
-    else if (props.paused) renderState.value = 'paused'
-    return
-  }
-  if (!canvas.value || fallback.value) return
-  initializing = true
-  try {
-    const { createLiquidScene } = await import('@/graphics/liquidScene')
-    if (!mounted || disposed || reducedMotion.value || !canvas.value) return
-    controller = createLiquidScene(canvas.value, { pointerX: 0, pointerY: 0, scroll: props.progress })
-    resetQualityState()
-    if (import.meta.env.DEV) {
-      canvas.value.dataset.sceneFrame = '0'
-      markSceneInput()
-    }
-    resize()
-    updateScroll()
-    ready.value = true
-    startLoop()
-  } catch (error) {
-    console.warn('WebGL scene unavailable; keeping the static portrait.', error)
-    activatePoster()
-  } finally {
-    initializing = false
-  }
-}
-
-watch(() => props.progress, (nextProgress) => {
-  scroll.value = Math.min(Math.max(nextProgress, 0), 1)
-}, { flush: 'post' })
-
-watch(reducedMotion, (shouldReduce) => {
-  if (shouldReduce) suspendScene()
-  else if (!controller && !fallback.value && !props.paused) initialize()
-})
-
-watch(() => props.paused, (isPaused) => {
-  if (isPaused) {
-    stopLoop()
-    renderState.value = fallback.value || reducedMotion.value ? 'static' : 'paused'
-  } else if (controller) {
-    startLoop()
-  } else if (!reducedMotion.value && !fallback.value && isVisible && !document.hidden) {
-    void initialize()
-  }
-})
-
-onMounted(async () => {
-  mounted = true
-  installDebugFrameTimeSetter()
-  mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
-  setReducedMotion(mediaQuery)
-  mediaQuery.addEventListener('change', setReducedMotion)
-
-  window.addEventListener('pointermove', onPointerMove, { passive: true })
-  window.addEventListener('pointerleave', resetPointer)
-  document.addEventListener('visibilitychange', handleVisibility)
-  cleanupListeners = [
-    () => window.removeEventListener('pointermove', onPointerMove),
-    () => window.removeEventListener('pointerleave', resetPointer),
-    () => document.removeEventListener('visibilitychange', handleVisibility),
-    () => mediaQuery?.removeEventListener('change', setReducedMotion),
-  ]
-
-  if (root.value) {
-    resizeObserver = new ResizeObserver(resize)
-    resizeObserver.observe(root.value)
-    visibilityObserver = new IntersectionObserver(([entry]) => {
-      isVisible = entry.isIntersecting
-      if (isVisible) startLoop()
-      else stopLoop()
-    }, { threshold: 0.01 })
-    visibilityObserver.observe(root.value)
-  }
-  updateScroll()
-  await initialize()
-})
-
-onBeforeUnmount(() => {
-  disposed = true
-  mounted = false
-  stopLoop()
-  cleanupListeners.forEach((cleanup) => cleanup())
-  cleanupListeners = []
-  removeDebugFrameTimeSetter()
-  resizeObserver?.disconnect()
-  resizeObserver = null
-  visibilityObserver?.disconnect()
-  visibilityObserver = null
-  controller?.dispose()
-  controller = null
+  return props.paused ? 'PAUSED / MANUAL' : 'SHARED / WEBGL'
 })
 </script>
 
@@ -292,17 +19,14 @@ onBeforeUnmount(() => {
     class="immersive-scene"
     role="img"
     :aria-label="alt"
-    :data-render-state="renderState"
-    :data-quality-tier="qualityTier"
-    :data-quality-updates="qualityUpdates"
-    :data-motion-stage="fallback ? undefined : scroll < 0.18 ? 'idea' : scroll < 0.48 ? 'writing' : scroll < 0.78 ? 'projects' : 'signal'"
-    :style="{ '--scene-progress': scroll }"
+    data-render-state="shared-runtime"
+    :data-motion-stage="props.progress < 0.18 ? 'idea' : props.progress < 0.48 ? 'writing' : props.progress < 0.78 ? 'projects' : 'signal'"
+    :style="{ '--scene-progress': props.progress }"
   >
     <div class="scene-grid" aria-hidden="true" />
     <div class="scene-orbit scene-orbit--one" aria-hidden="true" />
     <div class="scene-orbit scene-orbit--two" aria-hidden="true" />
-    <canvas v-show="ready && !fallback && !reducedMotion" ref="canvas" class="scene-canvas" aria-hidden="true" />
-    <div v-show="showPoster" ref="poster" class="scene-poster" aria-hidden="true">
+    <div v-show="showPoster" class="scene-poster" aria-hidden="true">
       <span class="poster-ring poster-ring--one" />
       <span class="poster-ring poster-ring--two" />
       <span class="poster-core">∿</span>
@@ -326,8 +50,7 @@ onBeforeUnmount(() => {
   isolation: isolate;
   contain: layout paint;
 }
-.scene-canvas, .scene-poster { position: absolute; inset: 0; width: 100%; height: 100%; }
-.scene-canvas { z-index: 3; display: block; touch-action: pan-y; }
+.scene-poster { position: absolute; inset: 0; width: 100%; height: 100%; }
 .scene-grid {
   position: absolute;
   inset: 8%;

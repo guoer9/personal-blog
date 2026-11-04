@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { SceneRegistry } from './SceneRegistry'
 import { VisualRuntime } from './VisualRuntime'
-import type { PageSceneModule, RendererAdapter, SceneContext, SceneRenderContext, VisualState } from './types'
+import type { PageSceneModule, RendererAdapter } from './types'
 
 function makeRenderer(): RendererAdapter {
   return {

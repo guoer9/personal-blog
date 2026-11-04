@@ -151,9 +151,10 @@ export class VisualRuntime {
   private renderFrame(time: number): void {
     this.frameId = 0
     if (!this.canRender() || !this.coordinator?.getActiveModule() || !this.renderer) return
-    const deltaSeconds = this.lastTime ? Math.min(0.1, Math.max(0, (time - this.lastTime) / 1000)) : 1 / 60
-    this.lastTime = time
-    this.state = normalizeVisualState({ ...this.targetState, timeMs: time, deltaSeconds })
+    const frameTime = Number.isFinite(time) ? time : this.now()
+    const deltaSeconds = this.lastTime ? Math.min(0.1, Math.max(0, (frameTime - this.lastTime) / 1000)) : 1 / 60
+    this.lastTime = frameTime
+    this.state = normalizeVisualState({ ...this.targetState, timeMs: frameTime, deltaSeconds })
     this.coordinator.updateFrame(this.state)
     this.coordinator.render({ renderer: this.renderer, visualState: this.state, viewportWidth: this.state.viewportWidth, viewportHeight: this.state.viewportHeight, dpr: this.state.dpr })
     this.effects.render({ renderer: this.renderer, visualState: this.state, viewportWidth: this.state.viewportWidth, viewportHeight: this.state.viewportHeight, dpr: this.state.dpr })
