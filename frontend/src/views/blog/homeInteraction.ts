@@ -61,12 +61,12 @@ export function createHomeSphereInteractionBridge({ options, emit, viewport = vi
     emit({ sequence, type, ndcX: point.x, ndcY: point.y })
   }
 
-  const cancelActive = (event?: PointerEvent) => {
+  const cancelActive = (event?: PointerEvent, suppressClick = false) => {
     if (!active) return
     clearTimer()
     if (active.longPressStarted && event) {
       publish('press-end', event)
-      suppressNextClick = true
+      suppressNextClick = suppressClick
     }
     active = null
   }
@@ -74,7 +74,10 @@ export function createHomeSphereInteractionBridge({ options, emit, viewport = vi
   return {
     onPointerDown(event: PointerEvent) {
       if (active || event.isPrimary === false || (event.button !== undefined && event.button !== 0)) return
+      suppressNextClick = false
       const id = pointerId(event)
+      const target = event.currentTarget as (HTMLElement & { setPointerCapture?: (pointerId: number) => void }) | null
+      try { target?.setPointerCapture?.(id) } catch { /* The browser may have ended the pointer stream. */ }
       active = { id, startX: event.clientX, startY: event.clientY, longPressStarted: false, cancelled: false }
       timer = setTimeout(() => {
         if (!active || active.id !== id || active.cancelled) return
@@ -87,7 +90,7 @@ export function createHomeSphereInteractionBridge({ options, emit, viewport = vi
       const distance = Math.hypot(event.clientX - active.startX, event.clientY - active.startY)
       if (distance <= Math.max(0, options.allowableMovementCssPx)) return
       active.cancelled = true
-      cancelActive(event)
+      cancelActive(event, true)
     },
     onPointerUp(event: PointerEvent) {
       if (!active || active.id !== pointerId(event)) return
@@ -103,9 +106,6 @@ export function createHomeSphereInteractionBridge({ options, emit, viewport = vi
       active = null
     },
     onPointerCancel(event: PointerEvent) { cancelActive(event) },
-    onPointerLeave(event: PointerEvent) {
-      if (active && !active.longPressStarted) cancelActive(event)
-    },
     onClickCapture(event: MouseEvent) {
       if (!suppressNextClick) return
       suppressNextClick = false

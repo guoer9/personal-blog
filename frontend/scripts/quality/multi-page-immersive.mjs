@@ -125,6 +125,28 @@ async function capturePage(page, profile, name) {
   profileReport.pages.push(record)
 }
 
+async function sphereInteractionPoints(page) {
+  const visual = await page.locator('.hero-visual').boundingBox()
+  const viewport = page.viewportSize()
+  if (!visual || !viewport) throw new Error('The home sphere interaction region is not measurable.')
+  return {
+    inside: {
+      x: Math.min(visual.x + visual.width - 1, Math.max(visual.x + 1, viewport.width / 2)),
+      y: visual.y + visual.height * 0.5,
+    },
+    outside: { x: visual.x + visual.width - 8, y: visual.y + 8 },
+  }
+}
+
+async function sphereDataset(page) {
+  return page.locator('canvas').evaluate((element) => ({
+    hover: element.getAttribute('data-sphere-hover'),
+    rippleCount: Number(element.getAttribute('data-sphere-ripple-count') || 0),
+    pressDepth: Number(element.getAttribute('data-sphere-press-depth') || 0),
+    trailStrength: Number(element.getAttribute('data-sphere-trail-strength') || 0),
+  }))
+}
+
 async function runProfile(profile, fixtures) {
   const context = await browser.newContext({
     viewport: profile.viewport,
@@ -150,9 +172,51 @@ async function runProfile(profile, fixtures) {
   }
   await capturePage(page, profile, 'home')
   if (!profile.reducedMotion) {
+    const points = await sphereInteractionPoints(page)
+    await page.mouse.move(points.inside.x, points.inside.y)
+    await page.waitForFunction(() => document.querySelector('canvas')?.getAttribute('data-sphere-hover') === '1')
+    check(`${profile.name}: sphere hover follows the pointer`, (await sphereDataset(page)).hover === '1')
+
+    const rippleBefore = (await sphereDataset(page)).rippleCount
+    await page.mouse.click(points.inside.x, points.inside.y)
+    await page.waitForFunction((before) => Number(document.querySelector('canvas')?.getAttribute('data-sphere-ripple-count') || 0) > before, rippleBefore)
+    check(`${profile.name}: sphere tap produces one ripple`, (await sphereDataset(page)).rippleCount === rippleBefore + 1)
+
+    const outsideRippleBefore = (await sphereDataset(page)).rippleCount
+    await page.mouse.click(points.outside.x, points.outside.y)
+    await page.waitForTimeout(80)
+    check(`${profile.name}: sphere outside click has no feedback`, (await sphereDataset(page)).rippleCount === outsideRippleBefore)
+
+    await page.mouse.move(points.outside.x, points.outside.y)
+    await page.mouse.move(points.inside.x, points.inside.y)
+    await page.waitForFunction(() => Number(document.querySelector('canvas')?.getAttribute('data-sphere-trail-strength') || 0) > 0)
+    const movingTrail = (await sphereDataset(page)).trailStrength
+    await page.waitForTimeout(600)
+    check(`${profile.name}: particle trail fades while the pointer rests`, (await sphereDataset(page)).trailStrength < movingTrail)
+
+    await page.mouse.move(points.inside.x, points.inside.y)
+    await page.mouse.down()
+    await page.waitForFunction(() => Number(document.querySelector('canvas')?.getAttribute('data-sphere-press-depth') || 0) > 0.001, undefined, { timeout: 5000 })
+    const heldDepth = (await sphereDataset(page)).pressDepth
+    await page.mouse.up()
+    await page.waitForFunction((before) => Number(document.querySelector('canvas')?.getAttribute('data-sphere-press-depth') || 0) < before, heldDepth, { timeout: 5000 })
+    check(`${profile.name}: long press dents and release springs back`, (await sphereDataset(page)).pressDepth < heldDepth)
+  } else {
+    const points = await sphereInteractionPoints(page)
+    await page.mouse.click(points.inside.x, points.inside.y)
+    await page.waitForTimeout(120)
+    const reducedInteraction = await sphereDataset(page)
+    check(`${profile.name}: reduced motion suppresses sphere feedback`, reducedInteraction.rippleCount === 0 && reducedInteraction.pressDepth === 0 && reducedInteraction.trailStrength === 0)
+  }
+  if (!profile.reducedMotion) {
+    const points = await sphereInteractionPoints(page)
     await page.locator('.motion-toggle').click()
     await page.waitForFunction(() => window.__visualRuntimeDiagnostics?.()?.rafActive === false)
+    const pausedRippleBefore = (await sphereDataset(page)).rippleCount
+    await page.mouse.click(points.inside.x, points.inside.y)
+    await page.waitForTimeout(120)
     check(`${profile.name}: manual pause stops the shared RAF`, (await diagnostics(page))?.rafActive === false)
+    check(`${profile.name}: manual pause suppresses new sphere feedback`, (await sphereDataset(page)).rippleCount === pausedRippleBefore)
     await page.locator('.motion-toggle').click()
     await page.waitForFunction(() => window.__visualRuntimeDiagnostics?.()?.rafActive === true)
     check(`${profile.name}: resuming motion restarts the shared RAF`, (await diagnostics(page))?.rafActive === true)

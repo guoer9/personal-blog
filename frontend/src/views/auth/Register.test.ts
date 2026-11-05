@@ -80,7 +80,7 @@ describe('registration verification', () => {
 
     expect(wrapper.get('input[placeholder="请输入站长提供的验证内容"]').attributes('type')).toBe('text')
     await wrapper.get('input[placeholder="请输入站长提供的验证内容"]').setValue('组一辈子乐队')
-    expect(wrapper.get('input[placeholder="请输入站长提供的验证内容"]').element.value).toBe('组一辈子乐队')
+    expect((wrapper.get('input[placeholder="请输入站长提供的验证内容"]').element as HTMLInputElement).value).toBe('组一辈子乐队')
     wrapper.unmount()
   })
 })

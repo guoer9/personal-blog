@@ -78,4 +78,33 @@ describe('HomeScene quality adaptation', () => {
     scene.dispose()
   })
 
+  it('ends an active press even when reduced motion becomes enabled', () => {
+    const controller = {
+      setInput: vi.fn(),
+      setQualityTier: vi.fn(),
+      triggerRipple: vi.fn(),
+      beginPress: vi.fn(),
+      endPress: vi.fn(),
+      resize: vi.fn(),
+      render: vi.fn(),
+      dispose: vi.fn(),
+    }
+    mocks.createLiquidScene.mockReturnValue(controller as unknown as LiquidSceneController)
+    const scene = new HomeScene()
+    scene.mount({ renderer: {} as never } as never)
+
+    scene.update({ ...createVisualState(), reducedMotion: false }, {
+      paused: false,
+      interaction: { sequence: 1, type: 'press-start', ndcX: 0, ndcY: 0 },
+    } as never)
+    scene.update({ ...createVisualState(), reducedMotion: true }, {
+      paused: false,
+      interaction: { sequence: 2, type: 'press-end', ndcX: 0, ndcY: 0 },
+    } as never)
+
+    expect(controller.beginPress).toHaveBeenCalledOnce()
+    expect(controller.endPress).toHaveBeenCalledOnce()
+    scene.dispose()
+  })
+
 })

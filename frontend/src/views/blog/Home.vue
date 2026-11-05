@@ -193,7 +193,6 @@ onBeforeUnmount(() => {
         @pointermove="sphereInteraction.onPointerMove"
         @pointerup="sphereInteraction.onPointerUp"
         @pointercancel="sphereInteraction.onPointerCancel"
-        @pointerleave="sphereInteraction.onPointerLeave"
         @click.capture="sphereInteraction.onClickCapture"
       >
         <ImmersiveScene :progress="storyProgress" :paused="motionPaused" />
@@ -499,7 +498,7 @@ h1 span, h1 em { display: block; }
 h1 em, .section-heading em { color: var(--electric-blue); font-weight: 400; }
 .hero-intro { max-width: 480px; color: var(--muted); font-size: clamp(1rem, 1.5vw, 1.22rem); line-height: 1.8; }
 .hero-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 26px; margin-top: 38px; }
-.hero-visual { position: relative; min-width: 0; min-height: 480px; }
+.hero-visual { position: relative; min-width: 0; min-height: 480px; touch-action: pan-y; }
 .hero-visual :deep(.immersive-scene) { height: min(680px, 72vh); }
 .hero-signature { position: absolute; right: 10%; bottom: 18%; z-index: 1; color: rgba(17, 17, 17, 0.1); font: 800 clamp(3rem, 7vw, 7rem) var(--display-font); letter-spacing: -0.05em; pointer-events: none; }
 .hero-footnote { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font: 0.58rem var(--mono-font); letter-spacing: 0.07em; }

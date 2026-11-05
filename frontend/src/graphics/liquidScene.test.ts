@@ -16,7 +16,7 @@ function makeRenderer(): RendererAdapter {
 function lastRenderedScene(renderer: RendererAdapter) {
   const renderMock = renderer.render as ReturnType<typeof vi.fn>
   return renderMock.mock.calls[renderMock.mock.calls.length - 1]?.[0] as {
-    children: Array<{ material: { uniforms?: Record<string, { value: unknown }> } }>
+    children: Array<{ geometry: { drawRange: { count: number } }; material: { uniforms?: Record<string, { value: unknown }> } }>
   }
 }
 

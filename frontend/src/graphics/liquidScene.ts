@@ -379,6 +379,10 @@ export function createLiquidScene(
       particleMaterial.uniforms.uTrailDirection.value.copy(trailDirection)
       particleMaterial.uniforms.uTrailStrength.value = clamp(trailStrength, 0, 1)
       particleMaterial.uniforms.uImpactEnergy.value = clamp(impactEnergy, 0, 1)
+      canvas.dataset.sphereHover = hoverHit ? '1' : '0'
+      canvas.dataset.sphereRippleCount = String(rippleCount)
+      canvas.dataset.spherePressDepth = pressDepth.toFixed(4)
+      canvas.dataset.sphereTrailStrength = clamp(trailStrength, 0, 1).toFixed(4)
       renderer.render(scene, camera)
     },
     dispose() {

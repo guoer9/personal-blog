@@ -20,10 +20,13 @@ export class HomeScene implements PageSceneModule<HomePageState> {
     const interaction = this.pageState.interaction
     if (!interaction || interaction.sequence <= this.lastInteractionSequence) return
     this.lastInteractionSequence = interaction.sequence
+    if (interaction.type === 'press-end') {
+      this.controller?.endPress?.()
+      return
+    }
     if (this.pageState.paused || visualState.reducedMotion) return
     if (interaction.type === 'tap') this.controller?.triggerRipple?.(interaction.ndcX, interaction.ndcY)
     if (interaction.type === 'press-start') this.controller?.beginPress?.(interaction.ndcX, interaction.ndcY)
-    if (interaction.type === 'press-end') this.controller?.endPress?.()
   }
   resize(width: number, height: number, dpr: number): void { this.controller?.resize(width, height, dpr) }
   render(context: SceneRenderContext): void {

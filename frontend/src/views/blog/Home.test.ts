@@ -112,4 +112,43 @@ describe('Home sphere interaction bridge', () => {
       .filter(Boolean)
     expect(interactions).toHaveLength(0)
   })
+
+  it('suppresses the synthetic click after a long press', async () => {
+    const mounted = await mountHome()
+    const visual = mounted.get('.hero-visual')
+
+    await visual.trigger('pointerdown', { pointerId: 11, button: 0, isPrimary: true, clientX: 500, clientY: 400 })
+    vi.advanceTimersByTime(60)
+    await nextTick()
+    await visual.trigger('pointerup', { pointerId: 11, clientX: 500, clientY: 400 })
+
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true })
+    visual.element.dispatchEvent(click)
+    expect(click.defaultPrevented).toBe(true)
+  })
+
+  it('captures the pointer so a release outside the visual region can end a press', async () => {
+    const mounted = await mountHome()
+    const visual = mounted.get('.hero-visual')
+    const capturePointer = vi.fn()
+    Object.defineProperty(visual.element, 'setPointerCapture', { configurable: true, value: capturePointer })
+
+    await visual.trigger('pointerdown', { pointerId: 12, button: 0, isPrimary: true, clientX: 500, clientY: 400 })
+
+    expect(capturePointer).toHaveBeenCalledWith(12)
+  })
+
+  it('does not suppress a later click when a long press is cancelled by the browser', async () => {
+    const mounted = await mountHome()
+    const visual = mounted.get('.hero-visual')
+
+    await visual.trigger('pointerdown', { pointerId: 13, button: 0, isPrimary: true, clientX: 500, clientY: 400 })
+    vi.advanceTimersByTime(60)
+    await nextTick()
+    await visual.trigger('pointercancel', { pointerId: 13, clientX: 500, clientY: 400 })
+
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true })
+    visual.element.dispatchEvent(click)
+    expect(click.defaultPrevented).toBe(false)
+  })
 })
