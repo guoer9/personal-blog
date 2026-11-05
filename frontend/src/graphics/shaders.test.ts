@@ -20,4 +20,17 @@ describe('motion energy shaders', () => {
     expect(particleVertexShader).toContain('(0.65 + uEnergy * 0.35)')
   })
 
+  it('uses spherical ripple age and bounded press depth for vertex deformation', () => {
+    expect(flowVertexShader).toContain('uniform vec3 uRippleDirections[MAX_RIPPLES];')
+    expect(flowVertexShader).toContain('uniform float uRippleAges[MAX_RIPPLES];')
+    expect(flowVertexShader).toContain('exp(-pow')
+    expect(flowVertexShader).toContain('min(uPressDepth, PRESS_DEPTH_MAX)')
+  })
+
+  it('keeps hover and click feedback as separate bounded light responses', () => {
+    expect(flowFragmentShader).toContain('varying float vRippleLight;')
+    expect(flowFragmentShader).toContain('uHoverStrength * 0.12')
+    expect(flowFragmentShader).toContain('vRippleLight * 0.28')
+  })
+
 })

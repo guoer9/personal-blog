@@ -6,8 +6,11 @@ import {
   Mesh,
   PerspectiveCamera,
   Points,
+  Raycaster,
   Scene,
   ShaderMaterial,
+  Vector2,
+  Vector3,
 } from 'three'
 import { clamp, damp, MotionEnergy, qualityProfile, resolveMotionStage, sceneMoodAt } from './motion'
 import {
@@ -26,17 +29,19 @@ export interface SceneInput {
 }
 
 export interface SceneQuality {
-  width: number
-  hardwareConcurrency?: number
+  detail: number
+  pixelRatioCap: number
+  particleCount: number
+  rippleCapacity?: number
 }
 
 export interface LiquidSceneController {
   resize(width: number, height: number, dpr: number): void
   setInput(input: Readonly<SceneInput>): void
   setQualityTier(tier: QualityTier): void
-  triggerRipple?(ndcX: number, ndcY: number): boolean
-  beginPress?(ndcX: number, ndcY: number): boolean
-  endPress?(): void
+  triggerRipple(ndcX: number, ndcY: number): boolean
+  beginPress(ndcX: number, ndcY: number): boolean
+  endPress(): void
   render(time: number): void
   dispose(): void
 }
@@ -61,10 +66,17 @@ function createParticles(count: number) {
   return geometry
 }
 
+const MAX_RIPPLES = 6
+const RIPPLE_LIFETIME_SECONDS = 1.8
+const PRESS_DEPTH_MAX = 0.18
+const PRESS_GROW_SECONDS = 0.72
+const PRESS_STIFFNESS = 18
+const PRESS_DAMPING = 8
+
 export function createLiquidScene(
   renderer: RendererAdapter,
   initialState: SceneInput,
-  quality = qualityProfile(window.innerWidth, navigator.hardwareConcurrency || 4),
+  quality: SceneQuality = qualityProfile(window.innerWidth, navigator.hardwareConcurrency || 4),
 ): LiquidSceneController {
   const sharedRenderer = renderer as RendererAdapter & {
     setClearColor?: (color: number, alpha: number) => void
@@ -77,6 +89,16 @@ export function createLiquidScene(
   const scene = new Scene()
   const camera = new PerspectiveCamera(38, 1, 0.1, 100)
   camera.position.set(0, 0, 5.15)
+  const raycaster = new Raycaster()
+  const raycastNdc = new Vector2()
+  const configuredRippleCapacity = clamp(Math.floor(quality.rippleCapacity ?? 4), 1, MAX_RIPPLES)
+  let activeRippleCapacity = configuredRippleCapacity
+  const rippleDirections = Array.from({ length: MAX_RIPPLES }, () => new Vector3(0, 0, 1))
+  const rippleAges = new Float32Array(MAX_RIPPLES)
+  const rippleStrengths = new Float32Array(MAX_RIPPLES)
+  const rippleSlots = Array.from({ length: MAX_RIPPLES }, () => ({ startedAt: 0, active: false }))
+  const hoverDirection = new Vector3(0, 0, 1)
+  const pressDirection = new Vector3(0, 0, 1)
 
   const uniforms = {
     uTime: { value: 0 },
@@ -84,6 +106,16 @@ export function createLiquidScene(
     uPointerY: { value: 0 },
     uScroll: { value: 0 },
     uEnergy: { value: 0 },
+    uRippleDirections: { value: rippleDirections },
+    uRippleAges: { value: rippleAges },
+    uRippleStrengths: { value: rippleStrengths },
+    uRippleCount: { value: 0 },
+    uRippleCapacity: { value: activeRippleCapacity },
+    uHoverDirection: { value: hoverDirection },
+    uHoverActive: { value: 0 },
+    uHoverStrength: { value: 0 },
+    uPressDirection: { value: pressDirection },
+    uPressDepth: { value: 0 },
   }
   const geometry = new IcosahedronGeometry(1.48, quality.detail)
   const material = new ShaderMaterial({
@@ -138,8 +170,60 @@ export function createLiquidScene(
   let currentQualityTier: QualityTier = 'high'
   let lastTime = 0
   let easedMotionEnergy = 0
+  let rippleCursor = 0
+  let rippleCount = 0
+  let hoverStrength = 0
+  let pressDepth = 0
+  let pressVelocity = 0
+  let pressStartedAt = 0
+  let pressActive = false
   let disposed = false
   let previousStage = resolveMotionStage(initialState.scroll)
+
+  function hitSphere(ndcX: number, ndcY: number): Vector3 | null {
+    if (disposed) return null
+    raycastNdc.set(clamp(ndcX, -1, 1), clamp(ndcY, -1, 1))
+    camera.updateMatrixWorld()
+    mesh.updateMatrixWorld(true)
+    raycaster.setFromCamera(raycastNdc, camera)
+    const hit = raycaster.intersectObject(mesh, false)[0]
+    if (!hit) return null
+    return mesh.worldToLocal(hit.point.clone()).normalize()
+  }
+
+  function updateRippleUniforms(seconds: number) {
+    let nextCount = 0
+    for (let index = 0; index < MAX_RIPPLES; index += 1) {
+      const slot = rippleSlots[index]
+      const active = index < activeRippleCapacity && slot.active
+      const age = active ? Math.max(0, seconds - slot.startedAt) : 0
+      if (active && age <= RIPPLE_LIFETIME_SECONDS) {
+        rippleAges[index] = age
+        rippleStrengths[index] = Math.min(1, Math.max(0, 1 - age / RIPPLE_LIFETIME_SECONDS))
+        nextCount += 1
+      } else {
+        slot.active = false
+        rippleAges[index] = 0
+        rippleStrengths[index] = 0
+      }
+    }
+    rippleCount = nextCount
+    uniforms.uRippleCount.value = rippleCount
+  }
+
+  function updatePress(delta: number, seconds: number) {
+    const targetDepth = pressActive
+      ? Math.min(PRESS_DEPTH_MAX, Math.max(0, (seconds - pressStartedAt) / PRESS_GROW_SECONDS) * PRESS_DEPTH_MAX)
+      : 0
+    const acceleration = (targetDepth - pressDepth) * PRESS_STIFFNESS - pressVelocity * PRESS_DAMPING
+    pressVelocity = pressVelocity + acceleration * delta
+    pressDepth = clamp(pressDepth + pressVelocity * delta, 0, PRESS_DEPTH_MAX)
+    if (!pressActive && pressDepth < 0.0001 && Math.abs(pressVelocity) < 0.001) {
+      pressDepth = 0
+      pressVelocity = 0
+    }
+    uniforms.uPressDepth.value = pressDepth
+  }
 
   function applyQualityTier(tier: QualityTier) {
     currentQualityTier = tier
@@ -151,6 +235,12 @@ export function createLiquidScene(
     const tierDprCap = tier === 'high' ? deviceDprCap : tier === 'balanced' ? 1.4 : 1.15
     const dprCap = Math.max(1, Math.min(deviceDprCap, tierDprCap, rawDpr))
     const pixelRatio = clamp(rawDpr, 1, dprCap)
+    activeRippleCapacity = tier === 'high'
+      ? configuredRippleCapacity
+      : tier === 'balanced'
+        ? Math.max(1, configuredRippleCapacity - 1)
+        : 1
+    uniforms.uRippleCapacity.value = activeRippleCapacity
     particleGeometry.setDrawRange(0, particleCount)
     particleMaterial.uniforms.uPixelRatio.value = pixelRatio
     if (viewportWidth <= 0 || viewportHeight <= 0 || disposed) return
@@ -191,6 +281,30 @@ export function createLiquidScene(
       if (disposed || tier === currentQualityTier) return
       applyQualityTier(tier)
     },
+    triggerRipple(ndcX, ndcY) {
+      const direction = hitSphere(ndcX, ndcY)
+      if (!direction) return false
+      const slotIndex = rippleCursor % activeRippleCapacity
+      rippleDirections[slotIndex].copy(direction)
+      rippleSlots[slotIndex].startedAt = lastTime
+      rippleSlots[slotIndex].active = true
+      rippleStrengths[slotIndex] = 1
+      rippleCursor = (slotIndex + 1) % activeRippleCapacity
+      rippleCount = Math.min(activeRippleCapacity, rippleCount + 1)
+      uniforms.uRippleCount.value = rippleCount
+      return true
+    },
+    beginPress(ndcX, ndcY) {
+      const direction = hitSphere(ndcX, ndcY)
+      if (!direction) return false
+      pressDirection.copy(direction)
+      pressStartedAt = lastTime
+      pressActive = true
+      return true
+    },
+    endPress() {
+      pressActive = false
+    },
     render(time) {
       if (disposed) return
       const seconds = time / 1000
@@ -221,6 +335,13 @@ export function createLiquidScene(
       mesh.scale.setScalar(scale)
       wireMesh.scale.setScalar(scale * 1.008)
 
+      const hoverHit = hitSphere(current.pointerX, current.pointerY)
+      if (hoverHit) hoverDirection.copy(hoverHit)
+      const hoverTarget = hoverHit ? 1 : 0
+      hoverStrength = damp(hoverStrength, hoverTarget, 9, delta)
+      updateRippleUniforms(seconds)
+      updatePress(delta, seconds)
+
       particles.rotation.set(rotationX * 0.35, -rotationY * 0.3 + seconds * 0.018, rotationZ * 0.24)
       particles.position.y = offsetY * 0.8 + mood.particleLift * 0.1
       material.opacity = mood.lightness
@@ -232,6 +353,8 @@ export function createLiquidScene(
       uniforms.uPointerY.value = current.pointerY
       uniforms.uScroll.value = current.scroll
       uniforms.uEnergy.value = easedMotionEnergy
+      uniforms.uHoverActive.value = hoverHit ? 1 : 0
+      uniforms.uHoverStrength.value = hoverStrength
       renderer.render(scene, camera)
     },
     dispose() {

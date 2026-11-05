@@ -1,13 +1,30 @@
 export const flowVertexShader = /* glsl */ `
+#define MAX_RIPPLES 6
+#define PRESS_DEPTH_MAX 0.18
   uniform float uTime;
   uniform float uPointerX;
   uniform float uPointerY;
   uniform float uScroll;
   uniform float uEnergy;
+  uniform vec3 uRippleDirections[MAX_RIPPLES];
+  uniform float uRippleAges[MAX_RIPPLES];
+  uniform float uRippleStrengths[MAX_RIPPLES];
+  uniform int uRippleCount;
+  uniform int uRippleCapacity;
+  uniform vec3 uHoverDirection;
+  uniform float uHoverActive;
+  uniform float uHoverStrength;
+  uniform vec3 uPressDirection;
+  uniform float uPressDepth;
   varying vec3 vNormal;
   varying vec3 vWorldPosition;
   varying float vFlow;
   varying float vEnergy;
+  varying float vRippleLight;
+
+  float sphericalDistance(vec3 a, vec3 b) {
+    return acos(clamp(dot(normalize(a), normalize(b)), -1.0, 1.0));
+  }
 
   void main() {
     vec3 p = position;
@@ -19,15 +36,37 @@ export const flowVertexShader = /* glsl */ `
     float expansion = sin(uScroll * 14.0 + length(p) * 2.8) * smoothstep(0.12, 0.7, uScroll) * 0.09;
     float grid = sin(p.x * 11.0 + uTime * 0.24) * sin(p.y * 11.0 - uTime * 0.2);
     grid *= smoothstep(0.5, 0.95, uScroll) * 0.065;
-    float deformation = formation + expansion + grid + pointerPull;
+    float rippleDisplacement = 0.0;
+    float rippleLight = 0.0;
+    for (int index = 0; index < MAX_RIPPLES; index += 1) {
+      float slotActive = step(float(index), float(uRippleCount - 1));
+      float distanceToRipple = sphericalDistance(normalize(p), uRippleDirections[index]);
+      float waveFront = uRippleAges[index] * 1.55;
+      float envelope = exp(-pow((distanceToRipple - waveFront) * 8.0, 2.0));
+      envelope *= exp(-uRippleAges[index] * 1.75) * uRippleStrengths[index] * slotActive;
+      rippleDisplacement += sin(distanceToRipple * 12.0 - uRippleAges[index] * 9.0) * envelope * 0.075;
+      rippleLight += envelope;
+    }
+    rippleDisplacement = clamp(rippleDisplacement, -0.11, 0.11);
+    rippleLight = clamp(rippleLight, 0.0, 1.0);
+
+    float hoverDistance = sphericalDistance(normalize(p), uHoverDirection);
+    float hoverEnvelope = exp(-pow(hoverDistance * 3.2, 2.0)) * uHoverActive * uHoverStrength;
+    float hoverRipple = sin(hoverDistance * 10.0 - uTime * 2.0) * hoverEnvelope * 0.025;
+    float pressDistance = sphericalDistance(normalize(p), uPressDirection);
+    float pressEnvelope = exp(-pow(pressDistance * 3.4, 2.0));
+    float pressDimple = pressEnvelope * min(uPressDepth, PRESS_DEPTH_MAX);
+
+    float deformation = formation + expansion + grid + pointerPull + rippleDisplacement + hoverRipple - pressDimple;
     deformation *= 1.0 + uEnergy * 0.45;
     p += normal * deformation;
 
     vec4 worldPosition = modelMatrix * vec4(p, 1.0);
     vWorldPosition = worldPosition.xyz;
     vNormal = normalize(mat3(modelMatrix) * normal);
-    vFlow = formation * 8.0 + pointerPull;
-    vEnergy = abs(expansion) * 4.0 + pointerPull;
+    vFlow = formation * 8.0 + pointerPull + rippleDisplacement;
+    vEnergy = abs(expansion) * 4.0 + pointerPull + rippleLight * 0.4;
+    vRippleLight = rippleLight;
     gl_Position = projectionMatrix * viewMatrix * worldPosition;
   }
 `
@@ -36,10 +75,12 @@ export const flowFragmentShader = /* glsl */ `
   uniform float uTime;
   uniform float uScroll;
   uniform float uEnergy;
+  uniform float uHoverStrength;
   varying vec3 vNormal;
   varying vec3 vWorldPosition;
   varying float vFlow;
   varying float vEnergy;
+  varying float vRippleLight;
 
   vec3 palette(float t) {
     vec3 ink = vec3(0.035, 0.040, 0.045);
@@ -61,6 +102,8 @@ export const flowFragmentShader = /* glsl */ `
     color = mix(color, vec3(0.95, 0.96, 0.9), fresnel * 0.22);
     color += vec3(0.84, 1.0, 0.36) * vEnergy * 0.24;
     color += vec3(0.67, 1.0, 0.12) * uEnergy * 0.12;
+    color += vec3(0.55, 0.8, 1.0) * uHoverStrength * 0.12;
+    color += vec3(0.86, 1.0, 0.3) * vRippleLight * 0.28;
     color *= mix(0.88, 1.0, facets * smoothstep(0.35, 0.8, uScroll));
     gl_FragColor = vec4(color, 0.96);
   }
