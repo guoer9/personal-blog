@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { navigation, profile } from '@/data/portfolio'
 import { useUserStore } from '@/stores/user'
@@ -12,7 +12,6 @@ const searchOpen = ref(false)
 const searchKeyword = ref('')
 const searchInput = ref<HTMLInputElement | null>(null)
 const searchToggle = ref<HTMLButtonElement | null>(null)
-const isDark = computed(() => ['PostDetail'].includes(String(route.name)))
 
 function submitSearch() {
   const query = searchKeyword.value.trim()
@@ -58,7 +57,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', closeOnEscape))
 </script>
 
 <template>
-  <header class="site-header" :class="{ 'site-header--dark': isDark, 'site-header--open': menuOpen }">
+  <header class="site-header" :class="{ 'site-header--open': menuOpen }">
     <div class="header-inner">
       <div class="header-identity">
         <router-link to="/" class="brand" title="返回首页">
@@ -122,11 +121,6 @@ onBeforeUnmount(() => document.removeEventListener('keydown', closeOnEscape))
   background: rgba(244, 241, 234, 0.9);
   backdrop-filter: blur(18px);
 }
-.site-header--dark {
-  border-color: rgba(255, 255, 255, 0.16);
-  color: #f4f1ea;
-  background: rgba(16, 17, 18, 0.92);
-}
 .header-inner {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -148,7 +142,6 @@ onBeforeUnmount(() => document.removeEventListener('keydown', closeOnEscape))
   color: var(--acid);
   font: 800 0.78rem var(--mono-font);
 }
-.site-header--dark .brand-mark { background: var(--acid); color: var(--ink); }
 .brand-name { font: 700 0.76rem var(--mono-font); letter-spacing: 0.14em; }
 .account-link { justify-self: start; color: inherit; font-size: .95rem; text-decoration: none; white-space: nowrap; }
 .account-link:hover, .account-link:focus-visible { text-decoration: underline; text-underline-offset: 5px; }
@@ -180,7 +173,6 @@ onBeforeUnmount(() => document.removeEventListener('keydown', closeOnEscape))
 .nav-link:hover::after, .nav-link.is-active::after { transform: scaleX(1); transform-origin: left; }
 .nav-link span { font-size: 0.86rem; }
 .nav-link small { color: var(--muted); font: 0.59rem var(--mono-font); letter-spacing: 0.04em; text-transform: uppercase; }
-.site-header--dark .nav-link small { color: #979b9b; }
 .header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 16px; }
 .icon-button, .menu-toggle { border: 1px solid currentColor; background: transparent; color: inherit; cursor: pointer; }
 .icon-button { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; }

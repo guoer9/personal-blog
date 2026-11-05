@@ -45,10 +45,13 @@ describe('HomeScene quality adaptation', () => {
 
     const pressStart = { sequence: 2, type: 'press-start', ndcX: 0.1, ndcY: -0.3 }
     const pressEnd = { sequence: 3, type: 'press-end', ndcX: 0.1, ndcY: -0.3 }
+    const drag = { sequence: 4, type: 'drag', ndcX: 0.2, ndcY: -0.1 }
     scene.update(visualState, { paused: false, interaction: pressStart } as never)
     scene.update(visualState, { paused: false, interaction: pressEnd } as never)
+    scene.update(visualState, { paused: false, interaction: drag } as never)
     expect(controller.beginPress).toHaveBeenCalledWith(0.1, -0.3)
     expect(controller.endPress).toHaveBeenCalledTimes(1)
+    expect(controller.triggerRipple).toHaveBeenCalledWith(0.2, -0.1)
     scene.dispose()
   })
 

@@ -74,9 +74,50 @@ describe('Home sphere interaction bridge', () => {
 
     await visual.trigger('pointerdown', { pointerId: 7, button: 0, isPrimary: true, clientX: 250, clientY: 200 })
     await visual.trigger('pointerup', { pointerId: 7, clientX: 250, clientY: 200 })
+    visual.element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1, clientX: 250, clientY: 200 }))
 
     const interaction = runtime.setPageState.mock.lastCall?.[1].interaction
     expect(interaction).toMatchObject({ type: 'tap', sequence: 1, ndcX: -0.5, ndcY: 0.5 })
+  })
+
+  it('emits a ripple for a click anywhere on the page without cancelling the click', async () => {
+    const mounted = await mountHome()
+    const text = mounted.get('.hero-copy h1')
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1, clientX: 400, clientY: 240 })
+
+    text.element.dispatchEvent(click)
+
+    const interaction = runtime.setPageState.mock.lastCall?.[1].interaction
+    expect(interaction).toMatchObject({ type: 'tap' })
+    expect(interaction.ndcX).toBeCloseTo(-0.2)
+    expect(interaction.ndcY).toBeCloseTo(0.4)
+    expect(click.defaultPrevented).toBe(false)
+  })
+
+  it('emits drag points after the pointer crosses the movement tolerance', async () => {
+    const mounted = await mountHome()
+    const home = mounted.get('.home')
+
+    await home.trigger('pointerdown', { pointerId: 14, pointerType: 'mouse', button: 0, isPrimary: true, clientX: 500, clientY: 400 })
+    await home.trigger('pointermove', { pointerId: 14, pointerType: 'mouse', clientX: 520, clientY: 400 })
+    await home.trigger('pointermove', { pointerId: 14, pointerType: 'mouse', clientX: 530, clientY: 410 })
+    await home.trigger('pointerup', { pointerId: 14, pointerType: 'mouse', clientX: 530, clientY: 410 })
+
+    const interactions = runtime.setPageState.mock.calls.map((call) => call[1]?.interaction).filter(Boolean)
+    expect(interactions.map((interaction) => interaction.type)).toEqual(['drag', 'drag'])
+  })
+
+  it('marks active page gestures as non-selectable and clears the state after release', async () => {
+    const mounted = await mountHome()
+    const home = mounted.get('.home')
+
+    await home.trigger('pointerdown', { pointerId: 15, pointerType: 'mouse', button: 0, isPrimary: true, clientX: 500, clientY: 400 })
+    expect(document.body.classList.contains('sphere-gesture-active')).toBe(true)
+    await home.trigger('pointerup', { pointerId: 15, pointerType: 'mouse', clientX: 500, clientY: 400 })
+    vi.advanceTimersByTime(120)
+    await nextTick()
+
+    expect(document.body.classList.contains('sphere-gesture-active')).toBe(false)
   })
 
   it('emits press-start and press-end once after the injected long press duration without a tap', async () => {
@@ -99,12 +140,12 @@ describe('Home sphere interaction bridge', () => {
     const mounted = await mountHome()
     const visual = mounted.get('.hero-visual')
 
-    await visual.trigger('pointerdown', { pointerId: 9, button: 0, isPrimary: true, clientX: 500, clientY: 400 })
-    await visual.trigger('pointermove', { pointerId: 9, clientX: 520, clientY: 400 })
-    await visual.trigger('pointerup', { pointerId: 9, clientX: 520, clientY: 400 })
+    await visual.trigger('pointerdown', { pointerId: 9, pointerType: 'touch', button: 0, isPrimary: true, clientX: 500, clientY: 400 })
+    await visual.trigger('pointermove', { pointerId: 9, pointerType: 'touch', clientX: 500, clientY: 420 })
+    await visual.trigger('pointerup', { pointerId: 9, pointerType: 'touch', clientX: 500, clientY: 420 })
 
-    await visual.trigger('pointerdown', { pointerId: 10, button: 0, isPrimary: true, clientX: 500, clientY: 400 })
-    await visual.trigger('pointercancel', { pointerId: 10, clientX: 500, clientY: 400 })
+    await visual.trigger('pointerdown', { pointerId: 10, pointerType: 'touch', button: 0, isPrimary: true, clientX: 500, clientY: 400 })
+    await visual.trigger('pointercancel', { pointerId: 10, pointerType: 'touch', clientX: 500, clientY: 400 })
     vi.advanceTimersByTime(100)
 
     const interactions = runtime.setPageState.mock.calls
@@ -124,18 +165,20 @@ describe('Home sphere interaction bridge', () => {
 
     const click = new MouseEvent('click', { bubbles: true, cancelable: true })
     visual.element.dispatchEvent(click)
-    expect(click.defaultPrevented).toBe(true)
+    expect(click.defaultPrevented).toBe(false)
+    expect(runtime.setPageState.mock.calls.map((call) => call[1]?.interaction?.type).filter(Boolean)).toEqual(['press-start', 'press-end'])
   })
 
-  it('captures the pointer so a release outside the visual region can end a press', async () => {
+  it('tracks the pointer globally while preserving native click behavior', async () => {
     const mounted = await mountHome()
     const visual = mounted.get('.hero-visual')
-    const capturePointer = vi.fn()
-    Object.defineProperty(visual.element, 'setPointerCapture', { configurable: true, value: capturePointer })
-
     await visual.trigger('pointerdown', { pointerId: 12, button: 0, isPrimary: true, clientX: 500, clientY: 400 })
+    await visual.trigger('pointerup', { pointerId: 12, clientX: 500, clientY: 400 })
 
-    expect(capturePointer).toHaveBeenCalledWith(12)
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true })
+    visual.element.dispatchEvent(click)
+    expect(click.defaultPrevented).toBe(false)
+    expect(runtime.setPageState.mock.calls.map((call) => call[1]?.interaction?.type).filter(Boolean)).toEqual(['tap'])
   })
 
   it('does not suppress a later click when a long press is cancelled by the browser', async () => {

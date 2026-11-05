@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
 
 export const baseURL = getBaseURL()
+// The retired post URL also checks that compatibility redirects remain accessible.
 export const publicPaths = ['/', '/writing', '/search', '/about', '/post/quality-check-missing-post']
 
 function getBaseURL() {

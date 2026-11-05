@@ -23,7 +23,7 @@ describe('Archive scene bridge', () => {
     const runtime = { setPageState: vi.fn(), registerAnchor: vi.fn(() => vi.fn()), measureAnchors: vi.fn() }
     const router = createRouter({ history: createMemoryHistory(), routes: [
       { path: '/writing', component: Archive },
-      { path: '/post/:slug', name: 'PostDetail', component: { template: '<div />' } },
+      { path: '/documents/:slug', name: 'DocumentDetail', component: { template: '<div />' } },
     ] })
     await router.push('/writing'); await router.isReady()
     wrapper = mount(Archive, { attachTo: document.body, global: { plugins: [router], provide: { [visualRuntimeKey as symbol]: ref(runtime) } } })
@@ -37,6 +37,9 @@ describe('Archive scene bridge', () => {
   it('renders archive article titles as second-level headings', async () => {
     api.getPosts.mockResolvedValue({ data: { items: [{
       id: 1,
+      key: 'post:1',
+      kind: 'post',
+      public_url: '/documents/a-field-note',
       title: 'A field note',
       slug: 'a-field-note',
       is_published: true,
@@ -48,7 +51,7 @@ describe('Archive scene bridge', () => {
     }], total: 1 } })
     const router = createRouter({ history: createMemoryHistory(), routes: [
       { path: '/writing', component: Archive },
-      { path: '/post/:slug', name: 'PostDetail', component: { template: '<div />' } },
+      { path: '/documents/:slug', name: 'DocumentDetail', component: { template: '<div />' } },
     ] })
     await router.push('/writing'); await router.isReady()
     wrapper = mount(Archive, { attachTo: document.body, global: { plugins: [router] } })

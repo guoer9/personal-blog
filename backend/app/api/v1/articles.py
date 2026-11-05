@@ -44,7 +44,7 @@ def _post_article(post: Post) -> dict[str, Any]:
         "tags": [tag.name for tag in post.tags],
         "comment_count": len(post.comments),
         "view_count": post.view_count or 0,
-        "public_url": f"/post/{post.slug}",
+        "public_url": f"/documents/{post.slug}",
         "external_url": None,
         "source_label": "手动文章",
         "created_at": _utc(post.created_at),

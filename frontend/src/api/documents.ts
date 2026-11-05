@@ -3,12 +3,13 @@ import type { Author, PaginatedResponse } from './posts'
 
 export interface PublicDocumentSummary {
   id: number
+  kind: 'post' | 'notion'
   slug: string; title: string; summary: string | null; categories: string[]
   created_at: string; updated_at: string
   icon?: string | null; cover_url?: string | null
   author: Author | null; author_label: string
   view_count: number; comment_count: number
-  public_url: string; external_url: string
+  public_url: string; external_url: string | null
 }
 export interface NotionText { text: string; bold: boolean; italic: boolean; underline: boolean; strikethrough: boolean; code: boolean; color: string; href: string | null }
 export interface NotionBlock {

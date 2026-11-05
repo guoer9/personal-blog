@@ -23,8 +23,12 @@ const router = createRouter({
         },
         {
           path: 'post/:slug',
-          name: 'PostDetail',
-          component: () => import('@/views/blog/PostDetail.vue'),
+          redirect: to => ({
+            name: 'DocumentDetail',
+            params: { slug: to.params.slug },
+            query: to.query,
+            hash: to.hash,
+          }),
         },
         {
           path: 'writing',
@@ -177,7 +181,6 @@ const pageTitles: Record<string, string> = {
   Transfer: `临时传输 · ${siteTitle}`,
   Search: `搜索 · ${siteTitle}`,
   TagPosts: `标签 · ${siteTitle}`,
-  PostDetail: siteTitle,
   NotFound: `页面未找到 · ${siteTitle}`,
   AdminLogin: `后台登录 · ${siteTitle}`,
   Login: `登录 · ${siteTitle}`,

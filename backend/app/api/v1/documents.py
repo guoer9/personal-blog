@@ -1,4 +1,4 @@
-"""Public Notion library documents, isolated from ordinary blog posts."""
+"""Shared public reading surface for manual and Notion articles."""
 
 import math
 import unicodedata
@@ -6,12 +6,14 @@ import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.session import get_db
 from app.models.notion_library import NotionDocument
+from app.models.post import Post
+from app.crud.article import get_article_by_slug
 from app.schemas.documents import PublicDocumentDetail, PublicDocumentList
 from app.services.notion_content import media_directory, NotionContentError
 
@@ -49,6 +51,7 @@ def _sort_key(document: NotionDocument):
 def _summary(document: NotionDocument) -> dict:
     return {
         "id": document.id,
+        "kind": "notion",
         "slug": document.slug,
         "title": document.title,
         "summary": document.summary,
@@ -63,6 +66,27 @@ def _summary(document: NotionDocument) -> dict:
         "comment_count": len(document.comments),
         "public_url": f"/documents/{document.slug}",
         "external_url": f"https://www.notion.so/{document.notion_page_id.replace('-', '')}",
+    }
+
+
+def _manual_summary(post: Post) -> dict:
+    return {
+        "id": post.id,
+        "kind": "post",
+        "slug": post.slug,
+        "title": post.title,
+        "summary": post.summary,
+        "categories": [tag.name for tag in post.tags],
+        "created_at": post.created_at,
+        "updated_at": post.updated_at,
+        "icon": None,
+        "cover_url": post.cover_image,
+        "author": post.author,
+        "author_label": post.author.username if post.author else "未指定作者",
+        "view_count": post.view_count or 0,
+        "comment_count": len(post.comments),
+        "public_url": f"/documents/{post.slug}",
+        "external_url": None,
     }
 
 
@@ -123,18 +147,23 @@ async def document_media(page_id: str, asset: str, db: AsyncSession = Depends(ge
 
 @router.get("/{slug}", response_model=PublicDocumentDetail)
 async def get_document(slug: str, db: AsyncSession = Depends(get_db)) -> dict:
-    document = await db.scalar(
-        select(NotionDocument).options(selectinload(NotionDocument.comments)).where(
-            NotionDocument.slug == slug,
-            NotionDocument.status == "published",
-            NotionDocument.manual_unpublished.is_(False),
-        )
-    )
-    if document is None:
+    article = await get_article_by_slug(db, slug)
+    if isinstance(article, NotionDocument):
+        if article.status != "published" or article.manual_unpublished:
+            raise HTTPException(404, "资料不存在")
+        await db.execute(update(NotionDocument).where(NotionDocument.id == article.id).values(
+            view_count=NotionDocument.view_count + 1,
+            updated_at=NotionDocument.updated_at,
+        ))
+        await db.commit()
+        return {**_summary(article), "content": article.content, "blocks": article.content_blocks}
+
+    if article is None or not article.is_published:
         raise HTTPException(404, "资料不存在")
-    await db.execute(update(NotionDocument).where(NotionDocument.id == document.id).values(
-        view_count=NotionDocument.view_count + 1,
-        updated_at=NotionDocument.updated_at,
+    await db.execute(update(Post).where(Post.id == article.id).values(
+        view_count=func.coalesce(Post.view_count, 0) + 1,
+        updated_at=Post.updated_at,
     ))
     await db.commit()
-    return {**_summary(document), "content": document.content, "blocks": document.content_blocks}
+    await db.refresh(article, attribute_names=["view_count"])
+    return {**_manual_summary(article), "content": article.content, "blocks": None}

@@ -101,7 +101,7 @@ describe('MainLayout skip link', () => {
     expect(mediaQuery.removeEventListener).toHaveBeenCalledWith('change', expect.any(Function))
   })
 
-  it('remeasures registered DOM anchors after the page scrolls', async () => {
+  it('coalesces scroll anchor measurements while updating scroll state immediately', async () => {
     await router.push('/test-layout')
     await router.isReady()
     const setScroll = vi.spyOn(VisualRuntime.prototype, 'setScroll')
@@ -114,8 +114,11 @@ describe('MainLayout skip link', () => {
     measureAnchors.mockClear()
 
     window.dispatchEvent(new Event('scroll'))
+    window.dispatchEvent(new Event('scroll'))
 
-    expect(setScroll).toHaveBeenCalledTimes(1)
+    expect(setScroll).toHaveBeenCalledTimes(2)
+    expect(measureAnchors).not.toHaveBeenCalled()
+    await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
     expect(measureAnchors).toHaveBeenCalledTimes(1)
     expect(setScroll.mock.invocationCallOrder[0]).toBeLessThan(measureAnchors.mock.invocationCallOrder[0]!)
     wrapper.unmount()

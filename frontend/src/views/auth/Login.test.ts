@@ -48,11 +48,11 @@ describe('public login', () => {
       routes: [
         { path: '/login', name: 'Login', component: Login },
         { path: '/register', name: 'Register', component: { template: '<div />' } },
-        { path: '/post/:slug', name: 'PostDetail', component: { template: '<div />' } },
+        { path: '/documents/:slug', name: 'DocumentDetail', component: { template: '<div />' } },
         { path: '/', name: 'Home', component: { template: '<div />' } },
       ],
     })
-    await router.push('/login?redirect=%2Fpost%2Ffield-note')
+    await router.push('/login?redirect=%2Fdocuments%2Ffield-note')
     const wrapper = mount(Login, { global: { plugins: [router], stubs: elementStubs } })
 
     expect(wrapper.find('input[placeholder*="验证"]').exists()).toBe(false)
@@ -62,7 +62,7 @@ describe('public login', () => {
     await flushPromises()
 
     expect(state.login).toHaveBeenCalledWith({ username: 'reader', password: 'reader-password' })
-    expect(router.currentRoute.value.fullPath).toBe('/post/field-note')
+    expect(router.currentRoute.value.fullPath).toBe('/documents/field-note')
     wrapper.unmount()
   })
 

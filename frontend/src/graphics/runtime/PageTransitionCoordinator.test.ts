@@ -87,7 +87,7 @@ describe('PageTransitionCoordinator', () => {
     const module = { ...moduleFor('article'), resize }
     const coordinator = new PageTransitionCoordinator({ context, preload: async () => module })
     coordinator.resize(1440, 900, 1.5)
-    coordinator.setTarget({ routeName: 'PostDetail', pageId: 'article', params: {} })
+    coordinator.setTarget({ routeName: 'DocumentDetail', pageId: 'library', params: {} })
     await coordinator.preloadTarget()
     await coordinator.afterEnter()
 

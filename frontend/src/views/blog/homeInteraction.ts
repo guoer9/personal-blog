@@ -18,12 +18,14 @@ interface ActivePointer {
   startX: number
   startY: number
   longPressStarted: boolean
-  cancelled: boolean
+  dragging: boolean
+  pointerType: string
 }
 
 interface HomeSphereInteractionBridgeOptions {
   options: HomeSphereInteractionOptions
   emit: (interaction: HomeSphereInteraction) => void
+  onGestureActive?: (active: boolean) => void
   viewport?: () => { width: number; height: number }
 }
 
@@ -36,7 +38,7 @@ function viewportSize(): { width: number; height: number } {
   }
 }
 
-function toViewportNdc(event: PointerEvent, viewport: () => { width: number; height: number }): { x: number; y: number } {
+function toViewportNdc(event: Pick<PointerEvent, 'clientX' | 'clientY'>, viewport: () => { width: number; height: number }): { x: number; y: number } {
   const { width, height } = viewport()
   return {
     x: Math.min(1, Math.max(-1, (event.clientX / Math.max(1, width)) * 2 - 1)),
@@ -44,9 +46,10 @@ function toViewportNdc(event: PointerEvent, viewport: () => { width: number; hei
   }
 }
 
-export function createHomeSphereInteractionBridge({ options, emit, viewport = viewportSize }: HomeSphereInteractionBridgeOptions) {
+export function createHomeSphereInteractionBridge({ options, emit, onGestureActive, viewport = viewportSize }: HomeSphereInteractionBridgeOptions) {
   let active: ActivePointer | null = null
   let timer: ReturnType<typeof setTimeout> | null = null
+  let gestureTimer: ReturnType<typeof setTimeout> | null = null
   let sequence = 0
   let suppressNextClick = false
 
@@ -55,10 +58,18 @@ export function createHomeSphereInteractionBridge({ options, emit, viewport = vi
     timer = null
   }
 
-  const publish = (type: HomeSphereInteractionType, event: PointerEvent) => {
+  const publish = (type: HomeSphereInteractionType, event: Pick<PointerEvent, 'clientX' | 'clientY'>) => {
     const point = toViewportNdc(event, viewport)
     sequence += 1
     emit({ sequence, type, ndcX: point.x, ndcY: point.y })
+  }
+
+  const finishGesture = () => {
+    if (gestureTimer !== null) clearTimeout(gestureTimer)
+    gestureTimer = setTimeout(() => {
+      gestureTimer = null
+      onGestureActive?.(false)
+    }, 100)
   }
 
   const cancelActive = (event?: PointerEvent, suppressClick = false) => {
@@ -69,51 +80,74 @@ export function createHomeSphereInteractionBridge({ options, emit, viewport = vi
       suppressNextClick = suppressClick
     }
     active = null
+    finishGesture()
   }
 
   return {
     onPointerDown(event: PointerEvent) {
       if (active || event.isPrimary === false || (event.button !== undefined && event.button !== 0)) return
       suppressNextClick = false
+      const eventTarget = event.target as Element | null
+      if (eventTarget?.closest('input, textarea, select, [contenteditable="true"]')) return
+      if (gestureTimer !== null) clearTimeout(gestureTimer)
+      gestureTimer = null
+      onGestureActive?.(true)
       const id = pointerId(event)
       const target = event.currentTarget as (HTMLElement & { setPointerCapture?: (pointerId: number) => void }) | null
       try { target?.setPointerCapture?.(id) } catch { /* The browser may have ended the pointer stream. */ }
-      active = { id, startX: event.clientX, startY: event.clientY, longPressStarted: false, cancelled: false }
+      active = { id, startX: event.clientX, startY: event.clientY, longPressStarted: false, dragging: false, pointerType: event.pointerType || 'mouse' }
       timer = setTimeout(() => {
-        if (!active || active.id !== id || active.cancelled) return
+        if (!active || active.id !== id || active.dragging) return
         active.longPressStarted = true
         publish('press-start', event)
       }, Math.max(0, options.longPressDurationMs))
     },
     onPointerMove(event: PointerEvent) {
       if (!active || active.id !== pointerId(event)) return
-      const distance = Math.hypot(event.clientX - active.startX, event.clientY - active.startY)
-      if (distance <= Math.max(0, options.allowableMovementCssPx)) return
-      active.cancelled = true
-      cancelActive(event, true)
+      const deltaX = event.clientX - active.startX
+      const deltaY = event.clientY - active.startY
+      if (!active.dragging && Math.hypot(deltaX, deltaY) > Math.max(0, options.allowableMovementCssPx)) {
+        clearTimer()
+        if (active.longPressStarted) publish('press-end', event)
+        active.longPressStarted = false
+        if (active.pointerType === 'touch' && Math.abs(deltaY) >= Math.abs(deltaX)) {
+          active = null
+          finishGesture()
+          return
+        }
+        active.dragging = true
+      }
+      if (active.dragging) publish('drag', event)
     },
     onPointerUp(event: PointerEvent) {
       if (!active || active.id !== pointerId(event)) return
       clearTimer()
-      if (!active.cancelled) {
-        if (active.longPressStarted) {
-          publish('press-end', event)
-          suppressNextClick = true
-        } else {
-          publish('tap', event)
-        }
+      if (active.longPressStarted) {
+        publish('press-end', event)
+        suppressNextClick = true
       }
       active = null
+      finishGesture()
     },
-    onPointerCancel(event: PointerEvent) { cancelActive(event) },
-    onClickCapture(event: MouseEvent) {
-      if (!suppressNextClick) return
+    onPointerCancel(event: PointerEvent) {
       suppressNextClick = false
-      event.preventDefault()
-      event.stopPropagation()
+      cancelActive(event)
+    },
+    onClickCapture(event: MouseEvent) {
+      if (suppressNextClick) {
+        suppressNextClick = false
+        return
+      }
+      const point = event.detail === 0 && event.clientX === 0 && event.clientY === 0
+        ? { clientX: viewport().width / 2, clientY: viewport().height / 2 }
+        : event
+      publish('tap', point)
     },
     dispose() {
       clearTimer()
+      if (gestureTimer !== null) clearTimeout(gestureTimer)
+      onGestureActive?.(false)
+      gestureTimer = null
       active = null
       suppressNextClick = false
     },

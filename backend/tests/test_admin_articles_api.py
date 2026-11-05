@@ -56,7 +56,7 @@ async def test_admin_articles_unifies_posts_and_notion_documents_with_shared_met
     assert rows["post"]["author"]["username"] == "admin"
     assert rows["post"]["tags"] == ["技术"]
     assert rows["post"]["comment_count"] == 1
-    assert rows["post"]["public_url"] == "/post/manual-post"
+    assert rows["post"]["public_url"] == "/documents/manual-post"
     assert rows["notion"]["author"]["username"] == "admin"
     assert rows["notion"]["tags"] == ["随笔", "技术"]
     assert rows["notion"]["comment_count"] == 0

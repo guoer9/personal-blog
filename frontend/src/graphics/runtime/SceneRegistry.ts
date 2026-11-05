@@ -1,7 +1,7 @@
 import type { PageSceneId, PageSceneModule, RouteVisualIdentity } from './types'
 
 const ROUTE_SCENE_MAP: Readonly<Record<string, PageSceneId>> = {
-  Home: 'home', Works: 'works', WorkDetail: 'work-detail', About: 'about', PostDetail: 'article',
+  Home: 'home', Works: 'works', WorkDetail: 'work-detail', About: 'about',
   Archive: 'archive', TagPosts: 'archive', Search: 'archive', Documents: 'library', DocumentDetail: 'library',
 }
 export function pageSceneIdForRoute(routeName: string | null | undefined): PageSceneId | null { return routeName ? ROUTE_SCENE_MAP[routeName] ?? null : null }

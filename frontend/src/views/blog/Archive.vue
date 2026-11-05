@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, provide, ref, watch, type Ref } from 'vue'
-import { getPosts, type Post } from '@/api/posts'
+import { getPosts, type PublicArticle } from '@/api/posts'
 import ArticleRow from '@/components/blog/ArticleRow.vue'
 import StatePanel from '@/components/blog/StatePanel.vue'
 import ScrollReveal from '@/components/immersive/ScrollReveal.vue'
@@ -8,7 +8,7 @@ import { usePageSceneState } from '@/graphics/runtime/usePageSceneState'
 import { visualPageSceneBridgeKey, visualRuntimeKey, type VisualRuntimeBridge } from '@/graphics/runtime/visualRuntimeHandle'
 import type { ArchivePageState } from '@/graphics/scenes/pageStates'
 
-const posts = ref<Post[]>([])
+const posts = ref<PublicArticle[]>([])
 const runtime = inject<Ref<VisualRuntimeBridge | null>>(visualRuntimeKey, ref(null))
 const sceneBridge = usePageSceneState<ArchivePageState>({ mode: 'archive', query: '', resultCount: 0, page: 1, totalPages: 0 })
 provide(visualPageSceneBridgeKey, sceneBridge)
@@ -90,7 +90,7 @@ onBeforeUnmount(() => unregisterArchiveAnchor?.())
           <button type="button" class="text-action" @click="loadPosts">重新加载 ↗</button>
         </div>
         <div v-else-if="posts.length" class="article-list">
-          <ArticleRow v-for="(post, index) in posts" :key="post.id" :post="post" :index="(currentPage - 1) * pageSize + index" heading-tag="h2" />
+          <ArticleRow v-for="(post, index) in posts" :key="post.key" :post="post" :index="(currentPage - 1) * pageSize + index" heading-tag="h2" />
         </div>
         <StatePanel
           v-else

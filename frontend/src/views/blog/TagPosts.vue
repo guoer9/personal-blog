@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, provide, ref, watch, type Ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { getPosts, type Post } from '@/api/posts'
+import { getPosts, type PublicArticle } from '@/api/posts'
 import ArticleRow from '@/components/blog/ArticleRow.vue'
 import StatePanel from '@/components/blog/StatePanel.vue'
 import { usePageSceneState } from '@/graphics/runtime/usePageSceneState'
@@ -12,7 +12,7 @@ const route = useRoute()
 const runtime = inject<Ref<VisualRuntimeBridge | null>>(visualRuntimeKey, ref(null))
 const sceneBridge = usePageSceneState<ArchivePageState>({ mode: 'tag', query: '', resultCount: 0, page: 1, totalPages: 0 })
 provide(visualPageSceneBridgeKey, sceneBridge)
-const posts = ref<Post[]>([])
+const posts = ref<PublicArticle[]>([])
 const loading = ref(true)
 const error = ref(false)
 const total = ref(0)
@@ -89,7 +89,7 @@ onBeforeUnmount(() => unregisterArchiveAnchor?.())
           <button type="button" class="text-action" @click="loadTagPosts(currentPage)">重试 ↗</button>
         </div>
         <div v-else-if="posts.length" class="article-list">
-          <ArticleRow v-for="(post, index) in posts" :key="post.id" :post="post" :index="index" />
+          <ArticleRow v-for="(post, index) in posts" :key="post.key" :post="post" :index="index" />
         </div>
         <StatePanel
           v-else

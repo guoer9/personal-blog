@@ -25,12 +25,13 @@ describe('motion energy shaders', () => {
     expect(flowVertexShader).toContain('uniform float uRippleAges[MAX_RIPPLES];')
     expect(flowVertexShader).toContain('exp(-pow')
     expect(flowVertexShader).toContain('min(uPressDepth, PRESS_DEPTH_MAX)')
+    expect(flowVertexShader).not.toContain('step(float(index), float(uRippleCount - 1))')
   })
 
   it('keeps hover and click feedback as separate bounded light responses', () => {
     expect(flowFragmentShader).toContain('varying float vRippleLight;')
     expect(flowFragmentShader).toContain('uHoverStrength * 0.12')
-    expect(flowFragmentShader).toContain('vRippleLight * 0.28')
+    expect(flowFragmentShader).toContain('vRippleLight * 0.42')
   })
 
   it('cycles finite trail particles along pointer direction and fades their alpha', () => {
@@ -39,6 +40,7 @@ describe('motion energy shaders', () => {
     expect(particleVertexShader).toContain('fract(uTime *')
     expect(particleVertexShader).toContain('smoothstep(0.55, 1.0, trailAge)')
     expect(particleVertexShader).toContain('uTrailDirection')
+    expect(particleVertexShader).toContain('max(smoothstep(0.08, 0.22, uScroll), smoothstep(0.02, 0.2, max(uTrailStrength, uImpactEnergy)))')
     expect(particleFragmentShader).toContain('vTrailAlpha')
   })
 

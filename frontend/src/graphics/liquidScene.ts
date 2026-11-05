@@ -179,6 +179,7 @@ export function createLiquidScene(
   let easedMotionEnergy = 0
   let rippleCursor = 0
   let rippleCount = 0
+  let rippleSequence = 0
   let hoverStrength = 0
   let trailStrength = 0
   let impactEnergy = 0
@@ -198,6 +199,26 @@ export function createLiquidScene(
     const hit = raycaster.intersectObject(mesh, false)[0]
     if (!hit) return null
     return mesh.worldToLocal(hit.point.clone()).normalize()
+  }
+
+  function resolveInteractionDirection(ndcX: number, ndcY: number): Vector3 | null {
+    const directHit = hitSphere(ndcX, ndcY)
+    if (directHit) return directHit
+    let nearestHit = hitSphere(0, 0)
+    if (!nearestHit) return null
+    let hitDistance = 0
+    let missDistance = 1
+    for (let step = 0; step < 12; step += 1) {
+      const distance = (hitDistance + missDistance) * 0.5
+      const hit = hitSphere(ndcX * distance, ndcY * distance)
+      if (hit) {
+        nearestHit = hit
+        hitDistance = distance
+      } else {
+        missDistance = distance
+      }
+    }
+    return nearestHit
   }
 
   function updateRippleUniforms(seconds: number) {
@@ -293,7 +314,7 @@ export function createLiquidScene(
       applyQualityTier(tier)
     },
     triggerRipple(ndcX, ndcY) {
-      const direction = hitSphere(ndcX, ndcY)
+      const direction = resolveInteractionDirection(ndcX, ndcY)
       if (!direction) return false
       const slotIndex = rippleCursor % activeRippleCapacity
       rippleDirections[slotIndex].copy(direction)
@@ -302,12 +323,13 @@ export function createLiquidScene(
       rippleStrengths[slotIndex] = 1
       rippleCursor = (slotIndex + 1) % activeRippleCapacity
       rippleCount = Math.min(activeRippleCapacity, rippleCount + 1)
+      rippleSequence += 1
       uniforms.uRippleCount.value = rippleCount
-      impactEnergy = clamp(impactEnergy + 0.65, 0, 1)
+      impactEnergy = clamp(impactEnergy + 0.85, 0, 1)
       return true
     },
     beginPress(ndcX, ndcY) {
-      const direction = hitSphere(ndcX, ndcY)
+      const direction = resolveInteractionDirection(ndcX, ndcY)
       if (!direction) return false
       pressDirection.copy(direction)
       pressStartedAt = lastTime
@@ -337,9 +359,9 @@ export function createLiquidScene(
       const rotationX = -0.06 + current.pointerY * 0.18 + current.scroll * (0.9 + mood.rotationSpeed)
       const rotationY = 0.25 + current.pointerX * 0.23 - current.scroll * (0.65 + mood.rotationSpeed)
       const rotationZ = -0.04 + current.scroll * (0.8 + mood.rotationSpeed)
-      const viewportScale = window.innerWidth < 760 ? 0.82 : 1
+      const viewportScale = window.innerWidth < 760 ? 0.68 : 1
       const moodScale = 1 + (mood.scale - 1) * 0.12
-      const scale = (0.94 + Math.sin(seconds * 0.55) * 0.018 + current.scroll * 0.16) * moodScale * viewportScale
+      const scale = (0.66 + Math.sin(seconds * 0.55) * 0.012 + current.scroll * 0.06) * moodScale * viewportScale
       const offsetY = Math.sin(seconds * 0.45 * (0.4 + mood.rotationSpeed)) * 0.04
 
       mesh.rotation.set(rotationX, rotationY, rotationZ)
@@ -383,6 +405,8 @@ export function createLiquidScene(
       canvas.dataset.sphereRippleCount = String(rippleCount)
       canvas.dataset.spherePressDepth = pressDepth.toFixed(4)
       canvas.dataset.sphereTrailStrength = clamp(trailStrength, 0, 1).toFixed(4)
+      canvas.dataset.sphereScale = scale.toFixed(4)
+      canvas.dataset.sphereRippleSequence = String(rippleSequence)
       renderer.render(scene, camera)
     },
     dispose() {

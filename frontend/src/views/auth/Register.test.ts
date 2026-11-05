@@ -49,7 +49,7 @@ describe('registration verification', () => {
         { path: '/login', name: 'Login', component: { template: '<div />' } },
       ],
     })
-    await router.push('/register?redirect=%2Fpost%2Ffield-note')
+    await router.push('/register?redirect=%2Fdocuments%2Ffield-note')
     const wrapper = mount(Register, { global: { plugins: [router], stubs: elementStubs } })
 
     await wrapper.get('input[placeholder="请输入站长提供的验证内容"]').setValue('测试短语')
@@ -66,7 +66,7 @@ describe('registration verification', () => {
       email: 'reader@example.com',
       password: 'reader-password',
     })
-    expect(router.currentRoute.value.fullPath).toBe('/login?redirect=/post/field-note')
+    expect(router.currentRoute.value.fullPath).toBe('/login?redirect=/documents/field-note')
     wrapper.unmount()
   })
 

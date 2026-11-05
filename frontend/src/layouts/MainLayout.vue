@@ -22,6 +22,7 @@ const canvas = ref<HTMLCanvasElement | null>(null)
 const runtime = shallowRef<VisualRuntime | null>(null)
 const runtimeFailed = ref(false)
 let reducedMotionQuery: MediaQueryList | null = null
+let anchorMeasureFrame = 0
 const diagnosticReader = (): VisualRuntimeDiagnostics | null => runtime.value?.getDiagnostics() ?? null
 type DiagnosticWindow = Window & { __visualRuntimeDiagnostics?: () => VisualRuntimeDiagnostics | null }
 provide(visualRuntimeKey, runtime)
@@ -58,15 +59,24 @@ function onPageAfterEnter() { void runtime.value?.finishTransitionEnter() }
 function onPointerMove(event: PointerEvent) {
   runtime.value?.setPointer((event.clientX / Math.max(1, window.innerWidth)) * 2 - 1, -((event.clientY / Math.max(1, window.innerHeight)) * 2 - 1))
 }
-function onScroll() {
+function updateScrollState() {
   const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight)
   runtime.value?.setScroll(window.scrollY, window.scrollY / max)
-  runtime.value?.measureAnchors()
+}
+function onScroll() {
+  updateScrollState()
+  if (anchorMeasureFrame) return
+  anchorMeasureFrame = requestAnimationFrame(() => {
+    anchorMeasureFrame = 0
+    runtime.value?.measureAnchors()
+  })
 }
 function onResize() {
   runtime.value?.resize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1)
+  if (anchorMeasureFrame) cancelAnimationFrame(anchorMeasureFrame)
+  anchorMeasureFrame = 0
+  updateScrollState()
   runtime.value?.measureAnchors()
-  onScroll()
 }
 function onReducedMotionChange(event: MediaQueryList | MediaQueryListEvent) {
   runtime.value?.setReducedMotion(event.matches)
@@ -101,6 +111,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('pointermove', onPointerMove)
   window.removeEventListener('scroll', onScroll)
   window.removeEventListener('resize', onResize)
+  if (anchorMeasureFrame) cancelAnimationFrame(anchorMeasureFrame)
+  anchorMeasureFrame = 0
   reducedMotionQuery?.removeEventListener('change', onReducedMotionChange)
   reducedMotionQuery = null
   const diagnosticWindow = window as DiagnosticWindow

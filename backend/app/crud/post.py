@@ -1,11 +1,12 @@
-import unicodedata
 from typing import Optional, List, Tuple
 from slugify import slugify
-from sqlalchemy import case, select, func, or_
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.post import Post, Tag
+from app.models.notion_library import NotionDocument
 from app.schemas.post import PostCreate, PostUpdate
+from app.services.article_search import literal_pattern, search_expressions, search_tokens
 
 
 async def get_post_by_id(
@@ -88,11 +89,14 @@ async def generate_unique_slug(db: AsyncSession, title: str, post_id: Optional[i
     counter = 1
     
     while True:
-        query = select(Post).where(Post.slug == slug)
+        query = select(Post.id).where(Post.slug == slug)
         if post_id:
             query = query.where(Post.id != post_id)
         result = await db.execute(query)
-        if not result.scalar_one_or_none():
+        legacy_id = await db.scalar(select(NotionDocument.id).where(
+            (NotionDocument.legacy_post_slug == slug) | (NotionDocument.slug == slug)
+        ))
+        if result.scalar_one_or_none() is None and legacy_id is None:
             break
         slug = f"{base_slug}-{counter}"
         counter += 1
@@ -172,45 +176,16 @@ async def search_posts(
     page_size: int = 10
 ) -> Tuple[List[Post], int]:
     """搜索已发布文章，按字段相关度稳定排序。"""
-    normalized_keyword = " ".join(unicodedata.normalize("NFKC", keyword).split())
-    if not normalized_keyword or len(normalized_keyword) > 120:
-        return [], 0
-
-    words = normalized_keyword.split(" ")
-    if len(words) > 8:
+    tokens = search_tokens(keyword)
+    if not tokens:
         return [], 0
     # ILIKE folds both operands using the database's rules. Python casefold
     # alone would make even identical Unicode text unmatchable on SQLite.
-    tokens = list(dict.fromkeys(words))
-
-    def escape_like(value: str) -> str:
-        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-    token_matches = []
-    title_matches = []
-    tag_matches = []
-    summary_matches = []
-    content_matches = []
-    for token in tokens:
-        pattern = f"%{escape_like(token)}%"
-        title_match = Post.title.ilike(pattern, escape="\\")
-        tag_match = Post.tags.any(Tag.name.ilike(pattern, escape="\\"))
-        summary_match = Post.summary.ilike(pattern, escape="\\")
-        content_match = Post.content.ilike(pattern, escape="\\")
-        token_matches.append(or_(title_match, tag_match, summary_match, content_match))
-        title_matches.append(title_match)
-        tag_matches.append(tag_match)
-        summary_matches.append(summary_match)
-        content_matches.append(content_match)
-
-    match_conditions = [Post.is_published == True, *token_matches]
-    relevance = case(
-        (or_(*title_matches), 4),
-        (or_(*tag_matches), 3),
-        (or_(*summary_matches), 2),
-        (or_(*content_matches), 1),
-        else_=0,
+    token_matches, relevance = search_expressions(
+        tokens, title=Post.title, summary=Post.summary, content=Post.content,
+        tag_matches=[Post.tags.any(Tag.name.ilike(literal_pattern(token), escape="\\")) for token in tokens],
     )
+    match_conditions = [Post.is_published == True, *token_matches]
     query = select(Post).options(
         selectinload(Post.author),
         selectinload(Post.tags)

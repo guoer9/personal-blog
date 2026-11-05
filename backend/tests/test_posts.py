@@ -3,7 +3,7 @@ from urllib.parse import quote
 import httpx
 from sqlalchemy import select
 
-from app.models import NotionDocument, NotionSource, Post, User
+from app.models import NotionDocument, NotionPage, NotionSource, Post, User
 from app.core.config import settings
 
 
@@ -103,6 +103,13 @@ async def test_post_url_prefers_document_when_old_post_and_document_share_slug(c
             status="published",
         ),
     ])
+    await db_session.commit()
+
+    legacy = await db_session.scalar(select(Post).where(Post.slug == "docker-mirror"))
+    db_session.add(NotionPage(
+        notion_page_id="44444444-4444-4444-4444-444444444444", post_id=legacy.id,
+        source_title=legacy.title,
+    ))
     await db_session.commit()
 
     response = await client.get("/api/v1/posts/docker-mirror", follow_redirects=False)

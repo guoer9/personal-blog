@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 
 const sourceRoot = resolve(__dirname, '..')
 const readSource = (file: string) => readFileSync(resolve(sourceRoot, file), 'utf8')
@@ -17,7 +18,7 @@ describe('public blog access boundary', () => {
       'views/blog/Archive.vue',
       'views/blog/Search.vue',
       'views/blog/TagPosts.vue',
-      'views/blog/PostDetail.vue',
+      'views/blog/DocumentDetail.vue',
     ]) {
       expect(readSource(file)).not.toMatch(/from ['"](?:element-plus|@element-plus\/icons-vue)/)
     }
@@ -54,6 +55,16 @@ describe('public transfer route', () => {
     const route = router.resolve('/transfer')
     expect(route.name).toBe('Transfer')
     expect(route.matched.some(record => record.meta.requiresAuth)).toBe(false)
+  })
+})
+
+describe('canonical article route', () => {
+  it('keeps old post links as redirects to the document detail route', async () => {
+    setActivePinia(createPinia())
+    const { default: router } = await import('./index')
+    await router.push('/post/legacy-note?source=archive#discussion')
+    expect(router.currentRoute.value.name).toBe('DocumentDetail')
+    expect(router.currentRoute.value.fullPath).toBe('/documents/legacy-note?source=archive#discussion')
   })
 })
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, onMounted, provide, ref, watch, type Ref } from 'vue'
-import { getPosts, type Post } from '@/api/posts'
+import { getPosts, type PublicArticle } from '@/api/posts'
 import { getTags, type Tag } from '@/api/tags'
 import { profile, resources } from '@/data/portfolio'
 import { getWorks } from '@/api/works'
@@ -22,7 +22,7 @@ import ArticleRow from '@/components/blog/ArticleRow.vue'
 import StatePanel from '@/components/blog/StatePanel.vue'
 import { narrativeProgress, resolveMotionStage, stageFocus } from '@/graphics/motion'
 
-const posts = ref<Post[]>([])
+const posts = ref<PublicArticle[]>([])
 const featuredWorks = ref<Work[]>([])
 const worksError = ref(false)
 const worksLoading = ref(true)
@@ -58,6 +58,7 @@ const runtime = inject<Ref<VisualRuntimeHandle | null>>(visualRuntimeKey, ref(nu
 const sceneBridge = usePageSceneState<HomePageState>({ paused: false, interaction: null })
 provide(visualPageSceneBridgeKey, sceneBridge)
 const latestInteraction = ref<HomePageState['interaction']>(null)
+const sphereGestureActive = ref(false)
 const sphereInteractionOptions = inject(homeSphereInteractionOptionsKey, defaultHomeSphereInteractionOptions)
 
 function publishSceneState() {
@@ -67,6 +68,10 @@ function publishSceneState() {
 }
 const sphereInteraction = createHomeSphereInteractionBridge({
   options: sphereInteractionOptions,
+  onGestureActive: (active) => {
+    sphereGestureActive.value = active
+    document.body?.classList.toggle('sphere-gesture-active', active)
+  },
   emit: (interaction) => {
     latestInteraction.value = interaction
     publishSceneState()
@@ -134,6 +139,11 @@ onMounted(() => {
   reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
   setSystemReducedMotion(reducedMotionQuery)
   reducedMotionQuery.addEventListener('change', setSystemReducedMotion)
+  document.addEventListener('pointerdown', sphereInteraction.onPointerDown, true)
+  document.addEventListener('pointermove', sphereInteraction.onPointerMove, true)
+  document.addEventListener('pointerup', sphereInteraction.onPointerUp, true)
+  document.addEventListener('pointercancel', sphereInteraction.onPointerCancel, true)
+  document.addEventListener('click', sphereInteraction.onClickCapture, true)
   updateNarrative()
   window.addEventListener('scroll', scheduleNarrativeUpdate, { passive: true })
   window.addEventListener('resize', scheduleNarrativeUpdate, { passive: true })
@@ -149,6 +159,12 @@ watch(runtime, publishSceneState)
 
 onBeforeUnmount(() => {
   sphereInteraction.dispose()
+  document.removeEventListener('pointerdown', sphereInteraction.onPointerDown, true)
+  document.removeEventListener('pointermove', sphereInteraction.onPointerMove, true)
+  document.removeEventListener('pointerup', sphereInteraction.onPointerUp, true)
+  document.removeEventListener('pointercancel', sphereInteraction.onPointerCancel, true)
+  document.removeEventListener('click', sphereInteraction.onClickCapture, true)
+  document.body?.classList.remove('sphere-gesture-active')
   worksController?.abort()
   if (scrollFrame) cancelAnimationFrame(scrollFrame)
   window.removeEventListener('scroll', scheduleNarrativeUpdate)
@@ -162,6 +178,7 @@ onBeforeUnmount(() => {
   <div
     ref="home"
     class="home"
+    :class="{ 'home--sphere-gesture-active': sphereGestureActive }"
     :data-stage="motionStage"
     :data-motion-paused="motionPaused"
     :style="{ '--story-progress': storyProgress }"
@@ -189,11 +206,6 @@ onBeforeUnmount(() => {
       </div>
       <div
         class="hero-visual"
-        @pointerdown="sphereInteraction.onPointerDown"
-        @pointermove="sphereInteraction.onPointerMove"
-        @pointerup="sphereInteraction.onPointerUp"
-        @pointercancel="sphereInteraction.onPointerCancel"
-        @click.capture="sphereInteraction.onClickCapture"
       >
         <ImmersiveScene :progress="storyProgress" :paused="motionPaused" />
         <span class="hero-signature">{{ profile.name }}</span>
@@ -234,7 +246,7 @@ onBeforeUnmount(() => {
       </ScrollReveal>
       <div class="writing-grid">
         <div class="article-list">
-          <ArticleRow v-for="(post, index) in posts" :key="post.id" :post="post" :index="index" />
+          <ArticleRow v-for="(post, index) in posts" :key="post.key" :post="post" :index="index" />
           <div v-if="loading" class="loading-lines" aria-label="正在载入文章">
             <span v-for="index in 3" :key="index" />
           </div>
@@ -498,7 +510,8 @@ h1 span, h1 em { display: block; }
 h1 em, .section-heading em { color: var(--electric-blue); font-weight: 400; }
 .hero-intro { max-width: 480px; color: var(--muted); font-size: clamp(1rem, 1.5vw, 1.22rem); line-height: 1.8; }
 .hero-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 26px; margin-top: 38px; }
-.hero-visual { position: relative; min-width: 0; min-height: 480px; touch-action: pan-y; }
+.hero-visual { position: relative; min-width: 0; min-height: 480px; touch-action: pan-y; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+:global(body.sphere-gesture-active), :global(body.sphere-gesture-active *) { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .hero-visual :deep(.immersive-scene) { height: min(680px, 72vh); }
 .hero-signature { position: absolute; right: 10%; bottom: 18%; z-index: 1; color: rgba(17, 17, 17, 0.1); font: 800 clamp(3rem, 7vw, 7rem) var(--display-font); letter-spacing: -0.05em; pointer-events: none; }
 .hero-footnote { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font: 0.58rem var(--mono-font); letter-spacing: 0.07em; }

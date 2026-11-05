@@ -45,6 +45,7 @@ describe('shared liquid scene controller', () => {
       return renderedScene.children[0]?.scale.x ?? 0
     }
     const initialScale = readSphereScale()
+    expect(initialScale).toBeLessThan(0.7)
     let previousScale = initialScale
     let maxScaleStep = 0
     let time = 1000
@@ -93,16 +94,49 @@ describe('shared liquid scene controller', () => {
     scene.dispose()
   })
 
-  it('registers a ripple only when the full viewport ray hits the sphere', () => {
+  it('maps clicks outside the projected sphere to its nearest visible edge', () => {
     const renderer = makeRenderer()
     const scene = createLiquidScene(renderer, { pointerX: 0, pointerY: 0, pointerVelocity: { x: 0, y: 0 }, scroll: 0 }, sceneQuality())
     scene.resize(1000, 1000, 1)
     scene.render(1000)
 
     expect(scene.triggerRipple(0, 0)).toBe(true)
-    expect(scene.triggerRipple(1, 1)).toBe(false)
+    expect(scene.triggerRipple(1, 1)).toBe(true)
     scene.render(1016)
-    expect(lastRenderedScene(renderer).children[0]?.material.uniforms?.uRippleCount?.value).toBe(1)
+    expect(lastRenderedScene(renderer).children[0]?.material.uniforms?.uRippleCount?.value).toBe(2)
+    scene.dispose()
+  })
+
+  it('maps a touch press outside the projected sphere to the nearest visible edge', () => {
+    const renderer = makeRenderer()
+    const scene = createLiquidScene(renderer, { pointerX: 0, pointerY: 0, pointerVelocity: { x: 0, y: 0 }, scroll: 0 }, sceneQuality())
+    scene.resize(390, 844, 2)
+    scene.render(1000)
+
+    expect(scene.beginPress(0, -0.92)).toBe(true)
+    scene.render(1200)
+    const heldDepth = Number(lastRenderedScene(renderer).children[0]?.material.uniforms?.uPressDepth?.value)
+    expect(heldDepth).toBeGreaterThan(0)
+    scene.endPress()
+    scene.dispose()
+  })
+
+  it('renders a new ripple when the ring cursor reuses a slot after the active count drops', () => {
+    const renderer = makeRenderer()
+    const scene = createLiquidScene(renderer, { pointerX: 0, pointerY: 0, pointerVelocity: { x: 0, y: 0 }, scroll: 0 }, sceneQuality(2))
+    scene.resize(1000, 1000, 1)
+    scene.render(1000)
+    expect(scene.triggerRipple(0, 0)).toBe(true)
+    scene.render(3000)
+
+    expect(scene.triggerRipple(0, 0)).toBe(true)
+    scene.render(3016)
+    const uniforms = lastRenderedScene(renderer).children[0]?.material.uniforms
+    const strengths = uniforms?.uRippleStrengths?.value as Float32Array
+
+    expect(uniforms?.uRippleCount?.value).toBe(1)
+    expect(strengths[0]).toBe(0)
+    expect(strengths[1]).toBeGreaterThan(0)
     scene.dispose()
   })
 
@@ -158,7 +192,8 @@ describe('shared liquid scene controller', () => {
     for (let frame = 1; frame <= 120; frame += 1) scene.render(1600 + frame * 16)
     const releasedDepth = Number(lastRenderedScene(renderer).children[0]?.material.uniforms?.uPressDepth?.value)
     expect(releasedDepth).toBeLessThan(heldDepth)
-    expect(scene.beginPress(1, 1)).toBe(false)
+    expect(scene.beginPress(1, 1)).toBe(true)
+    scene.endPress()
     scene.dispose()
   })
 

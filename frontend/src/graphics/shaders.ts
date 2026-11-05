@@ -39,11 +39,10 @@ export const flowVertexShader = /* glsl */ `
     float rippleDisplacement = 0.0;
     float rippleLight = 0.0;
     for (int index = 0; index < MAX_RIPPLES; index += 1) {
-      float slotActive = step(float(index), float(uRippleCount - 1));
       float distanceToRipple = sphericalDistance(normalize(p), uRippleDirections[index]);
       float waveFront = uRippleAges[index] * 1.55;
       float envelope = exp(-pow((distanceToRipple - waveFront) * 8.0, 2.0));
-      envelope *= exp(-uRippleAges[index] * 1.75) * uRippleStrengths[index] * slotActive;
+      envelope *= exp(-uRippleAges[index] * 1.75) * uRippleStrengths[index];
       rippleDisplacement += sin(distanceToRipple * 12.0 - uRippleAges[index] * 9.0) * envelope * 0.075;
       rippleLight += envelope;
     }
@@ -103,7 +102,7 @@ export const flowFragmentShader = /* glsl */ `
     color += vec3(0.84, 1.0, 0.36) * vEnergy * 0.24;
     color += vec3(0.67, 1.0, 0.12) * uEnergy * 0.12;
     color += vec3(0.55, 0.8, 1.0) * uHoverStrength * 0.12;
-    color += vec3(0.86, 1.0, 0.3) * vRippleLight * 0.28;
+    color += vec3(0.86, 1.0, 0.3) * vRippleLight * 0.42;
     color *= mix(0.88, 1.0, facets * smoothstep(0.35, 0.8, uScroll));
     gl_FragColor = vec4(color, 0.96);
   }
@@ -136,7 +135,8 @@ export const particleVertexShader = /* glsl */ `
     vec4 viewPosition = modelViewMatrix * vec4(p, 1.0);
     gl_Position = projectionMatrix * viewPosition;
     gl_PointSize = aSize * uPixelRatio * (18.0 / max(1.0, -viewPosition.z)) * (1.0 + uEnergy * 0.9) * (1.0 + clamp(uTrailStrength, 0.0, 1.0) * 0.6 + clamp(uImpactEnergy, 0.0, 1.0) * 0.4);
-    vTrailAlpha = smoothstep(0.02, 0.22, uScroll) * (0.45 + aSeed * 0.55) * (0.65 + uEnergy * 0.35) * trailLife * (0.22 + clamp(uTrailStrength, 0.0, 1.0) * 0.78 + clamp(uImpactEnergy, 0.0, 1.0) * 0.18);
+    float trailActivity = max(smoothstep(0.08, 0.22, uScroll), smoothstep(0.02, 0.2, max(uTrailStrength, uImpactEnergy)));
+    vTrailAlpha = trailActivity * (0.45 + aSeed * 0.55) * (0.65 + uEnergy * 0.35) * trailLife * (0.22 + clamp(uTrailStrength, 0.0, 1.0) * 0.78 + clamp(uImpactEnergy, 0.0, 1.0) * 0.18);
   }
 `
 

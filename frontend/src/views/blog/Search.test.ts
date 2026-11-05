@@ -4,7 +4,7 @@ import { nextTick } from 'vue'
 import { ref } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Post } from '@/api/posts'
+import type { PublicArticle } from '@/api/posts'
 import Search from './Search.vue'
 import { visualRuntimeKey } from '@/graphics/runtime/visualRuntimeHandle'
 
@@ -18,7 +18,7 @@ const routes = [
   { path: '/', component: { template: '<div />' } },
   { path: '/search', name: 'Search', component: Search },
   { path: '/writing', name: 'Archive', component: { template: '<div />' } },
-  { path: '/post/:slug', name: 'PostDetail', component: { template: '<div />' } },
+  { path: '/documents/:slug', name: 'DocumentDetail', component: { template: '<div />' } },
 ]
 
 describe('Search results focus', () => {
@@ -195,6 +195,9 @@ describe('Search results focus', () => {
       data: {
         items: [{
           id: 13,
+          key: 'post:13',
+          kind: 'post',
+          public_url: '/documents/second-page',
           title: 'Second page article',
           slug: 'second-page',
           summary: 'Test summary',
@@ -248,7 +251,7 @@ describe('Search results focus', () => {
 
   it('restores focus to the article that opened the detail page', async () => {
     window.history.replaceState(
-      { ...window.history.state, searchReturnFocus: '/post/second-page' },
+      { ...window.history.state, searchReturnFocus: '/documents/second-page' },
       '',
     )
     searchPosts.mockResolvedValue({
@@ -256,6 +259,9 @@ describe('Search results focus', () => {
         items: [{
           id: 13,
           title: 'Second page article',
+          key: 'post:13',
+          kind: 'post',
+          public_url: '/documents/second-page',
           slug: 'second-page',
           summary: 'Test summary',
           is_published: true,
@@ -281,7 +287,7 @@ describe('Search results focus', () => {
     await flushPromises()
     await nextTick()
 
-    const article = wrapper.get('a[href="/post/second-page"]')
+    const article = wrapper.get('a[href="/documents/second-page"]')
     expect(document.activeElement).toBe(article.element)
     expect(window.history.state.searchReturnFocus).toBeUndefined()
 
@@ -289,9 +295,12 @@ describe('Search results focus', () => {
   })
 })
 
-function article(id: number, title: string): Post {
+function article(id: number, title: string): PublicArticle {
   return {
     id,
+    key: `post:${id}`,
+    kind: 'post',
+    public_url: '/documents/article-' + id,
     title,
     slug: 'article-' + id,
     summary: 'Search summary',
@@ -304,7 +313,7 @@ function article(id: number, title: string): Post {
   }
 }
 
-function result(items: Post[], total = items.length) {
+function result(items: PublicArticle[], total = items.length) {
   return { data: { items, total, page: 1, page_size: 12, total_pages: Math.ceil(total / 12) } }
 }
 

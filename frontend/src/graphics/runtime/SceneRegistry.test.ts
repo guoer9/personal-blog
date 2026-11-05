@@ -4,7 +4,7 @@ import { pageSceneIdForRoute, routeVisualIdentity } from './SceneRegistry'
 describe('SceneRegistry route mapping', () => {
   it.each([
     ['Home', 'home'], ['Works', 'works'], ['WorkDetail', 'work-detail'], ['About', 'about'],
-    ['PostDetail', 'article'], ['Archive', 'archive'], ['TagPosts', 'archive'], ['Search', 'archive'],
+    ['Archive', 'archive'], ['TagPosts', 'archive'], ['Search', 'archive'],
     ['Documents', 'library'], ['DocumentDetail', 'library'],
   ] as const)('maps %s to %s', (routeName, pageId) => {
     expect(pageSceneIdForRoute(routeName)).toBe(pageId)

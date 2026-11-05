@@ -1,7 +1,6 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import math
 
@@ -11,10 +10,12 @@ from app.schemas.post import (
     PostDetailResponse, PostPaginatedResponse
 )
 from app.crud.post import (
-    get_post_by_id, get_post_by_slug, get_posts, 
+    get_post_by_id, get_posts,
     create_post, update_post, delete_post,
-    increment_view_count, search_posts
+    increment_view_count
 )
+from app.crud.article import get_article_by_slug, get_public_articles, get_public_article_tags
+from app.schemas.articles import PublicArticlePage, PublicArticleTag
 from app.api.deps import get_current_admin
 from app.models.user import User
 from app.models.notion_library import NotionDocument
@@ -23,21 +24,17 @@ from app.core.config import settings
 router = APIRouter()
 
 
-@router.get("", response_model=PostPaginatedResponse)
+@router.get("", response_model=PublicArticlePage)
 async def list_posts(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
     tag: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
-    """获取文章列表"""
-    posts, total = await get_posts(
-        db, page, page_size, 
-        tag_slug=tag, 
-        include_unpublished=False
-    )
+    """公开文章索引：手写文章和资料库中的 Notion 文章。"""
+    posts, total = await get_public_articles(db, page, page_size, tag_slug=tag)
     
-    return PostPaginatedResponse(
+    return PublicArticlePage(
         items=posts,
         total=total,
         page=page,
@@ -46,7 +43,13 @@ async def list_posts(
     )
 
 
-@router.get("/search", response_model=PostPaginatedResponse)
+@router.get("/topics/list", response_model=list[PublicArticleTag])
+async def list_article_tags(db: AsyncSession = Depends(get_db)):
+    """公开主题索引；不向管理端标签选择器添加虚构的标签 ID。"""
+    return await get_public_article_tags(db)
+
+
+@router.get("/search", response_model=PublicArticlePage)
 async def search(
     q: str = Query(..., min_length=1, max_length=120),
     page: int = Query(1, ge=1),
@@ -54,9 +57,9 @@ async def search(
     db: AsyncSession = Depends(get_db)
 ):
     """搜索文章"""
-    posts, total = await search_posts(db, q, page, page_size)
+    posts, total = await get_public_articles(db, page, page_size, keyword=q)
     
-    return PostPaginatedResponse(
+    return PublicArticlePage(
         items=posts,
         total=total,
         page=page,
@@ -104,39 +107,24 @@ async def get_post(
     slug: str,
     db: AsyncSession = Depends(get_db),
 ):
-    """Resolve migrated articles to their canonical document-library page."""
-    public_document = (
-        NotionDocument.status == "published",
-        NotionDocument.manual_unpublished.is_(False),
-    )
-    document = await db.scalar(
-        select(NotionDocument).where(
-            NotionDocument.legacy_post_slug == slug,
-            *public_document,
-        )
-    )
-    if document is None:
-        document = await db.scalar(
-            select(NotionDocument).where(
-                NotionDocument.slug == slug,
-                *public_document,
+    """兼容旧文章 API；公开页面统一使用 /documents。"""
+    article = await get_article_by_slug(db, slug)
+    if isinstance(article, NotionDocument):
+        if article.status == "published" and not article.manual_unpublished:
+            return RedirectResponse(
+                url=f"{settings.API_V1_PREFIX}/documents/{article.slug}",
+                status_code=307,
             )
-        )
-    if document is not None:
-        return RedirectResponse(
-            url=f"{settings.API_V1_PREFIX}/documents/{document.slug}",
-            status_code=307,
-        )
+        raise HTTPException(status_code=404, detail="文章不存在")
 
-    post = await get_post_by_slug(db, slug, include_unpublished=False)
-    if not post:
+    if article is None or not article.is_published:
         raise HTTPException(status_code=404, detail="文章不存在")
     
     # 增加浏览次数
-    await increment_view_count(db, post)
+    await increment_view_count(db, article)
     await db.commit()
     
-    return post
+    return article
 
 
 @router.post("", response_model=PostDetailResponse, status_code=status.HTTP_201_CREATED)
