@@ -126,25 +126,112 @@ async function capturePage(page, profile, name) {
 }
 
 async function sphereInteractionPoints(page) {
-  const visual = await page.locator('.hero-visual').boundingBox()
   const viewport = page.viewportSize()
-  if (!visual || !viewport) throw new Error('The home sphere interaction region is not measurable.')
+  if (!viewport) throw new Error('The home viewport is not measurable.')
   return {
-    inside: {
-      x: Math.min(visual.x + visual.width - 1, Math.max(visual.x + 1, viewport.width / 2)),
-      y: visual.y + visual.height * 0.5,
-    },
-    outside: { x: visual.x + visual.width - 8, y: visual.y + 8 },
+    inside: { x: viewport.width / 2, y: viewport.height * 0.45 },
+    outside: { x: 12, y: viewport.height * 0.25 },
   }
+}
+
+async function captureSphereState(page, profile, state) {
+  const path = join(reportDirectory, `${profile.name}-sphere-${state}.png`)
+  await page.screenshot({ path, animations: 'disabled' })
+  report.profiles.find((item) => item.name === profile.name).sphereScreenshots ??= []
+  report.profiles.find((item) => item.name === profile.name).sphereScreenshots.push({ state, path })
 }
 
 async function sphereDataset(page) {
   return page.locator('canvas').evaluate((element) => ({
     hover: element.getAttribute('data-sphere-hover'),
     rippleCount: Number(element.getAttribute('data-sphere-ripple-count') || 0),
+    rippleSequence: Number(element.getAttribute('data-sphere-ripple-sequence') || 0),
     pressDepth: Number(element.getAttribute('data-sphere-press-depth') || 0),
     trailStrength: Number(element.getAttribute('data-sphere-trail-strength') || 0),
+    scale: Number(element.getAttribute('data-sphere-scale') || 0),
+    wakeCount: Number(element.getAttribute('data-sphere-wake-count') || 0),
   }))
+}
+
+async function clickAt(page, profile, point) {
+  if (profile.isMobile) await page.touchscreen.tap(point.x, point.y)
+  else await page.mouse.click(point.x, point.y)
+}
+
+async function waitForSphereRest(page) {
+  await page.evaluate(() => new Promise((resolve, reject) => {
+    const deadline = performance.now() + 5000
+    let settledFrames = 0
+    const sample = () => {
+      const depth = Number(document.querySelector('canvas')?.getAttribute('data-sphere-press-depth') || 0)
+      settledFrames = Math.abs(depth) < 0.005 ? settledFrames + 1 : 0
+      if (settledFrames >= 12) { resolve(); return }
+      if (performance.now() > deadline) { reject(new Error('The sphere did not settle after release.')); return }
+      requestAnimationFrame(sample)
+    }
+    requestAnimationFrame(sample)
+  }))
+}
+
+async function touchLongPress(page, point, profile) {
+  const session = await page.context().newCDPSession(page)
+  try {
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{ id: 1, x: point.x, y: point.y, radiusX: 4, radiusY: 4, force: 1 }],
+    })
+    await page.waitForFunction(() => Number(document.querySelector('canvas')?.getAttribute('data-sphere-press-depth') || 0) > 0.2, undefined, { timeout: 5000 })
+    const heldDepth = (await sphereDataset(page)).pressDepth
+    await captureSphereState(page, profile, 'held')
+    await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+    await page.waitForFunction((before) => Number(document.querySelector('canvas')?.getAttribute('data-sphere-press-depth') || 0) < before, heldDepth, { timeout: 5000 })
+    return heldDepth
+  } finally {
+    await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }).catch(() => {})
+    await session.detach()
+  }
+}
+
+async function touchDrag(page, start, end) {
+  const session = await page.context().newCDPSession(page)
+  try {
+    await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ id: 3, ...start }] })
+    for (let index = 1; index <= 8; index += 1) {
+      const amount = index / 8
+      await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ id: 3, x: start.x + (end.x - start.x) * amount, y: start.y + (end.y - start.y) * amount }] })
+      await page.waitForTimeout(20)
+    }
+    await page.waitForFunction((before) => Number(document.querySelector('canvas')?.getAttribute('data-sphere-ripple-sequence') || 0) > before, start.rippleSequence, { timeout: 3000 })
+    return await sphereDataset(page)
+  } finally {
+    await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }).catch(() => {})
+    await session.detach()
+  }
+}
+
+async function touchSwipe(page, start, end) {
+  const session = await page.context().newCDPSession(page)
+  const before = await page.evaluate(() => window.scrollY)
+  try {
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{ id: 2, x: start.x, y: start.y, radiusX: 4, radiusY: 4, force: 1 }],
+    })
+    for (let step = 1; step <= 6; step += 1) {
+      const amount = step / 6
+      await session.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{ id: 2, x: start.x + (end.x - start.x) * amount, y: start.y + (end.y - start.y) * amount, radiusX: 4, radiusY: 4, force: 1 }],
+      })
+      await page.waitForTimeout(20)
+    }
+    await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+    await page.waitForFunction((scrollY) => window.scrollY > scrollY, before, { timeout: 5000 })
+    return await page.evaluate(() => window.scrollY)
+  } finally {
+    await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }).catch(() => {})
+    await session.detach()
+  }
 }
 
 async function runProfile(profile, fixtures) {
@@ -171,36 +258,158 @@ async function runProfile(profile, fixtures) {
     check(`${profile.name}: reduced motion keeps runtime static`, initialState.rafActive === false && await page.locator('canvas').evaluate((element) => getComputedStyle(element).display === 'none'))
   }
   await capturePage(page, profile, 'home')
+  await captureSphereState(page, profile, 'idle')
   if (!profile.reducedMotion) {
+    const scaleAtTop = (await sphereDataset(page)).scale
+    const maxTopScale = profile.isMobile ? 0.5 : 0.72
+    check(`${profile.name}: sphere no longer dominates the first viewport`, scaleAtTop > 0 && scaleAtTop < maxTopScale, { scale: scaleAtTop, maxTopScale })
+
+    const firstClickTarget = await page.locator('main h1').first().boundingBox()
+    if (!firstClickTarget) throw new Error('The home title is not measurable for the first-click check.')
+    const firstClickSequence = (await sphereDataset(page)).rippleSequence
+    await clickAt(page, profile, { x: firstClickTarget.x + firstClickTarget.width * 0.5, y: firstClickTarget.y + firstClickTarget.height * 0.5 })
+    await page.waitForFunction((before) => Number(document.querySelector('canvas')?.getAttribute('data-sphere-ripple-sequence') || 0) > before, firstClickSequence)
+    check(`${profile.name}: first page click produces immediate sphere feedback`, (await sphereDataset(page)).rippleSequence > firstClickSequence)
+
+    const beforeSearchToggle = (await sphereDataset(page)).rippleSequence
+    await page.locator('.search-toggle').click()
+    await page.waitForFunction((before) => Number(document.querySelector('canvas')?.getAttribute('data-sphere-ripple-sequence') || 0) > before, beforeSearchToggle)
+    const beforeLabelClick = (await sphereDataset(page)).rippleSequence
+    const searchLabel = await page.locator('label[for="header-search-input"]').boundingBox()
+    if (!searchLabel) throw new Error('The search label is not measurable.')
+    await clickAt(page, profile, { x: searchLabel.x + searchLabel.width / 2, y: searchLabel.y + searchLabel.height / 2 })
+    await page.waitForFunction((before) => Number(document.querySelector('canvas')?.getAttribute('data-sphere-ripple-sequence') || 0) > before, beforeLabelClick)
+    const afterLabelClick = await sphereDataset(page)
+    const searchInputFocused = await page.locator('#header-search-input').evaluate((element) => document.activeElement === element)
+    check(`${profile.name}: native search label focuses the input with exactly one ripple`, afterLabelClick.rippleSequence === beforeLabelClick + 1 && searchInputFocused,
+      { before: beforeLabelClick, after: afterLabelClick.rippleSequence, searchInputFocused })
+    await page.locator('.search-toggle').click()
+
     const points = await sphereInteractionPoints(page)
     await page.mouse.move(points.inside.x, points.inside.y)
     await page.waitForFunction(() => document.querySelector('canvas')?.getAttribute('data-sphere-hover') === '1')
     check(`${profile.name}: sphere hover follows the pointer`, (await sphereDataset(page)).hover === '1')
 
-    const rippleBefore = (await sphereDataset(page)).rippleCount
-    await page.mouse.click(points.inside.x, points.inside.y)
-    await page.waitForFunction((before) => Number(document.querySelector('canvas')?.getAttribute('data-sphere-ripple-count') || 0) > before, rippleBefore)
-    check(`${profile.name}: sphere tap produces one ripple`, (await sphereDataset(page)).rippleCount === rippleBefore + 1)
+    const rippleBefore = (await sphereDataset(page)).rippleSequence
+    await clickAt(page, profile, points.inside)
+    await page.waitForFunction((before) => Number(document.querySelector('canvas')?.getAttribute('data-sphere-ripple-sequence') || 0) > before, rippleBefore)
+    check(`${profile.name}: sphere tap produces one ripple`, (await sphereDataset(page)).rippleSequence === rippleBefore + 1)
 
-    const outsideRippleBefore = (await sphereDataset(page)).rippleCount
-    await page.mouse.click(points.outside.x, points.outside.y)
-    await page.waitForTimeout(80)
-    check(`${profile.name}: sphere outside click has no feedback`, (await sphereDataset(page)).rippleCount === outsideRippleBefore)
+    const outsideRippleBefore = (await sphereDataset(page)).rippleSequence
+    await clickAt(page, profile, points.outside)
+    await page.waitForFunction((before) => Number(document.querySelector('canvas')?.getAttribute('data-sphere-ripple-sequence') || 0) > before, outsideRippleBefore)
+    check(`${profile.name}: clicks outside the visible sphere still create a ripple`, (await sphereDataset(page)).rippleSequence > outsideRippleBefore)
 
     await page.mouse.move(points.outside.x, points.outside.y)
     await page.mouse.move(points.inside.x, points.inside.y)
     await page.waitForFunction(() => Number(document.querySelector('canvas')?.getAttribute('data-sphere-trail-strength') || 0) > 0)
+    await page.waitForTimeout(160)
+    await page.waitForFunction(() => Number(document.querySelector('canvas')?.getAttribute('data-sphere-wake-count') || 0) > 0)
+    await captureSphereState(page, profile, 'wake')
     const movingTrail = (await sphereDataset(page)).trailStrength
+    check(`${profile.name}: pointer trail is visible at the top of the page`, movingTrail > 0, { trailStrength: movingTrail })
     await page.waitForTimeout(600)
-    check(`${profile.name}: particle trail fades while the pointer rests`, (await sphereDataset(page)).trailStrength < movingTrail)
+    const restingTrail = (await sphereDataset(page)).trailStrength
+    check(`${profile.name}: particle trail fades while the pointer rests`, restingTrail < movingTrail, { movingTrail, restingTrail })
+    await page.waitForFunction(() => Number(document.querySelector('canvas')?.getAttribute('data-sphere-wake-count') || 0) === 0, undefined, { timeout: 3000 })
+    check(`${profile.name}: cursor water rings expire at rest`, (await sphereDataset(page)).wakeCount === 0)
 
-    await page.mouse.move(points.inside.x, points.inside.y)
-    await page.mouse.down()
-    await page.waitForFunction(() => Number(document.querySelector('canvas')?.getAttribute('data-sphere-press-depth') || 0) > 0.001, undefined, { timeout: 5000 })
-    const heldDepth = (await sphereDataset(page)).pressDepth
-    await page.mouse.up()
-    await page.waitForFunction((before) => Number(document.querySelector('canvas')?.getAttribute('data-sphere-press-depth') || 0) < before, heldDepth, { timeout: 5000 })
-    check(`${profile.name}: long press dents and release springs back`, (await sphereDataset(page)).pressDepth < heldDepth)
+    let heldDepth
+    if (profile.isMobile) {
+      heldDepth = await touchLongPress(page, points.inside, profile)
+    } else {
+      await page.mouse.move(points.inside.x, points.inside.y)
+      await page.mouse.down()
+      await page.waitForFunction(() => Number(document.querySelector('canvas')?.getAttribute('data-sphere-press-depth') || 0) > 0.2, undefined, { timeout: 5000 })
+      heldDepth = (await sphereDataset(page)).pressDepth
+      await captureSphereState(page, profile, 'held')
+      await page.mouse.up()
+      await page.waitForFunction((before) => Number(document.querySelector('canvas')?.getAttribute('data-sphere-press-depth') || 0) < before, heldDepth, { timeout: 5000 })
+    }
+    await waitForSphereRest(page)
+    await captureSphereState(page, profile, 'released')
+    check(`${profile.name}: long press dents and release springs back`, Math.abs((await sphereDataset(page)).pressDepth) < 0.005, { heldDepth })
+
+    if (!profile.isMobile) {
+      const dragRippleBefore = (await sphereDataset(page)).rippleSequence
+      await page.mouse.move(points.inside.x, points.inside.y)
+      await page.mouse.down()
+      await page.mouse.move(points.inside.x + 24, points.inside.y + 5, { steps: 3 })
+      await page.mouse.move(points.inside.x + 48, points.inside.y + 10, { steps: 3 })
+      await page.mouse.up()
+      await page.waitForFunction((before) => Number(document.querySelector('canvas')?.getAttribute('data-sphere-ripple-sequence') || 0) > before, dragRippleBefore)
+      check(`${profile.name}: dragging creates a continuous ripple trail`, (await sphereDataset(page)).rippleSequence > dragRippleBefore)
+
+      await page.locator('main h1').first().dblclick()
+      check(`${profile.name}: repeated clicks do not select decorative hero text`, await page.evaluate(() => window.getSelection()?.toString() === ''))
+
+      const intro = await page.locator('.hero-intro').boundingBox()
+      if (!intro) throw new Error('The introduction is not measurable for text selection.')
+      await page.mouse.move(intro.x + 2, intro.y + 12)
+      await page.mouse.down()
+      await page.mouse.move(intro.x + Math.min(180, intro.width - 4), intro.y + 12, { steps: 8 })
+      await page.mouse.up()
+      check(`${profile.name}: ordinary introduction text can still be selected for copying`, await page.evaluate(() => (window.getSelection()?.toString().length || 0) > 0))
+      await page.evaluate(() => window.getSelection()?.removeAllRanges())
+      await page.locator('.principle-intro p').last().dblclick()
+      check(`${profile.name}: body text still supports native double-click selection`, await page.evaluate(() => (window.getSelection()?.toString().length || 0) > 0))
+      await page.evaluate(() => window.getSelection()?.removeAllRanges())
+    } else {
+      const beforeDrag = await sphereDataset(page)
+      const duringDrag = await touchDrag(page, { x: 70, y: points.inside.y, rippleSequence: beforeDrag.rippleSequence }, { x: 260, y: points.inside.y + 3 })
+      check(`${profile.name}: horizontal touch drag creates ripples and a pointer wake before release`, duringDrag.rippleSequence > beforeDrag.rippleSequence && duringDrag.wakeCount > 0, { wakeCount: duringDrag.wakeCount })
+    }
+
+    await page.locator('#writing-title').scrollIntoViewIfNeeded()
+    const writingTitle = await page.locator('#writing-title').boundingBox()
+    if (!writingTitle) throw new Error('The writing title is not measurable for the post-scroll click check.')
+    const scrolledClickBefore = (await sphereDataset(page)).rippleSequence
+    await clickAt(page, profile, { x: writingTitle.x + writingTitle.width * 0.5, y: writingTitle.y + writingTitle.height * 0.5 })
+    await page.waitForFunction((before) => Number(document.querySelector('canvas')?.getAttribute('data-sphere-ripple-sequence') || 0) > before, scrolledClickBefore)
+    check(`${profile.name}: page click still works after scrolling`, (await sphereDataset(page)).rippleSequence > scrolledClickBefore)
+
+    await page.locator('#projects-title').evaluate((element) => element.scrollIntoView({ block: 'center', behavior: 'instant' }))
+    await page.waitForTimeout(600)
+    const projectTitle = await page.locator('#projects-title').boundingBox()
+    if (!projectTitle) throw new Error('The project title is not measurable.')
+    const projectClickBefore = (await sphereDataset(page)).rippleSequence
+    await clickAt(page, profile, { x: projectTitle.x + projectTitle.width / 2, y: projectTitle.y + projectTitle.height / 2 })
+    await page.waitForFunction((before) => Number(document.querySelector('canvas')?.getAttribute('data-sphere-ripple-sequence') || 0) > before, projectClickBefore)
+    await captureSphereState(page, profile, 'projects')
+    check(`${profile.name}: project section clicks still create sphere feedback`, (await sphereDataset(page)).rippleSequence > projectClickBefore)
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
+    await page.waitForTimeout(120)
+
+    if (profile.isMobile) {
+      const heroVisual = await page.locator('.hero-visual').boundingBox()
+      if (!heroVisual) throw new Error('The touch scroll region is not measurable.')
+      const touchScrollBefore = await page.evaluate(() => window.scrollY)
+      const touchScrollAfter = await touchSwipe(page, {
+        x: heroVisual.x + heroVisual.width * 0.5,
+        y: Math.min(profile.viewport.height - 24, heroVisual.y + heroVisual.height * 0.82),
+      }, {
+        x: heroVisual.x + heroVisual.width * 0.5,
+        y: Math.min(profile.viewport.height - 24, heroVisual.y + heroVisual.height * 0.82) - 140,
+      })
+      check(`${profile.name}: vertical touch swipe still scrolls the page`, touchScrollAfter > touchScrollBefore)
+      await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
+      await page.waitForTimeout(120)
+    }
+
+    const scaleSteps = await page.evaluate(async () => {
+      const values = []
+      window.scrollTo(0, 0)
+      await new Promise((resolve) => requestAnimationFrame(resolve))
+      window.scrollTo(0, document.documentElement.scrollHeight)
+      for (let index = 0; index < 36; index += 1) {
+        await new Promise((resolve) => requestAnimationFrame(resolve))
+        values.push(Number(document.querySelector('canvas')?.getAttribute('data-sphere-scale') || 0))
+      }
+      return values.slice(1).reduce((largest, value, index) => Math.max(largest, Math.abs(value - values[index])), 0)
+    })
+    check(`${profile.name}: fast scroll keeps sphere scale smooth`, scaleSteps < 0.025, { largestScaleStep: scaleSteps })
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
+    await page.waitForTimeout(120)
   } else {
     const points = await sphereInteractionPoints(page)
     await page.mouse.click(points.inside.x, points.inside.y)
@@ -408,6 +617,7 @@ try {
   browser = await chromium.launch({ channel: 'chrome', headless: true })
   for (const profile of [
     { name: 'desktop', viewport: { width: 1440, height: 960 }, deviceScaleFactor: 1, isMobile: false, reducedMotion: false },
+    { name: 'narrow-touch', viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, reducedMotion: false },
     { name: 'narrow-reduced', viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, reducedMotion: true },
   ]) {
     await runProfile(profile, fixtures)

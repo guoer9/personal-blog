@@ -45,6 +45,7 @@ describe('shared liquid scene controller', () => {
       return renderedScene.children[0]?.scale.x ?? 0
     }
     const initialScale = readSphereScale()
+    expect(initialScale).toBeLessThan(0.7)
     let previousScale = initialScale
     let maxScaleStep = 0
     let time = 1000
@@ -93,16 +94,59 @@ describe('shared liquid scene controller', () => {
     scene.dispose()
   })
 
-  it('registers a ripple only when the full viewport ray hits the sphere', () => {
+  it('maps clicks outside the projected sphere to its nearest visible edge', () => {
     const renderer = makeRenderer()
     const scene = createLiquidScene(renderer, { pointerX: 0, pointerY: 0, pointerVelocity: { x: 0, y: 0 }, scroll: 0 }, sceneQuality())
     scene.resize(1000, 1000, 1)
     scene.render(1000)
 
     expect(scene.triggerRipple(0, 0)).toBe(true)
-    expect(scene.triggerRipple(1, 1)).toBe(false)
+    expect(scene.triggerRipple(1, 1)).toBe(true)
     scene.render(1016)
-    expect(lastRenderedScene(renderer).children[0]?.material.uniforms?.uRippleCount?.value).toBe(1)
+    expect(lastRenderedScene(renderer).children[0]?.material.uniforms?.uRippleCount?.value).toBe(2)
+    scene.dispose()
+  })
+
+  it('maps a touch press outside the projected sphere to the nearest visible edge', () => {
+    const renderer = makeRenderer()
+    const scene = createLiquidScene(renderer, { pointerX: 0, pointerY: 0, pointerVelocity: { x: 0, y: 0 }, scroll: 0 }, sceneQuality())
+    scene.resize(390, 844, 2)
+    scene.render(1000)
+
+    expect(scene.beginPress(0, -0.92)).toBe(true)
+    scene.render(1200)
+    const heldDepth = Number(lastRenderedScene(renderer).children[0]?.material.uniforms?.uPressDepth?.value)
+    expect(heldDepth).toBeGreaterThan(0)
+    scene.endPress()
+    scene.dispose()
+  })
+
+  it('renders a new ripple when the ring cursor reuses a slot after the active count drops', () => {
+    const renderer = makeRenderer()
+    const scene = createLiquidScene(renderer, { pointerX: 0, pointerY: 0, pointerVelocity: { x: 0, y: 0 }, scroll: 0 }, sceneQuality(2))
+    scene.resize(1000, 1000, 1)
+    scene.render(1000)
+    expect(scene.triggerRipple(0, 0)).toBe(true)
+    scene.render(3000)
+
+    expect(scene.triggerRipple(0, 0)).toBe(true)
+    scene.render(3016)
+    const uniforms = lastRenderedScene(renderer).children[0]?.material.uniforms
+    const strengths = uniforms?.uRippleStrengths?.value as Float32Array
+
+    expect(uniforms?.uRippleCount?.value).toBe(1)
+    expect(strengths[0]).toBe(0)
+    expect(strengths[1]).toBeGreaterThan(0)
+    scene.dispose()
+  })
+
+  it('keeps a first click queued until the first animation frame after a late scene mount', () => {
+    const renderer = makeRenderer()
+    const scene = createLiquidScene(renderer, { pointerX: 0, pointerY: 0, pointerVelocity: { x: 0, y: 0 }, scroll: 0 }, sceneQuality())
+    scene.resize(1000, 800, 1)
+    expect(scene.triggerRipple(0, 0)).toBe(true)
+    scene.render(10000)
+    expect(Number(renderer.domElement.dataset.sphereRippleCount)).toBe(1)
     scene.dispose()
   })
 
@@ -158,7 +202,8 @@ describe('shared liquid scene controller', () => {
     for (let frame = 1; frame <= 120; frame += 1) scene.render(1600 + frame * 16)
     const releasedDepth = Number(lastRenderedScene(renderer).children[0]?.material.uniforms?.uPressDepth?.value)
     expect(releasedDepth).toBeLessThan(heldDepth)
-    expect(scene.beginPress(1, 1)).toBe(false)
+    expect(scene.beginPress(1, 1)).toBe(true)
+    scene.endPress()
     scene.dispose()
   })
 
@@ -208,6 +253,77 @@ describe('shared liquid scene controller', () => {
     expect(lowQualityScene.children[2]).toBe(particles)
     expect(lowQualityScene.children[2]?.geometry).toBe(particleGeometry)
     expect(lowQualityScene.children[2]?.geometry.drawRange.count).toBeLessThan(100)
+    scene.dispose()
+  })
+
+  it('starts a new wake at the first pointer sample and after a suspended frame loop', () => {
+    const renderer = makeRenderer()
+    const scene = createLiquidScene(renderer, { pointerX: 0, pointerY: 0, pointerVelocity: { x: 0, y: 0 }, scroll: 0 }, sceneQuality())
+    scene.resize(1000, 800, 1)
+    scene.render(1000)
+    scene.setInput({ pointerX: 0.8, pointerY: 0.8, pointerVelocity: { x: 1, y: 0 }, scroll: 0 })
+    scene.render(1040)
+    expect(Number(renderer.domElement.dataset.sphereWakeCount)).toBe(0)
+    scene.setInput({ pointerX: 0.6, pointerY: 0.8, pointerVelocity: { x: -1, y: 0 }, scroll: 0 })
+    scene.render(1080)
+    expect(Number(renderer.domElement.dataset.sphereWakeCount)).toBeGreaterThan(0)
+    scene.setInput({ pointerX: -0.8, pointerY: -0.8, pointerVelocity: { x: -1, y: -1 }, scroll: 0 })
+    scene.render(3000)
+    expect(Number(renderer.domElement.dataset.sphereWakeCount)).toBe(0)
+    scene.dispose()
+  })
+
+  it('leaves a bounded wake at the actual pointer path and lets old samples expire', () => {
+    const renderer = makeRenderer()
+    const scene = createLiquidScene(renderer, { pointerX: 0, pointerY: 0, pointerVelocity: { x: 0, y: 0 }, scroll: 0 }, sceneQuality())
+    scene.resize(1000, 800, 1)
+    scene.render(1000)
+    scene.setInput({ pointerX: -0.35, pointerY: 0.2, pointerVelocity: { x: 1, y: 0 }, scroll: 0 })
+    scene.render(1040)
+    scene.setInput({ pointerX: 0.35, pointerY: -0.2, pointerVelocity: { x: 1, y: -0.2 }, scroll: 0 })
+    scene.render(1080)
+    expect(Number(renderer.domElement.dataset.sphereWakeCount)).toBeGreaterThan(0)
+    expect(Number(renderer.domElement.dataset.sphereWakeCount)).toBeLessThanOrEqual(32)
+    scene.setInput({ pointerX: 0.35, pointerY: -0.2, pointerVelocity: { x: 0, y: 0 }, scroll: 0 })
+    for (let frame = 1; frame <= 120; frame += 1) scene.render(1080 + frame * 16)
+    expect(Number(renderer.domElement.dataset.sphereWakeCount)).toBe(0)
+    scene.dispose()
+  })
+
+  it('makes a held dent visible within a short hold and allows an elastic overshoot on release', () => {
+    const renderer = makeRenderer()
+    const scene = createLiquidScene(renderer, { pointerX: 0, pointerY: 0, pointerVelocity: { x: 0, y: 0 }, scroll: 0 }, sceneQuality())
+    scene.resize(1000, 800, 1)
+    scene.render(1000)
+    scene.beginPress(0, 0)
+    for (let frame = 1; frame <= 25; frame += 1) scene.render(1000 + frame * 16)
+    const uniforms = lastRenderedScene(renderer).children[0]?.material.uniforms
+    expect(Number(uniforms?.uPressDepth?.value)).toBeGreaterThan(0.12)
+    scene.endPress()
+    let minDepth = 0
+    for (let frame = 1; frame <= 100; frame += 1) {
+      scene.render(1400 + frame * 16)
+      minDepth = Math.min(minDepth, Number(uniforms?.uPressDepth?.value))
+    }
+    expect(minDepth).toBeLessThan(0)
+    expect(Number(uniforms?.uPressDepth?.value)).toBeCloseTo(0, 2)
+    scene.dispose()
+  })
+
+  it('keeps rotation velocity continuous when fast scroll input reverses direction', () => {
+    const renderer = makeRenderer()
+    const scene = createLiquidScene(renderer, { pointerX: 0, pointerY: 0, pointerVelocity: { x: 0, y: 0 }, scroll: 0.3 }, sceneQuality())
+    scene.resize(1000, 800, 1)
+    scene.render(1000)
+    const scroll = () => Number(lastRenderedScene(renderer).children[0]?.material.uniforms?.uScroll?.value)
+    scene.setInput({ pointerX: 0, pointerY: 0, pointerVelocity: { x: 0, y: 0 }, scroll: 0.8 })
+    let before = scroll()
+    for (let frame = 1; frame <= 12; frame += 1) { before = scroll(); scene.render(1000 + frame * 16) }
+    const previousStep = scroll() - before
+    before = scroll()
+    scene.setInput({ pointerX: 0, pointerY: 0, pointerVelocity: { x: 0, y: 0 }, scroll: 0 })
+    scene.render(1208)
+    expect(Math.abs((scroll() - before) - previousStep)).toBeLessThan(0.012)
     scene.dispose()
   })
 

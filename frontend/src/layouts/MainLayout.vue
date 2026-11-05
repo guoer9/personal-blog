@@ -22,6 +22,7 @@ const canvas = ref<HTMLCanvasElement | null>(null)
 const runtime = shallowRef<VisualRuntime | null>(null)
 const runtimeFailed = ref(false)
 let reducedMotionQuery: MediaQueryList | null = null
+let anchorMeasureFrame = 0
 const diagnosticReader = (): VisualRuntimeDiagnostics | null => runtime.value?.getDiagnostics() ?? null
 type DiagnosticWindow = Window & { __visualRuntimeDiagnostics?: () => VisualRuntimeDiagnostics | null }
 provide(visualRuntimeKey, runtime)
@@ -58,15 +59,24 @@ function onPageAfterEnter() { void runtime.value?.finishTransitionEnter() }
 function onPointerMove(event: PointerEvent) {
   runtime.value?.setPointer((event.clientX / Math.max(1, window.innerWidth)) * 2 - 1, -((event.clientY / Math.max(1, window.innerHeight)) * 2 - 1))
 }
-function onScroll() {
+function updateScrollState() {
   const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight)
   runtime.value?.setScroll(window.scrollY, window.scrollY / max)
-  runtime.value?.measureAnchors()
+}
+function onScroll() {
+  updateScrollState()
+  if (anchorMeasureFrame) return
+  anchorMeasureFrame = requestAnimationFrame(() => {
+    anchorMeasureFrame = 0
+    runtime.value?.measureAnchors()
+  })
 }
 function onResize() {
   runtime.value?.resize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1)
+  if (anchorMeasureFrame) cancelAnimationFrame(anchorMeasureFrame)
+  anchorMeasureFrame = 0
+  updateScrollState()
   runtime.value?.measureAnchors()
-  onScroll()
 }
 function onReducedMotionChange(event: MediaQueryList | MediaQueryListEvent) {
   runtime.value?.setReducedMotion(event.matches)
@@ -101,6 +111,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('pointermove', onPointerMove)
   window.removeEventListener('scroll', onScroll)
   window.removeEventListener('resize', onResize)
+  if (anchorMeasureFrame) cancelAnimationFrame(anchorMeasureFrame)
+  anchorMeasureFrame = 0
   reducedMotionQuery?.removeEventListener('change', onReducedMotionChange)
   reducedMotionQuery = null
   const diagnosticWindow = window as DiagnosticWindow
@@ -117,7 +129,7 @@ function focusMainContent() {
 </script>
 
 <template>
-  <div class="main-layout">
+  <div class="main-layout" :class="{ 'main-layout--home': route.name === 'Home' }">
     <a class="skip-link" href="#main-content" @click="focusMainContent">跳到正文</a>
     <SiteHeader />
     <canvas ref="canvas" class="visual-runtime-canvas" aria-hidden="true" :data-runtime-failed="runtimeFailed" />
@@ -154,6 +166,8 @@ function focusMainContent() {
 <style scoped>
 .main-layout { min-height: 100vh; display: flex; flex-direction: column; }
 .site-main { position: relative; z-index: 2; flex: 1; }
+.main-layout--home .site-main { z-index: auto; }
+.main-layout--home .footer { position: relative; z-index: 2; }
 .visual-runtime-canvas { position: fixed; z-index: 1; inset: 0; width: 100%; height: 100%; pointer-events: none; opacity: .7; }
 .skip-link { position: fixed; z-index: 1000; top: 12px; left: 12px; padding: 10px 15px; background: var(--ink); color: var(--paper); transform: translateY(-160%); }
 .skip-link:focus { transform: none; }

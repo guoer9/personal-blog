@@ -134,6 +134,14 @@ onMounted(() => {
   reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
   setSystemReducedMotion(reducedMotionQuery)
   reducedMotionQuery.addEventListener('change', setSystemReducedMotion)
+  document.addEventListener('pointerdown', sphereInteraction.onPointerDown, true)
+  document.addEventListener('pointermove', sphereInteraction.onPointerMove, true)
+  document.addEventListener('pointerup', sphereInteraction.onPointerUp, true)
+  document.addEventListener('pointercancel', sphereInteraction.onPointerCancel, true)
+  document.addEventListener('click', sphereInteraction.onClickCapture, true)
+  document.addEventListener('mousedown', sphereInteraction.onMouseDown, true)
+  document.addEventListener('contextmenu', sphereInteraction.onContextMenu, true)
+  window.addEventListener('blur', sphereInteraction.cancel)
   updateNarrative()
   window.addEventListener('scroll', scheduleNarrativeUpdate, { passive: true })
   window.addEventListener('resize', scheduleNarrativeUpdate, { passive: true })
@@ -149,6 +157,14 @@ watch(runtime, publishSceneState)
 
 onBeforeUnmount(() => {
   sphereInteraction.dispose()
+  document.removeEventListener('pointerdown', sphereInteraction.onPointerDown, true)
+  document.removeEventListener('pointermove', sphereInteraction.onPointerMove, true)
+  document.removeEventListener('pointerup', sphereInteraction.onPointerUp, true)
+  document.removeEventListener('pointercancel', sphereInteraction.onPointerCancel, true)
+  document.removeEventListener('click', sphereInteraction.onClickCapture, true)
+  document.removeEventListener('mousedown', sphereInteraction.onMouseDown, true)
+  document.removeEventListener('contextmenu', sphereInteraction.onContextMenu, true)
+  window.removeEventListener('blur', sphereInteraction.cancel)
   worksController?.abort()
   if (scrollFrame) cancelAnimationFrame(scrollFrame)
   window.removeEventListener('scroll', scheduleNarrativeUpdate)
@@ -187,14 +203,7 @@ onBeforeUnmount(() => {
           <MagneticLink href="#writing">最新文章</MagneticLink>
         </div>
       </div>
-      <div
-        class="hero-visual"
-        @pointerdown="sphereInteraction.onPointerDown"
-        @pointermove="sphereInteraction.onPointerMove"
-        @pointerup="sphereInteraction.onPointerUp"
-        @pointercancel="sphereInteraction.onPointerCancel"
-        @click.capture="sphereInteraction.onClickCapture"
-      >
+      <div class="hero-visual">
         <ImmersiveScene :progress="storyProgress" :paused="motionPaused" />
         <span class="hero-signature">{{ profile.name }}</span>
       </div>
@@ -267,6 +276,7 @@ onBeforeUnmount(() => {
     </section>
 
     <section id="projects" class="projects-section" aria-labelledby="projects-title">
+      <div class="projects-section__backdrop" aria-hidden="true" />
       <div class="page-shell">
         <ScrollReveal>
           <div class="section-title-row section-title-row--light">
@@ -351,6 +361,9 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .home { position: relative; overflow-x: clip; }
+.home > section:not(.projects-section), .home > .marquee { position: relative; z-index: 2; }
+.projects-section > .page-shell { position: relative; z-index: 2; }
+.projects-section__backdrop { position: absolute; inset: 0; z-index: 0; background: var(--ink); pointer-events: none; }
 .featured-state { padding: 30px 0; color: var(--paper); font-size: .85rem; }
 .media-section { padding-top: var(--section-space); }
 .media-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; }
@@ -449,10 +462,10 @@ onBeforeUnmount(() => {
 .home[data-motion-paused='true'] :deep(.scene-orbit),
 .home[data-motion-paused='true'] :deep(.poster-core) { animation-play-state: paused; }
 .home[data-motion-paused='true'] :deep(.scroll-reveal) { transition: none; }
-.projects-section { isolation: isolate; }
-.projects-section::before {
+.projects-section { isolation: auto; }
+.projects-section__backdrop::before {
   position: absolute;
-  z-index: -1;
+  z-index: 0;
   inset: 0;
   background:
     radial-gradient(circle at 82% 18%, rgba(55, 103, 255, 0.15), transparent 28%),
@@ -463,9 +476,10 @@ onBeforeUnmount(() => {
   transform: scale(1.08);
   transition: opacity 900ms ease, transform 1200ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.home[data-stage='projects'] .projects-section::before,
-.home[data-stage='signal'] .projects-section::before { opacity: 1; transform: scale(1); }
+.home[data-stage='projects'] .projects-section__backdrop::before,
+.home[data-stage='signal'] .projects-section__backdrop::before { opacity: 1; transform: scale(1); }
 .hero {
+  touch-action: pan-y pinch-zoom;
   display: grid;
   grid-template-columns: minmax(0, 0.92fr) minmax(360px, 1.08fr);
   align-items: center;
@@ -498,7 +512,8 @@ h1 span, h1 em { display: block; }
 h1 em, .section-heading em { color: var(--electric-blue); font-weight: 400; }
 .hero-intro { max-width: 480px; color: var(--muted); font-size: clamp(1rem, 1.5vw, 1.22rem); line-height: 1.8; }
 .hero-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 26px; margin-top: 38px; }
-.hero-visual { position: relative; min-width: 0; min-height: 480px; touch-action: pan-y; }
+.hero-visual { position: relative; min-width: 0; min-height: 480px; touch-action: pan-y pinch-zoom; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.hero h1 { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .hero-visual :deep(.immersive-scene) { height: min(680px, 72vh); }
 .hero-signature { position: absolute; right: 10%; bottom: 18%; z-index: 1; color: rgba(17, 17, 17, 0.1); font: 800 clamp(3rem, 7vw, 7rem) var(--display-font); letter-spacing: -0.05em; pointer-events: none; }
 .hero-footnote { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font: 0.58rem var(--mono-font); letter-spacing: 0.07em; }
@@ -523,7 +538,7 @@ h1 em, .section-heading em { color: var(--electric-blue); font-weight: 400; }
 .loading-lines { display: grid; gap: 1px; }
 .loading-lines span { display: block; height: 122px; background: linear-gradient(90deg, var(--paper-soft), rgba(255,255,255,0.42), var(--paper-soft)); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-top: 1px solid var(--line); }
 @keyframes shimmer { to { background-position: -200% 0; } }
-.projects-section { position: relative; margin-top: var(--section-space); padding: var(--section-space) 0; background: var(--ink); color: var(--paper); }
+.projects-section { position: relative; margin-top: var(--section-space); padding: var(--section-space) 0; color: var(--paper); }
 .section-title-row--light .section-kicker, .projects-note { color: #9ca09e; }
 .section-title-row--light .section-heading em { color: var(--acid); }
 .projects-note { max-width: 260px; text-align: right; font-size: 0.82rem; }
@@ -605,6 +620,6 @@ h1 em, .section-heading em { color: var(--electric-blue); font-weight: 400; }
   .marquee-track { animation: none; }
   .loading-lines span { animation: none; }
   .motion-toggle { display: none; }
-  .story-rail, .story-rail__line, .story-rail__line i, .projects-section::before { transition: none; }
+  .story-rail, .story-rail__line, .story-rail__line i, .projects-section__backdrop::before { transition: none; }
 }
 </style>

@@ -25,7 +25,7 @@ export class HomeScene implements PageSceneModule<HomePageState> {
       return
     }
     if (this.pageState.paused || visualState.reducedMotion) return
-    if (interaction.type === 'tap') this.controller?.triggerRipple?.(interaction.ndcX, interaction.ndcY)
+    if (interaction.type === 'tap' || interaction.type === 'drag') this.controller?.triggerRipple?.(interaction.ndcX, interaction.ndcY)
     if (interaction.type === 'press-start') this.controller?.beginPress?.(interaction.ndcX, interaction.ndcY)
   }
   resize(width: number, height: number, dpr: number): void { this.controller?.resize(width, height, dpr) }

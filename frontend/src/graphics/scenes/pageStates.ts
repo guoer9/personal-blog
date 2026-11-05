@@ -1,6 +1,6 @@
 import type { WorkCategory } from '@/data/works'
 import type { PageSceneId } from '@/graphics/runtime/types'
-export type HomeSphereInteractionType = 'tap' | 'press-start' | 'press-end'
+export type HomeSphereInteractionType = 'tap' | 'drag' | 'press-start' | 'press-end'
 export interface HomeSphereInteraction {
   sequence: number
   type: HomeSphereInteractionType
