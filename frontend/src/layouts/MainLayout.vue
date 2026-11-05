@@ -5,15 +5,25 @@ import { WebGLRenderer } from 'three'
 import SiteHeader from '@/components/navigation/SiteHeader.vue'
 import { profile } from '@/data/portfolio'
 import { HomeScene } from '@/graphics/scenes/home/HomeScene'
+import { WorksScene } from '@/graphics/scenes/works/WorksScene'
+import { WorkDetailScene } from '@/graphics/scenes/work-detail/WorkDetailScene'
+import { AboutScene } from '@/graphics/scenes/about/AboutScene'
+import { ArticleScene } from '@/graphics/scenes/article/ArticleScene'
+import { ArchiveScene } from '@/graphics/scenes/archive/ArchiveScene'
+import { LibraryScene } from '@/graphics/scenes/library/LibraryScene'
 import { SceneRegistry, routeVisualIdentity } from '@/graphics/runtime/SceneRegistry'
 import { VisualRuntime } from '@/graphics/runtime/VisualRuntime'
 import type { RendererAdapter } from '@/graphics/runtime/types'
+import type { VisualRuntimeDiagnostics } from '@/graphics/runtime/VisualRuntime'
 import { visualPageSceneBridgeKey, visualRuntimeKey } from '@/graphics/runtime/visualRuntimeHandle'
 
 const route = useRoute()
 const canvas = ref<HTMLCanvasElement | null>(null)
 const runtime = shallowRef<VisualRuntime | null>(null)
 const runtimeFailed = ref(false)
+let reducedMotionQuery: MediaQueryList | null = null
+const diagnosticReader = (): VisualRuntimeDiagnostics | null => runtime.value?.getDiagnostics() ?? null
+type DiagnosticWindow = Window & { __visualRuntimeDiagnostics?: () => VisualRuntimeDiagnostics | null }
 provide(visualRuntimeKey, runtime)
 provide(visualPageSceneBridgeKey, null)
 
@@ -32,31 +42,51 @@ function createRenderer(element: HTMLCanvasElement): RendererAdapter {
 function createRuntime(): VisualRuntime {
   const sceneRegistry = new SceneRegistry()
   sceneRegistry.register('home', () => new HomeScene())
-  return new VisualRuntime({ sceneRegistry, createRenderer })
+  sceneRegistry.register('works', () => new WorksScene())
+  sceneRegistry.register('work-detail', () => new WorkDetailScene())
+  sceneRegistry.register('about', () => new AboutScene())
+  sceneRegistry.register('article', () => new ArticleScene())
+  sceneRegistry.register('archive', () => new ArchiveScene())
+  sceneRegistry.register('library', () => new LibraryScene())
+  return new VisualRuntime({ sceneRegistry, createRenderer, onFallbackChange: (fallback) => { runtimeFailed.value = fallback } })
 }
 
 function updateRoute() { runtime.value?.setRoute(routeIdentity()) }
+function onPageBeforeLeave() { runtime.value?.beginTransitionLeave() }
+function onPageAfterLeave() { runtime.value?.finishTransitionLeave() }
+function onPageAfterEnter() { void runtime.value?.finishTransitionEnter() }
 function onPointerMove(event: PointerEvent) {
   runtime.value?.setPointer((event.clientX / Math.max(1, window.innerWidth)) * 2 - 1, -((event.clientY / Math.max(1, window.innerHeight)) * 2 - 1))
 }
 function onScroll() {
   const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight)
   runtime.value?.setScroll(window.scrollY, window.scrollY / max)
+  runtime.value?.measureAnchors()
 }
 function onResize() {
   runtime.value?.resize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1)
   runtime.value?.measureAnchors()
   onScroll()
 }
+function onReducedMotionChange(event: MediaQueryList | MediaQueryListEvent) {
+  runtime.value?.setReducedMotion(event.matches)
+}
 
 onMounted(() => {
   if (!canvas.value) return
+  if (import.meta.env.DEV) (window as DiagnosticWindow).__visualRuntimeDiagnostics = diagnosticReader
   try {
     runtime.value = createRuntime()
     runtime.value.mount(canvas.value)
     runtime.value.resize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1)
+    if (typeof window.matchMedia === 'function') {
+      reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+      onReducedMotionChange(reducedMotionQuery)
+      reducedMotionQuery.addEventListener('change', onReducedMotionChange)
+    }
     runtime.value.start()
     updateRoute()
+    onPageAfterEnter()
     onScroll()
     window.addEventListener('pointermove', onPointerMove, { passive: true })
     window.addEventListener('scroll', onScroll, { passive: true })
@@ -71,6 +101,12 @@ onBeforeUnmount(() => {
   window.removeEventListener('pointermove', onPointerMove)
   window.removeEventListener('scroll', onScroll)
   window.removeEventListener('resize', onResize)
+  reducedMotionQuery?.removeEventListener('change', onReducedMotionChange)
+  reducedMotionQuery = null
+  const diagnosticWindow = window as DiagnosticWindow
+  if (import.meta.env.DEV && diagnosticWindow.__visualRuntimeDiagnostics === diagnosticReader) {
+    delete diagnosticWindow.__visualRuntimeDiagnostics
+  }
   runtime.value?.dispose()
   runtime.value = null
 })
@@ -87,7 +123,7 @@ function focusMainContent() {
     <canvas ref="canvas" class="visual-runtime-canvas" aria-hidden="true" :data-runtime-failed="runtimeFailed" />
     <main id="main-content" class="site-main" tabindex="-1">
       <router-view v-slot="{ Component }">
-        <transition name="page" mode="out-in">
+        <transition name="page" mode="out-in" @before-leave="onPageBeforeLeave" @after-leave="onPageAfterLeave" @after-enter="onPageAfterEnter">
           <component :is="Component" />
         </transition>
       </router-view>

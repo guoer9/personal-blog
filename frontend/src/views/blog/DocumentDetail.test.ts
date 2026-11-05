@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
 import { flushPromises, mount } from '@vue/test-utils'
+import { ref } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import DocumentDetail from './DocumentDetail.vue'
+import { visualRuntimeKey } from '@/graphics/runtime/visualRuntimeHandle'
 const api = vi.hoisted(() => ({ getDocument: vi.fn() }))
 vi.mock('@/api/documents', () => api)
 const commentsApi = vi.hoisted(() => ({ getNotionComments: vi.fn(), createComment: vi.fn(), deleteComment: vi.fn() }))
@@ -25,6 +27,19 @@ beforeEach(() => {
 })
 afterEach(() => wrapper?.unmount())
 describe('document detail', () => {
+  it('publishes library detail state and remeasures anchors after content loads', async () => {
+    const runtime = { setPageState: vi.fn(), measureAnchors: vi.fn() }
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/documents/:slug', component: DocumentDetail }] })
+    await router.push('/documents/note'); await router.isReady()
+    wrapper = mount(DocumentDetail, { attachTo: document.body, global: { plugins: [router], provide: { [visualRuntimeKey as symbol]: ref(runtime) } } })
+    await flushPromises()
+
+    expect(runtime.setPageState).toHaveBeenLastCalledWith('library', {
+      mode: 'detail', category: '技术', itemCount: 1, page: 1, readingProgress: 0,
+    })
+    expect(runtime.measureAnchors).toHaveBeenCalled()
+  })
+
   it('renders Markdown, category navigation and an anonymous discussion', async () => {
     await start()
     expect(wrapper.get('h1').text()).toBe('公开资料')

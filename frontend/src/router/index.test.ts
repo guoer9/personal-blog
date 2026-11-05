@@ -23,10 +23,9 @@ describe('public blog access boundary', () => {
     }
   })
 
-  it('keeps authentication in the private admin area', () => {
+  it('keeps administrator authentication on its private route', () => {
     const router = readSource('router/index.ts')
     expect(router).toMatch(/path:\s*['"]\/admin\/login['"][\s\S]*?name:\s*['"]AdminLogin['"]/)
-    expect(router).not.toMatch(/path:\s*['"]\/login['"]/)
     expect(router).toMatch(/return next\(\{\s*name:\s*['"]AdminLogin['"]/)
   })
 
@@ -35,16 +34,11 @@ describe('public blog access boundary', () => {
     expect(request.match(/startsWith\('\/admin'\)/g)).toHaveLength(2)
   })
 
-  it('does not link public pages to login or register', () => {
-    for (const file of [
-      'components/navigation/SiteHeader.vue',
-      'layouts/MainLayout.vue',
-      'views/blog/PostDetail.vue',
-    ]) {
-      expect(readSource(file)).not.toMatch(
-        /(?:to|name):\s*['"](?:\/login|Login|Register|\/register)['"]/,
-      )
-    }
+  it('resolves the public login route outside the protected admin routes', async () => {
+    const { default: router } = await import('./index')
+    const route = router.resolve('/login')
+    expect(route.name).toBe('Login')
+    expect(route.matched.some(record => record.meta.requiresAuth)).toBe(false)
   })
 })
 

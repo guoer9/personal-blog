@@ -15,7 +15,7 @@ import ProjectCardMotion from '@/components/immersive/ProjectCardMotion.vue'
 import ScrollReveal from '@/components/immersive/ScrollReveal.vue'
 import ArticleRow from '@/components/blog/ArticleRow.vue'
 import StatePanel from '@/components/blog/StatePanel.vue'
-import { narrativeProgress, resolveMotionStage } from '@/graphics/motion'
+import { narrativeProgress, resolveMotionStage, stageFocus } from '@/graphics/motion'
 
 const posts = ref<Post[]>([])
 const featuredWorks = ref<Work[]>([])
@@ -43,6 +43,12 @@ const manualMotionPaused = ref(false)
 const systemReducedMotion = ref(false)
 const motionPaused = computed(() => manualMotionPaused.value || systemReducedMotion.value)
 const motionStage = computed(() => resolveMotionStage(storyProgress.value))
+const storyStages = [
+  { id: 'idea', index: '01', label: 'IDEA' },
+  { id: 'writing', index: '02', label: 'NOTES' },
+  { id: 'projects', index: '03', label: 'WORK' },
+  { id: 'signal', index: '04', label: 'SIGNAL' },
+]
 const runtime = inject<Ref<VisualRuntimeHandle | null>>(visualRuntimeKey, ref(null))
 const sceneBridge = usePageSceneState<HomePageState>({ paused: false })
 provide(visualPageSceneBridgeKey, sceneBridge)
@@ -83,6 +89,10 @@ function updateNarrative() {
 function scheduleNarrativeUpdate() {
   if (scrollFrame) return
   scrollFrame = requestAnimationFrame(updateNarrative)
+}
+
+function stageStyle(index: number) {
+  return { '--stage-focus': stageFocus(storyProgress.value, index) }
 }
 
 function setSystemReducedMotion(event: MediaQueryListEvent | MediaQueryList) {
@@ -144,10 +154,9 @@ onBeforeUnmount(() => {
     <div class="story-rail" aria-hidden="true">
       <span class="story-rail__line"><i /></span>
       <ol class="story-rail__stages">
-        <li data-stage-label="idea"><span>01</span> IDEA</li>
-        <li data-stage-label="writing"><span>02</span> NOTES</li>
-        <li data-stage-label="projects"><span>03</span> WORK</li>
-        <li data-stage-label="signal"><span>04</span> SIGNAL</li>
+        <li v-for="(stage, index) in storyStages" :key="stage.id" :data-stage-label="stage.id" :style="stageStyle(index)">
+          <span>{{ stage.index }}</span> {{ stage.label }}
+        </li>
       </ol>
     </div>
     <section class="hero page-shell" aria-labelledby="hero-title">
@@ -338,6 +347,7 @@ onBeforeUnmount(() => {
   letter-spacing: 0.08em;
   pointer-events: none;
   transform: translateY(-50%);
+  transition: color 520ms ease;
 }
 .motion-toggle {
   display: inline-flex;
@@ -366,6 +376,7 @@ onBeforeUnmount(() => {
   height: 164px;
   background: rgba(17, 17, 17, 0.24);
   overflow: hidden;
+  transition: background-color 520ms ease;
 }
 .story-rail__line i {
   position: absolute;
@@ -373,6 +384,7 @@ onBeforeUnmount(() => {
   background: var(--electric-blue);
   transform: scaleY(var(--story-progress));
   transform-origin: top;
+  transition: background-color 520ms ease;
 }
 .story-rail__stages {
   display: grid;
@@ -385,20 +397,21 @@ onBeforeUnmount(() => {
   position: relative;
   display: flex;
   gap: 7px;
-  opacity: 0.46;
-  transition: color 240ms ease, opacity 240ms ease, transform 240ms ease;
+  opacity: calc(0.46 + var(--stage-focus, 0) * 0.54);
+  transform: translateX(calc(var(--stage-focus, 0) * -4px));
 }
 .story-rail__stages li::before {
   position: absolute;
   top: 50%;
   left: -16px;
-  width: 5px;
-  height: 5px;
+  width: calc(4px + var(--stage-focus, 0) * 1px);
+  height: calc(4px + var(--stage-focus, 0) * 1px);
   border: 1px solid currentColor;
   border-radius: 50%;
   background: var(--paper);
   content: '';
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) scale(calc(0.88 + var(--stage-focus, 0) * 0.12));
+  box-shadow: 0 0 0 calc(var(--stage-focus, 0) * 3px) rgba(55, 103, 255, calc(var(--stage-focus, 0) * 0.16));
 }
 .story-rail__stages li span { color: inherit; opacity: 0.62; }
 .home[data-stage='projects'] .story-rail,
@@ -407,30 +420,8 @@ onBeforeUnmount(() => {
 .home[data-stage='signal'] .story-rail__line { background: rgba(244, 241, 234, 0.25); }
 .home[data-stage='projects'] .story-rail__line i,
 .home[data-stage='signal'] .story-rail__line i { background: var(--acid); }
-.home[data-stage='projects'] [data-stage-label='projects'],
-.home[data-stage='signal'] [data-stage-label='signal'] { color: var(--paper); }
-.home[data-stage='projects'] [data-stage-label='projects']::before,
-.home[data-stage='signal'] [data-stage-label='signal']::before { border-color: var(--acid); background: var(--acid); box-shadow: 0 0 0 3px rgba(199, 255, 46, 0.16); }
 .home[data-stage='projects'] .story-rail__stages li::before,
 .home[data-stage='signal'] .story-rail__stages li::before { background: var(--ink); }
-.home[data-stage='idea'] [data-stage-label='idea'],
-.home[data-stage='writing'] [data-stage-label='writing'],
-.home[data-stage='projects'] [data-stage-label='projects'],
-.home[data-stage='signal'] [data-stage-label='signal'] {
-  color: var(--ink);
-  opacity: 1;
-  transform: translateX(-4px);
-}
-.home[data-stage='idea'] [data-stage-label='idea']::before,
-.home[data-stage='writing'] [data-stage-label='writing']::before,
-.home[data-stage='projects'] [data-stage-label='projects']::before,
-.home[data-stage='signal'] [data-stage-label='signal']::before {
-  border-color: var(--electric-blue);
-  background: var(--electric-blue);
-  box-shadow: 0 0 0 3px rgba(55, 103, 255, 0.16);
-}
-.home[data-stage='projects'] [data-stage-label='projects'],
-.home[data-stage='signal'] [data-stage-label='signal'] { color: var(--paper); }
 .home[data-motion-paused='true'] .marquee-track,
 .home[data-motion-paused='true'] .loading-lines span,
 .home[data-motion-paused='true'] :deep(.scene-orbit),
@@ -592,6 +583,6 @@ h1 em, .section-heading em { color: var(--electric-blue); font-weight: 400; }
   .marquee-track { animation: none; }
   .loading-lines span { animation: none; }
   .motion-toggle { display: none; }
-  .story-rail__line i, .story-rail__stages li, .projects-section::before { transition: none; }
+  .story-rail, .story-rail__line, .story-rail__line i, .projects-section::before { transition: none; }
 }
 </style>

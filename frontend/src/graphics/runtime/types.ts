@@ -66,6 +66,7 @@ export interface PageSceneModule<TPageState = unknown> {
   update(visualState: Readonly<VisualState>, pageState: Readonly<TPageState>): void
   resize(width: number, height: number, dpr: number): void
   render(context: SceneRenderContext): void
+  shouldAnimate?(): boolean
   dispose(): void
 }
 

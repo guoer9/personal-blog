@@ -12,6 +12,7 @@
     "quality:doctor": "node --env-file-if-exists=.env.local scripts/quality/doctor.mjs",
     "audit:axe": "node --env-file-if-exists=.env.local scripts/quality/axe.mjs",
     "audit:lighthouse": "node --env-file-if-exists=.env.local scripts/quality/lighthouse.mjs",
+    "test:immersive": "node scripts/quality/multi-page-immersive.mjs",
     "browserstack:check": "node --env-file-if-exists=.env.local scripts/quality/browserstack.mjs --check",
     "test:browserstack": "node --env-file-if-exists=.env.local scripts/quality/browserstack.mjs"
   },

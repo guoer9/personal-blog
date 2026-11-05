@@ -1,11 +1,17 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, provide, ref, watch, type Ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { getPosts, type Post } from '@/api/posts'
 import ArticleRow from '@/components/blog/ArticleRow.vue'
 import StatePanel from '@/components/blog/StatePanel.vue'
+import { usePageSceneState } from '@/graphics/runtime/usePageSceneState'
+import { visualPageSceneBridgeKey, visualRuntimeKey, type VisualRuntimeBridge } from '@/graphics/runtime/visualRuntimeHandle'
+import type { ArchivePageState } from '@/graphics/scenes/pageStates'
 
 const route = useRoute()
+const runtime = inject<Ref<VisualRuntimeBridge | null>>(visualRuntimeKey, ref(null))
+const sceneBridge = usePageSceneState<ArchivePageState>({ mode: 'tag', query: '', resultCount: 0, page: 1, totalPages: 0 })
+provide(visualPageSceneBridgeKey, sceneBridge)
 const posts = ref<Post[]>([])
 const loading = ref(true)
 const error = ref(false)
@@ -14,6 +20,22 @@ const tagSlug = computed(() => String(route.params.slug || ''))
 const pageSize = 12
 const totalPages = computed(() => Math.ceil(total.value / pageSize))
 const currentPage = ref(1)
+const archiveAnchor = ref<HTMLElement | null>(null)
+let unregisterArchiveAnchor: (() => void) | null = null
+
+function publishArchiveState() {
+  const state: ArchivePageState = { mode: 'tag', query: tagSlug.value, resultCount: total.value, page: currentPage.value, totalPages: totalPages.value }
+  sceneBridge.setState(state)
+  runtime.value?.setPageState('archive', state)
+}
+
+watch([runtime, archiveAnchor], ([activeRuntime, element]) => {
+  unregisterArchiveAnchor?.()
+  unregisterArchiveAnchor = activeRuntime && element
+    ? activeRuntime.registerAnchor?.('tag-results', element) ?? null
+    : null
+  activeRuntime?.measureAnchors?.()
+}, { flush: 'post' })
 
 async function loadTagPosts(page = 1) {
   loading.value = true
@@ -23,10 +45,14 @@ async function loadTagPosts(page = 1) {
     const response = await getPosts({ tag: tagSlug.value, page: currentPage.value, page_size: pageSize })
     posts.value = response.data.items
     total.value = response.data.total
+    publishArchiveState()
   } catch {
     error.value = true
   } finally {
     loading.value = false
+    publishArchiveState()
+    await nextTick()
+    runtime.value?.measureAnchors?.()
   }
 }
 
@@ -38,6 +64,7 @@ function changePage(page: number) {
 
 onMounted(() => loadTagPosts())
 watch(tagSlug, () => loadTagPosts())
+onBeforeUnmount(() => unregisterArchiveAnchor?.())
 </script>
 
 <template>
@@ -53,7 +80,7 @@ watch(tagSlug, () => loadTagPosts())
         <p class="page-lede">同一主题下的文章会在这里归到一起，方便沿着问题继续阅读。</p>
       </header>
 
-      <section class="tag-results" aria-label="标签文章列表">
+      <section ref="archiveAnchor" class="tag-results" aria-label="标签文章列表">
         <div v-if="loading" class="loading-block" aria-label="正在载入文章">
           <span v-for="index in 4" :key="index" />
         </div>

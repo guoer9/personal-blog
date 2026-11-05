@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
 import { flushPromises, mount } from '@vue/test-utils'
+import { ref } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Documents from './Documents.vue'
+import { visualRuntimeKey } from '@/graphics/runtime/visualRuntimeHandle'
 const api = vi.hoisted(() => ({ getDocuments: vi.fn() }))
 vi.mock('@/api/documents', () => api)
 const entry = { id: 8, slug: 'safe-note', title: '部署笔记', summary: '一份公开的资料', categories: ['技术'], author: { id: 1, username: 'guoer9' }, author_label: 'guoer9', view_count: 12, comment_count: 3, public_url: '/documents/safe-note', external_url: 'https://www.notion.so/11111111111111111111111111111111', created_at: '2026-11-01T00:00:00Z', updated_at: '2026-11-02T00:00:00Z' }
@@ -17,6 +19,19 @@ async function start(path = '/documents') {
 beforeEach(() => { api.getDocuments.mockReset(); api.getDocuments.mockResolvedValue({ data: response }) })
 afterEach(() => wrapper?.unmount())
 describe('public documents list', () => {
+  it('publishes library index state and remeasures anchors after async entries render', async () => {
+    const runtime = { setPageState: vi.fn(), measureAnchors: vi.fn() }
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/documents', component: Documents }] })
+    await router.push('/documents?category=技术&page=2'); await router.isReady()
+    wrapper = mount(Documents, { attachTo: document.body, global: { plugins: [router], provide: { [visualRuntimeKey as symbol]: ref(runtime) } } })
+    await flushPromises()
+
+    expect(runtime.setPageState).toHaveBeenLastCalledWith('library', {
+      mode: 'index', category: '技术', itemCount: 1, page: 2, readingProgress: 0,
+    })
+    expect(runtime.measureAnchors).toHaveBeenCalled()
+  })
+
   it('loads shared search/category/page from the URL and links to independent document detail', async () => {
     await start('/documents?q=部署&category=技术&page=2')
     expect(api.getDocuments).toHaveBeenCalledWith({ q: '部署', category: '技术', page: 2, page_size: 10 }, expect.any(AbortSignal))

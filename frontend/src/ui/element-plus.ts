@@ -67,7 +67,7 @@ export async function installElementPlus(app?: ElementPlusApp): Promise<void> {
 }
 
 export function installElementPlusForRoute(path: string): Promise<void> {
-  if (path.startsWith('/admin') || path === '/register') {
+  if (path.startsWith('/admin') || path === '/login' || path === '/register') {
     return installElementPlus()
   }
   return Promise.resolve()

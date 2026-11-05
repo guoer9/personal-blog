@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
@@ -8,10 +8,13 @@ import { getComments, createComment, deleteComment, type Comment } from '@/api/c
 import { useUserStore } from '@/stores/user'
 import { formatDate } from '@/utils/format'
 import { confirmAction, showError, showInfo, showSuccess, showWarning } from '@/ui/feedback'
+import { visualRuntimeKey, type VisualRuntimeBridge } from '@/graphics/runtime/visualRuntimeHandle'
+import type { ArticlePageState } from '@/graphics/scenes/pageStates'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const runtime = inject<Ref<VisualRuntimeBridge | null>>(visualRuntimeKey, ref(null))
 
 const post = ref<Post | null>(null)
 const comments = ref<Comment[]>([])
@@ -24,6 +27,8 @@ const commentLoading = ref(false)
 const newComment = ref('')
 const replyTo = ref<Comment | null>(null)
 const readingProgress = ref(0)
+const articleContent = ref<HTMLElement | null>(null)
+let unregisterArticleAnchor: (() => void) | null = null
 
 const slug = computed(() => String(route.params.slug || ''))
 const readingTime = computed(() => {
@@ -35,6 +40,7 @@ const readingTime = computed(() => {
 const canComment = computed(() => userStore.isLoggedIn && Boolean(userStore.userInfo))
 
 let requestSequence = 0
+let unregisterArticleAnchors: Array<() => void> = []
 
 async function fetchPost() {
   const sequence = ++requestSequence
@@ -173,7 +179,47 @@ function updateReadingProgress() {
   const rect = article.getBoundingClientRect()
   const distance = Math.max(0, rect.height - window.innerHeight)
   readingProgress.value = distance === 0 ? 100 : Math.min(100, Math.max(0, (-rect.top / distance) * 100))
+  publishArticleState()
 }
+
+function publishArticleState() {
+  const headings = post.value?.content?.match(/^#{1,6}\s+.+$/gm) || []
+  const sectionCount = headings.length
+  const activeSection = sectionCount && readingProgress.value > 0
+    ? Math.min(sectionCount - 1, Math.floor((readingProgress.value / 100) * sectionCount))
+    : null
+  const state: ArticlePageState = { readingProgress: readingProgress.value, sectionCount, activeSection }
+  runtime.value?.setPageState('article', state)
+}
+
+function measureArticleAnchor() {
+  runtime.value?.measureAnchors?.()
+}
+
+watch([post, runtime], async ([loadedPost, activeRuntime]) => {
+  unregisterArticleAnchors.forEach((unregister) => unregister())
+  unregisterArticleAnchors = []
+  unregisterArticleAnchor?.()
+  unregisterArticleAnchor = null
+  publishArticleState()
+  if (!loadedPost || !activeRuntime) return
+  await nextTick()
+  const element = articleContent.value
+  if (!element) return
+  unregisterArticleAnchor = activeRuntime.registerAnchor?.('article-content', element) ?? null
+  if (unregisterArticleAnchor) unregisterArticleAnchors.push(unregisterArticleAnchor)
+  const sections = Array.from(element.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6')).slice(0, 8)
+  if (sections.length) {
+    sections.forEach((section, index) => {
+      const unregister = activeRuntime.registerAnchor?.(`article-section-${index}`, section)
+      if (unregister) unregisterArticleAnchors.push(unregister)
+    })
+  } else {
+    const unregister = activeRuntime.registerAnchor?.('article-section-0', element)
+    if (unregister) unregisterArticleAnchors.push(unregister)
+  }
+  activeRuntime.measureAnchors?.()
+}, { flush: 'post' })
 
 function onKeydown(event: KeyboardEvent) {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'c' && window.getSelection()?.toString()) {
@@ -191,6 +237,9 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   requestSequence += 1
+  unregisterArticleAnchors.forEach((unregister) => unregister())
+  unregisterArticleAnchors = []
+  unregisterArticleAnchor?.()
   window.removeEventListener('scroll', updateReadingProgress)
   window.removeEventListener('resize', updateReadingProgress)
   document.removeEventListener('keydown', onKeydown)
@@ -198,7 +247,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="post-detail-page">
+  <div class="post-detail-page" @load.capture="measureArticleAnchor">
     <div v-if="loading" class="article-skeleton page-shell" aria-label="正在载入文章">
       <span class="skeleton-kicker" />
       <span class="skeleton-title" />
@@ -264,7 +313,7 @@ onBeforeUnmount(() => {
         </aside>
 
         <article class="article-main">
-          <div class="prose-shell">
+          <div ref="articleContent" class="prose-shell">
             <MdPreview :model-value="post.content || ''" :editor-id="`post-${post.id}`" />
           </div>
 
@@ -291,8 +340,9 @@ onBeforeUnmount(() => {
         <div class="discussion-grid">
           <div class="comment-form-wrap">
             <div v-if="!canComment" class="login-prompt">
-              <span>评论区暂未开放</span>
-              <p>当前仅展示已有讨论。公开博客不提供登录或注册入口。</p>
+              <span>登录后参与讨论</span>
+              <p>当前仅展示已有讨论。登录后即可发表你的想法。</p>
+              <router-link class="editorial-button login-prompt-link" :to="{ name: 'Login', query: { redirect: route.fullPath } }">登录后发表评论 ↗</router-link>
             </div>
             <form v-else class="comment-form" @submit.prevent="handleSubmitComment">
               <div class="form-heading">
@@ -456,6 +506,7 @@ onBeforeUnmount(() => {
 .login-prompt > span { font: 400 2rem var(--display-font); }
 .login-prompt p { margin: 12px 0 22px; color: var(--muted); font-size: .82rem; }
 .login-prompt .editorial-button { min-height: 42px; padding: 0 16px; }
+.login-prompt-link { display: inline-flex; align-items: center; color: var(--ink); text-decoration: none; }
 .comments-list { min-width: 0; }
 .comment-item { padding: 0 0 28px; margin-bottom: 28px; border-bottom: 1px solid var(--line); }
 .comment-main, .reply-item { display: flex; gap: 14px; }

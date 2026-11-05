@@ -58,6 +58,7 @@ describe('Element Plus route installer', () => {
 
     await installElementPlusForRoute('/admin')
     await installElementPlusForRoute('/admin/login')
+    await installElementPlusForRoute('/login')
     await installElementPlusForRoute('/register')
     expect(use).toHaveBeenCalledTimes(1)
   })

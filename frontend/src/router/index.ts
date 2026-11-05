@@ -80,6 +80,12 @@ const router = createRouter({
       meta: { title: '后台登录' },
     },
     {
+      path: '/login',
+      name: 'Login',
+      component: () => import('@/views/auth/Login.vue'),
+      meta: { title: '登录' },
+    },
+    {
       path: '/register',
       name: 'Register',
       component: () => import('@/views/auth/Register.vue'),
@@ -174,6 +180,8 @@ const pageTitles: Record<string, string> = {
   PostDetail: siteTitle,
   NotFound: `页面未找到 · ${siteTitle}`,
   AdminLogin: `后台登录 · ${siteTitle}`,
+  Login: `登录 · ${siteTitle}`,
+  Register: `注册 · ${siteTitle}`,
   AdminNotion: `Notion 连接与资料库 · ${siteTitle}`,
 }
 

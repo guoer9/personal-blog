@@ -14,6 +14,7 @@ export class HomeScene implements PageSceneModule<HomePageState> {
   leave(): void {}
   update(visualState: Readonly<VisualState>, pageState: Readonly<HomePageState>): void {
     this.pageState = { ...(pageState || { paused: false }) }
+    this.controller?.setQualityTier(visualState.qualityTier)
     this.controller?.setInput({ pointerX: visualState.pointerX, pointerY: visualState.pointerY, scroll: visualState.documentProgress })
   }
   resize(width: number, height: number, dpr: number): void { this.controller?.resize(width, height, dpr) }
@@ -21,5 +22,6 @@ export class HomeScene implements PageSceneModule<HomePageState> {
     if (this.pageState.paused || context.visualState.reducedMotion) return
     this.controller?.render(context.visualState.timeMs)
   }
+  shouldAnimate(): boolean { return !this.pageState.paused }
   dispose(): void { this.controller?.dispose(); this.controller = null }
 }

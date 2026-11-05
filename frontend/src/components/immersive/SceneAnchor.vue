@@ -1,17 +1,23 @@
 <script setup lang="ts">
-import { inject, onBeforeUnmount, onMounted, ref } from 'vue'
-import type { PageSceneBridge } from '@/graphics/runtime/types'
-import { visualPageSceneBridgeKey } from '@/graphics/runtime/visualRuntimeHandle'
+import { inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { visualRuntimeKey, type VisualRuntimeBridge } from '@/graphics/runtime/visualRuntimeHandle'
 
 const props = defineProps<{ id: string; class?: string }>()
 const element = ref<HTMLElement | null>(null)
-const bridge = inject<PageSceneBridge<unknown> | null>(visualPageSceneBridgeKey, null)
+const runtime = inject(visualRuntimeKey, ref<VisualRuntimeBridge | null>(null))
 let unregister: (() => void) | null = null
 
-onMounted(() => {
-  if (bridge && element.value) unregister = bridge.registerAnchor(props.id, element.value)
-})
+function registerAnchor() {
+  unregister?.()
+  unregister = null
+  if (!runtime.value || !element.value) return
+  unregister = runtime.value.registerAnchor?.(props.id, element.value) ?? null
+  runtime.value.measureAnchors?.()
+}
+
+watch(runtime, registerAnchor, { flush: 'post' })
+onMounted(registerAnchor)
 onBeforeUnmount(() => unregister?.())
 </script>
 
-<template><span ref="element" :class="props.class"><slot /></span></template>
+<template><div ref="element" :class="props.class"><slot /></div></template>

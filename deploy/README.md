@@ -33,6 +33,14 @@ docker compose --env-file deploy/.env.production \
   python -m app.production_admin
 ```
 
+自助注册默认关闭。需要开放注册时，在同一个服务器环境文件中设置 `REGISTRATION_PHRASE`，然后重建 API 容器；正确短语不会放入前端或仓库：
+
+```bash
+sudoedit /srv/personal-blog/deploy/.env.production
+docker compose --env-file deploy/.env.production \
+  -f deploy/compose.production.yml up -d --force-recreate api
+```
+
 首次创建后，将 `ADMIN_UPDATE_PASSWORD=false` 保持不变。只有明确要轮换密码时才临时设置为 `true`，执行一次初始化命令后再改回 `false`。
 
 部署检查：

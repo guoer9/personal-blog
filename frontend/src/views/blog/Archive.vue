@@ -1,17 +1,39 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, provide, ref, watch, type Ref } from 'vue'
 import { getPosts, type Post } from '@/api/posts'
 import ArticleRow from '@/components/blog/ArticleRow.vue'
 import StatePanel from '@/components/blog/StatePanel.vue'
 import ScrollReveal from '@/components/immersive/ScrollReveal.vue'
+import { usePageSceneState } from '@/graphics/runtime/usePageSceneState'
+import { visualPageSceneBridgeKey, visualRuntimeKey, type VisualRuntimeBridge } from '@/graphics/runtime/visualRuntimeHandle'
+import type { ArchivePageState } from '@/graphics/scenes/pageStates'
 
 const posts = ref<Post[]>([])
+const runtime = inject<Ref<VisualRuntimeBridge | null>>(visualRuntimeKey, ref(null))
+const sceneBridge = usePageSceneState<ArchivePageState>({ mode: 'archive', query: '', resultCount: 0, page: 1, totalPages: 0 })
+provide(visualPageSceneBridgeKey, sceneBridge)
 const loading = ref(true)
 const error = ref(false)
 const currentPage = ref(1)
 const total = ref(0)
 const pageSize = 12
 const totalPages = computed(() => Math.ceil(total.value / pageSize))
+const archiveAnchor = ref<HTMLElement | null>(null)
+let unregisterArchiveAnchor: (() => void) | null = null
+
+function publishArchiveState() {
+  const state: ArchivePageState = { mode: 'archive', query: '', resultCount: total.value, page: currentPage.value, totalPages: totalPages.value }
+  sceneBridge.setState(state)
+  runtime.value?.setPageState('archive', state)
+}
+
+watch([runtime, archiveAnchor], ([activeRuntime, element]) => {
+  unregisterArchiveAnchor?.()
+  unregisterArchiveAnchor = activeRuntime && element
+    ? activeRuntime.registerAnchor?.('archive-list', element) ?? null
+    : null
+  activeRuntime?.measureAnchors?.()
+}, { flush: 'post' })
 
 async function loadPosts() {
   loading.value = true
@@ -20,10 +42,14 @@ async function loadPosts() {
     const response = await getPosts({ page: currentPage.value, page_size: pageSize })
     posts.value = response.data.items
     total.value = response.data.total
+    publishArchiveState()
   } catch {
     error.value = true
   } finally {
     loading.value = false
+    publishArchiveState()
+    await nextTick()
+    runtime.value?.measureAnchors?.()
   }
 }
 
@@ -35,6 +61,7 @@ function changePage(page: number) {
 }
 
 onMounted(loadPosts)
+onBeforeUnmount(() => unregisterArchiveAnchor?.())
 </script>
 
 <template>
@@ -50,7 +77,7 @@ onMounted(loadPosts)
         </header>
       </ScrollReveal>
 
-      <section class="archive-body" aria-label="文章归档">
+      <section ref="archiveAnchor" class="archive-body" aria-label="文章归档">
         <div class="archive-label">
           <span>ARCHIVE / {{ String(total).padStart(2, '0') }} ENTRIES</span>
           <span>NEWEST FIRST ↓</span>
@@ -63,7 +90,7 @@ onMounted(loadPosts)
           <button type="button" class="text-action" @click="loadPosts">重新加载 ↗</button>
         </div>
         <div v-else-if="posts.length" class="article-list">
-          <ArticleRow v-for="(post, index) in posts" :key="post.id" :post="post" :index="(currentPage - 1) * pageSize + index" />
+          <ArticleRow v-for="(post, index) in posts" :key="post.id" :post="post" :index="(currentPage - 1) * pageSize + index" heading-tag="h2" />
         </div>
         <StatePanel
           v-else

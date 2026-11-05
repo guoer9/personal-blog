@@ -1,10 +1,12 @@
 // @vitest-environment happy-dom
 import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
+import { ref } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Post } from '@/api/posts'
 import Search from './Search.vue'
+import { visualRuntimeKey } from '@/graphics/runtime/visualRuntimeHandle'
 
 const searchPosts = vi.fn()
 
@@ -24,6 +26,25 @@ describe('Search results focus', () => {
     searchPosts.mockReset()
     searchPosts.mockResolvedValue({ data: { items: [], total: 0 } })
     document.body.innerHTML = ''
+  })
+
+  it('publishes archive search query and pagination state', async () => {
+    searchPosts.mockResolvedValue({ data: { items: [], total: 25, total_pages: 3 } })
+    const runtime = { setPageState: vi.fn(), measureAnchors: vi.fn() }
+    const router = createRouter({ history: createMemoryHistory(), routes })
+    await router.push('/search?q=alpha&page=2')
+    await router.isReady()
+    const wrapper = mount(Search, {
+      attachTo: document.body,
+      global: { plugins: [router], provide: { [visualRuntimeKey as symbol]: ref(runtime) } },
+    })
+    await flushPromises()
+
+    expect(runtime.setPageState).toHaveBeenLastCalledWith('archive', {
+      mode: 'search', query: 'alpha', resultCount: 25, page: 2, totalPages: 3,
+    })
+
+    wrapper.unmount()
   })
 
   it('moves focus to the result status after an in-page search', async () => {

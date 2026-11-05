@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
+import secrets
 
+from app.core.config import settings
 from app.db.session import get_db
 from app.schemas.user import (
     UserCreate, UserResponse, Token, TokenRefresh, LoginRequest
@@ -24,6 +26,21 @@ async def register(
     db: AsyncSession = Depends(get_db)
 ):
     """用户注册"""
+    configured_phrase = settings.REGISTRATION_PHRASE.strip()
+    if not configured_phrase:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="注册暂未开放",
+        )
+    if not secrets.compare_digest(
+        user_in.verification_phrase.strip().encode("utf-8"),
+        configured_phrase.encode("utf-8"),
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="验证内容不正确",
+        )
+
     # 检查用户名或邮箱是否已存在
     existing_user = await get_user_by_username_or_email(
         db, user_in.username, user_in.email

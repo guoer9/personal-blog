@@ -3,7 +3,9 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ref } from 'vue'
 import PostDetail from './PostDetail.vue'
+import { visualRuntimeKey } from '@/graphics/runtime/visualRuntimeHandle'
 
 const getPost = vi.fn()
 const getComments = vi.fn()
@@ -37,6 +39,7 @@ const routes = [
   { path: '/documents/:slug', name: 'DocumentDetail', component: { template: '<div />' } },
   { path: '/writing', name: 'Archive', component: { template: '<div />' } },
   { path: '/admin/login', name: 'AdminLogin', component: { template: '<div />' } },
+  { path: '/login', name: 'Login', component: { template: '<div />' } },
 ]
 
 const post = {
@@ -65,6 +68,19 @@ async function mountPost(path = '/post/round11-article') {
   return wrapper
 }
 
+async function mountPostWithRuntime() {
+  const runtime = { setPageState: vi.fn(), measureAnchors: vi.fn() }
+  const router = createRouter({ history: createMemoryHistory(), routes })
+  await router.push('/post/round11-article')
+  await router.isReady()
+  const wrapper = mount(PostDetail, {
+    attachTo: document.body,
+    global: { plugins: [createPinia(), router], provide: { [visualRuntimeKey as symbol]: ref(runtime) } },
+  })
+  await flushPromises()
+  return { wrapper, runtime }
+}
+
 describe('Post detail loaded-state semantics', () => {
   beforeEach(() => {
     getPost.mockReset()
@@ -74,6 +90,19 @@ describe('Post detail loaded-state semantics', () => {
     getComments.mockResolvedValue({ data: [] })
     document.body.innerHTML = ''
     localStorage.clear()
+  })
+
+  it('publishes article progress state and remeasures anchors after content loads', async () => {
+    const { wrapper, runtime } = await mountPostWithRuntime()
+
+    expect(runtime.setPageState).toHaveBeenCalledWith('article', {
+      readingProgress: 0,
+      sectionCount: 1,
+      activeSection: null,
+    })
+    expect(runtime.measureAnchors).toHaveBeenCalled()
+
+    wrapper.unmount()
   })
 
   it('replaces a migrated Notion post URL before touching blog author or comments', async () => {
@@ -110,6 +139,17 @@ describe('Post detail loaded-state semantics', () => {
     expect(empty.attributes('role')).toBe('status')
     expect(empty.attributes('aria-live')).toBe('polite')
     expect(empty.text()).toContain('还没有评论')
+
+    wrapper.unmount()
+  })
+
+  it('links anonymous readers to login with the current article as the return path', async () => {
+    const wrapper = await mountPost('/post/round11-article?source=archive')
+
+    expect(wrapper.get('.login-prompt a').text()).toContain('登录后发表评论')
+    expect(wrapper.get('.login-prompt a').attributes('href')).toBe(
+      '/login?redirect=/post/round11-article?source=archive',
+    )
 
     wrapper.unmount()
   })

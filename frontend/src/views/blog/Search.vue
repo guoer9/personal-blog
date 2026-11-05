@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import { searchPosts, type Post } from '@/api/posts'
 import ArticleRow from '@/components/blog/ArticleRow.vue'
 import StatePanel from '@/components/blog/StatePanel.vue'
+import { visualRuntimeKey, type VisualRuntimeBridge } from '@/graphics/runtime/visualRuntimeHandle'
+import type { ArchivePageState } from '@/graphics/scenes/pageStates'
 
 const route = useRoute()
 const router = useRouter()
+const runtime = inject<Ref<VisualRuntimeBridge | null>>(visualRuntimeKey, ref(null))
 const posts = ref<Post[]>([])
 const loading = ref(false)
 const error = ref(false)
@@ -23,8 +26,26 @@ const pageChangeRequested = ref(false)
 const statusRegion = ref<HTMLElement | null>(null)
 const articleList = ref<HTMLElement | null>(null)
 const queryInput = ref<HTMLInputElement | null>(null)
+const archiveAnchor = ref<HTMLElement | null>(null)
 const queryError = ref('')
 let latestRequestId = 0
+let unregisterArchiveAnchor: (() => void) | null = null
+
+function publishArchiveState() {
+  const state: ArchivePageState = {
+    mode: 'search', query: keyword.value, resultCount: total.value,
+    page: currentPage.value, totalPages: totalPages.value,
+  }
+  runtime.value?.setPageState('archive', state)
+}
+
+watch([runtime, archiveAnchor], ([activeRuntime, element]) => {
+  unregisterArchiveAnchor?.()
+  unregisterArchiveAnchor = activeRuntime && element
+    ? activeRuntime.registerAnchor?.('search-results', element) ?? null
+    : null
+  activeRuntime?.measureAnchors?.()
+}, { flush: 'post' })
 
 function normalizeQuery(value: string) {
   return value.normalize('NFKC').trim().replace(/\s+/gu, ' ')
@@ -81,6 +102,7 @@ async function loadResults(page = 1) {
     loading.value = false
     shouldFocusResults.value = false
     pageChangeRequested.value = false
+    publishArchiveState()
     return
   }
   loading.value = true
@@ -96,6 +118,9 @@ async function loadResults(page = 1) {
   } finally {
     if (requestId !== latestRequestId) return
     loading.value = false
+    publishArchiveState()
+    await nextTick()
+    runtime.value?.measureAnchors?.()
     const focusRequested = shouldFocusResults.value || pageChangeRequested.value
     shouldFocusResults.value = false
     pageChangeRequested.value = false
@@ -173,6 +198,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   latestRequestId += 1
+  unregisterArchiveAnchor?.()
   window.removeEventListener('click', rememberReturnFocus, true)
 })
 </script>
@@ -195,7 +221,7 @@ onBeforeUnmount(() => {
         </form>
       </header>
 
-      <section class="search-results" aria-label="搜索结果">
+      <section ref="archiveAnchor" class="search-results" aria-label="搜索结果" @load.capture="runtime?.measureAnchors?.()">
         <div v-if="keyword" ref="statusRegion" class="search-summary" role="status" tabindex="-1" aria-live="polite">
           <span>QUERY / “{{ keyword }}”</span>
           <span>{{ loading ? 'SEARCHING' : error ? 'SEARCH UNAVAILABLE' : `${total} RESULTS` }}</span>

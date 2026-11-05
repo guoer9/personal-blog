@@ -9,7 +9,7 @@ import {
   Scene,
   ShaderMaterial,
 } from 'three'
-import { clamp, damp, MotionEnergy, qualityProfile, resolveMotionStage, sceneMood } from './motion'
+import { clamp, damp, MotionEnergy, qualityProfile, resolveMotionStage, sceneMoodAt } from './motion'
 import {
   flowFragmentShader,
   flowVertexShader,
@@ -134,6 +134,7 @@ export function createLiquidScene(
   let rawDpr = 1
   let currentQualityTier: QualityTier = 'high'
   let lastTime = 0
+  let easedMotionEnergy = 0
   let disposed = false
   let previousStage = resolveMotionStage(initialState.scroll)
 
@@ -197,7 +198,7 @@ export function createLiquidScene(
       current.scroll = damp(current.scroll, target.scroll, 4.2, delta)
 
       const stage = resolveMotionStage(current.scroll)
-      const mood = sceneMood(stage)
+      const mood = sceneMoodAt(current.scroll)
       if (stage !== previousStage) {
         previousStage = stage
         canvas.dataset.motionStage = stage
@@ -206,7 +207,8 @@ export function createLiquidScene(
       const rotationY = 0.25 + current.pointerX * 0.23 - current.scroll * (0.65 + mood.rotationSpeed)
       const rotationZ = -0.04 + current.scroll * (0.8 + mood.rotationSpeed)
       const viewportScale = window.innerWidth < 760 ? 0.82 : 1
-      const scale = (0.94 + Math.sin(seconds * 0.55) * 0.018 + current.scroll * 0.16) * mood.scale * viewportScale
+      const moodScale = 1 + (mood.scale - 1) * 0.12
+      const scale = (0.94 + Math.sin(seconds * 0.55) * 0.018 + current.scroll * 0.16) * moodScale * viewportScale
       const offsetY = Math.sin(seconds * 0.45 * (0.4 + mood.rotationSpeed)) * 0.04
 
       mesh.rotation.set(rotationX, rotationY, rotationZ)
@@ -220,11 +222,13 @@ export function createLiquidScene(
       particles.position.y = offsetY * 0.8 + mood.particleLift * 0.1
       material.opacity = mood.lightness
 
+      const targetMotionEnergy = motionEnergy.advance(time)
+      easedMotionEnergy = damp(easedMotionEnergy, targetMotionEnergy, 4.8, delta)
       uniforms.uTime.value = seconds
       uniforms.uPointerX.value = current.pointerX
       uniforms.uPointerY.value = current.pointerY
       uniforms.uScroll.value = current.scroll
-      uniforms.uEnergy.value = motionEnergy.advance(time)
+      uniforms.uEnergy.value = easedMotionEnergy
       renderer.render(scene, camera)
     },
     dispose() {

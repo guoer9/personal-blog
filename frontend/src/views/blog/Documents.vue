@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getDocuments, type PublicDocumentSummary } from '@/api/documents'
 import { formatDate } from '@/utils/format'
+import { visualRuntimeKey, type VisualRuntimeBridge } from '@/graphics/runtime/visualRuntimeHandle'
+import type { LibraryPageState } from '@/graphics/scenes/pageStates'
 
 const route = useRoute()
 const router = useRouter()
+const runtime = inject<Ref<VisualRuntimeBridge | null>>(visualRuntimeKey, ref(null))
 const text = (value: unknown, max: number) => typeof value === 'string' ? value.trim().slice(0, max) : ''
 const query = computed(() => text(route.query.q, 120))
 const category = computed(() => text(route.query.category, 100))
@@ -22,8 +25,27 @@ const totalPages = ref(0)
 const loading = ref(true)
 const failed = ref(false)
 const resultHeading = ref<HTMLElement | null>(null)
+const libraryAnchor = ref<HTMLElement | null>(null)
 let controller: AbortController | null = null
+let unregisterLibraryAnchor: (() => void) | null = null
 let focusOnResult = false
+
+function publishLibraryState() {
+  const state: LibraryPageState = {
+    mode: 'index', category: category.value || null, itemCount: entries.value.length,
+    page: page.value, readingProgress: 0,
+  }
+  runtime.value?.setPageState('library', state)
+}
+
+watch([runtime, libraryAnchor], ([activeRuntime, element]) => {
+  unregisterLibraryAnchor?.()
+  unregisterLibraryAnchor = activeRuntime && element
+    ? activeRuntime.registerAnchor?.('library-index', element) ?? null
+    : null
+  activeRuntime?.measureAnchors?.()
+}, { flush: 'post' })
+
 async function load() {
   controller?.abort()
   const current = new AbortController(); controller = current
@@ -37,6 +59,9 @@ async function load() {
   finally {
     if (!current.signal.aborted) {
       loading.value = false
+      publishLibraryState()
+      await nextTick()
+      runtime.value?.measureAnchors?.()
       if (focusOnResult) { focusOnResult = false; await nextTick(); resultHeading.value?.focus({ preventScroll: true }) }
     }
   }
@@ -50,11 +75,11 @@ async function navigate(nextPage = 1, clear = false) {
   else await router.push({ path: '/documents', query: nextQuery })
 }
 watch(() => route.query, load, { immediate: true })
-onBeforeUnmount(() => controller?.abort())
+onBeforeUnmount(() => { controller?.abort(); unregisterLibraryAnchor?.() })
 </script>
 
 <template>
-  <div class="documents-page page-stage page-shell">
+  <div ref="libraryAnchor" class="documents-page page-stage page-shell" @load.capture="runtime?.measureAnchors?.()">
     <header class="simple-page-header"><router-link to="/" class="back-link">← 返回首页 / HOME</router-link><p class="section-kicker">Public library / 资料与笔记</p><h1>把有用的资料，<br /><em>留在这里。</em></h1><p class="page-lede">收集经过整理的文档与笔记。按关键词寻找内容，或用分类缩小范围。</p></header>
     <form class="documents-filters" role="search" aria-label="搜索资料库" @submit.prevent="navigate()"><div><label for="documents-query">关键词</label><input id="documents-query" v-model="queryInput" type="search" maxlength="120" placeholder="搜索标题、摘要或正文" /></div><div><label for="documents-category">分类名称</label><input id="documents-category" v-model="categoryInput" type="text" maxlength="100" placeholder="精确分类，例如：技术" /></div><button type="submit" class="editorial-button editorial-button--acid">查找资料 ↗</button><button v-if="query || category" type="button" class="clear-filter" @click="navigate(1, true)">清除筛选</button></form>
     <div class="results-heading"><h2 id="documents-results" ref="resultHeading" tabindex="-1">{{ query || category ? '查找结果' : '全部资料' }}</h2><p role="status" aria-live="polite">{{ loading ? '正在读取资料…' : failed ? '读取未完成' : `${total} 份公开资料` }}</p></div>

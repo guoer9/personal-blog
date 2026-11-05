@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { inject, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import { profile } from '@/data/portfolio'
 import MagneticLink from '@/components/immersive/MagneticLink.vue'
 import ScrollReveal from '@/components/immersive/ScrollReveal.vue'
 import SocialLinks from '@/components/portfolio/SocialLinks.vue'
+import { visualRuntimeKey, type VisualRuntimeBridge } from '@/graphics/runtime/visualRuntimeHandle'
 
 const sections = [
   { id: 'approach', index: '01', label: '工作方式' },
@@ -12,7 +13,36 @@ const sections = [
 ]
 
 const activeSection = ref('approach')
+const runtime = inject<Ref<VisualRuntimeBridge | null>>(visualRuntimeKey, ref(null))
+watch(activeSection, (section) => {
+  if (section === 'approach' || section === 'practice' || section === 'now') {
+    runtime.value?.setPageState('about', { activeSection: section })
+  }
+})
+const approachAnchor = ref<HTMLElement | null>(null)
+const practiceAnchor = ref<HTMLElement | null>(null)
+const nowAnchor = ref<HTMLElement | null>(null)
 let observer: IntersectionObserver | null = null
+let unregisterSectionAnchors: (() => void)[] = []
+
+function registerSectionAnchors() {
+  unregisterSectionAnchors.forEach((unregister) => unregister())
+  unregisterSectionAnchors = []
+  const activeRuntime = runtime.value
+  if (!activeRuntime) return
+  const anchors = [
+    ['about-approach', approachAnchor.value],
+    ['about-practice', practiceAnchor.value],
+    ['about-now', nowAnchor.value],
+  ] as const
+  for (const [id, element] of anchors) {
+    if (element) {
+      const unregister = activeRuntime.registerAnchor?.(id, element)
+      if (unregister) unregisterSectionAnchors.push(unregister)
+    }
+  }
+  activeRuntime.measureAnchors?.()
+}
 
 const practice = [
   {
@@ -58,6 +88,7 @@ async function focusHash() {
 }
 
 onMounted(() => {
+  registerSectionAnchors()
   focusHash()
   observer = new IntersectionObserver((entries) => {
     const visible = entries
@@ -71,7 +102,8 @@ onMounted(() => {
   })
 })
 
-onBeforeUnmount(() => observer?.disconnect())
+watch(runtime, registerSectionAnchors, { flush: 'post' })
+onBeforeUnmount(() => { observer?.disconnect(); unregisterSectionAnchors.forEach((unregister) => unregister()) })
 </script>
 
 <template>
@@ -106,7 +138,7 @@ onBeforeUnmount(() => observer?.disconnect())
           </div>
         </header>
 
-        <section id="approach" class="about-section approach-section" aria-labelledby="approach-title">
+        <section id="approach" ref="approachAnchor" class="about-section approach-section" aria-labelledby="approach-title">
           <div class="section-number">01 / APPROACH</div>
           <ScrollReveal>
             <div class="section-body">
@@ -125,7 +157,7 @@ onBeforeUnmount(() => observer?.disconnect())
           </div>
         </section>
 
-        <section id="practice" class="about-section" aria-labelledby="practice-title">
+        <section id="practice" ref="practiceAnchor" class="about-section" aria-labelledby="practice-title">
           <div class="section-number">02 / PRACTICE</div>
           <div class="section-body">
             <p class="section-kicker">Areas of practice</p>
@@ -144,7 +176,7 @@ onBeforeUnmount(() => observer?.disconnect())
           </div>
         </section>
 
-        <section id="now" class="about-section now-section" aria-labelledby="now-title">
+        <section id="now" ref="nowAnchor" class="about-section now-section" aria-labelledby="now-title">
           <div class="section-number">03 / NOW</div>
           <div class="section-body">
             <p class="section-kicker">Current focus</p>
@@ -180,7 +212,7 @@ onBeforeUnmount(() => observer?.disconnect())
 .sidebar-index p { padding: 14px 0; margin: 0; color: var(--muted); font: 0.58rem var(--mono-font); letter-spacing: 0.06em; }
 .sidebar-index a { display: flex; gap: 13px; align-items: center; padding: 13px 0; border-top: 1px solid var(--line); font-size: 0.79rem; text-decoration: none; }
 .sidebar-index a span { color: var(--muted); font: 0.57rem var(--mono-font); }
-.sidebar-index a.active { color: var(--electric-blue); }
+.sidebar-index a.active { color: #2852d4; }
 .share-link { padding: 14px 0 0; border: 0; background: transparent; color: var(--muted); font: 0.6rem var(--mono-font); cursor: pointer; }
 .about-content { min-width: 0; }
 .about-hero { min-height: 760px; padding-top: 66px; border-bottom: 1px solid var(--ink); }

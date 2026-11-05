@@ -1,4 +1,5 @@
 import httpx
+from app.core.config import settings
 
 
 async def test_public_routes_never_show_drafts_even_to_admin(client, admin_token):
@@ -60,7 +61,9 @@ async def test_admin_can_publish_and_public_can_list_post(
 async def test_non_admin_cannot_update_post(
     client: httpx.AsyncClient,
     admin_token: str,
+    monkeypatch,
 ):
+    monkeypatch.setitem(settings.__dict__, "REGISTRATION_PHRASE", "测试验证短语")
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
     create_response = await client.post(
         "/api/v1/posts",
@@ -80,6 +83,7 @@ async def test_non_admin_cannot_update_post(
             "username": "reader",
             "email": "reader@example.com",
             "password": "reader-password",
+            "verification_phrase": "测试验证短语",
         },
     )
     assert register_response.status_code == 201

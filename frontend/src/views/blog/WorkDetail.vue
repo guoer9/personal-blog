@@ -1,17 +1,29 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { inject, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { categoryLabel, formatDuration, type Work } from '@/data/works'
 import { getWork, getWorks } from '@/api/works'
 import WorkPlayer from '@/components/works/WorkPlayer.vue'
 import WorkCard from '@/components/works/WorkCard.vue'
+import { visualRuntimeKey, type VisualRuntimeBridge } from '@/graphics/runtime/visualRuntimeHandle'
 
 const route = useRoute()
+const runtime = inject<Ref<VisualRuntimeBridge | null>>(visualRuntimeKey, ref(null))
+const detailAnchor = ref<HTMLElement | null>(null)
 const work = ref<Work | null>(null)
 const related = ref<Work[]>([])
 const loading = ref(true)
 const failed = ref(false)
 let controller: AbortController | null = null
+let unregisterDetailAnchor: (() => void) | null = null
+function registerDetailAnchor() {
+  unregisterDetailAnchor?.()
+  unregisterDetailAnchor = null
+  const activeRuntime = runtime.value
+  if (!activeRuntime || !detailAnchor.value) return
+  unregisterDetailAnchor = activeRuntime.registerAnchor?.('work-detail', detailAnchor.value) ?? null
+  activeRuntime.measureAnchors?.()
+}
 async function load() {
   controller?.abort()
   const current = new AbortController()
@@ -20,10 +32,12 @@ async function load() {
   related.value = []
   loading.value = true
   failed.value = false
+  runtime.value?.setPageState('work-detail', { category: null, hasMedia: false, playing: false, playbackProgress: 0 })
   try {
     const response = await getWork(String(route.params.slug), current.signal)
     if (current.signal.aborted) return
     work.value = response.data
+    runtime.value?.setPageState('work-detail', { category: response.data.category, hasMedia: Boolean(response.data.video || response.data.audio), playing: false, playbackProgress: 0 })
     document.title = `${response.data.title} · GUOER`
     try {
       const others = await getWorks({ category: response.data.category }, current.signal)
@@ -36,12 +50,23 @@ async function load() {
     }
   } finally { if (!current.signal.aborted) loading.value = false }
 }
+function onPlayback(state: { playing: boolean; playbackProgress: number }) {
+  const current = work.value
+  if (!current) return
+  runtime.value?.setPageState('work-detail', {
+    category: current.category,
+    hasMedia: Boolean(current.video || current.audio),
+    playing: state.playing,
+    playbackProgress: state.playbackProgress,
+  })
+}
 watch(() => route.params.slug, load, { immediate: true })
-onBeforeUnmount(() => controller?.abort())
+watch([runtime, detailAnchor], registerDetailAnchor, { flush: 'post' })
+onBeforeUnmount(() => { controller?.abort(); unregisterDetailAnchor?.() })
 </script>
 
 <template>
-  <article v-if="work" class="work-detail page-shell page-stage">
+  <article v-if="work" ref="detailAnchor" class="work-detail page-shell page-stage">
     <header class="simple-page-header">
       <router-link :to="{ path: '/works', query: { type: work.category } }" class="back-link">← 返回{{ categoryLabel(work.category) }}作品</router-link>
       <p class="section-kicker">{{ work.caption }}</p>
@@ -49,7 +74,7 @@ onBeforeUnmount(() => controller?.abort())
       <div class="detail-meta"><span>小果Fruit / GUOER</span><span>{{ categoryLabel(work.category) }}</span><span v-if="work.duration">{{ formatDuration(work.duration) }}</span></div>
       <p class="page-lede">{{ work.description }}</p>
     </header>
-    <WorkPlayer v-if="work.video || work.audio" :key="work.slug" :work="work" class="detail-player" />
+    <WorkPlayer v-if="work.video || work.audio" :key="work.slug" :work="work" class="detail-player" @playback="onPlayback" />
     <div v-else class="repository-feature" :class="`repository-feature--${work.accent}`"><span class="eyebrow">Open source / guoer9</span><p>{{ work.title }}</p><a :href="work.repository || undefined" target="_blank" rel="noopener noreferrer" class="editorial-button">在 GitHub 查看项目 ↗</a></div>
     <div class="detail-description">
       <div><p class="section-kicker">About this work</p><h2>关于这件作品</h2></div>

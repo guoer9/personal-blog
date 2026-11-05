@@ -39,4 +39,33 @@ describe('DomAnchorRegistry', () => {
     removeFirst()
     expect(registry.has('shared')).toBe(true)
   })
+
+  it('refreshes cached geometry when a registered anchor changes size', () => {
+    let notifyResize: ((entries: ResizeObserverEntry[]) => void) | undefined
+    class TestResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        notifyResize = (entries) => callback(entries, this as unknown as ResizeObserver)
+      }
+      observe = vi.fn()
+      unobserve = vi.fn()
+      disconnect = vi.fn()
+    }
+    vi.stubGlobal('ResizeObserver', TestResizeObserver)
+    const registry = new DomAnchorRegistry()
+    const element = document.createElement('div')
+    let width = 100
+    vi.spyOn(element, 'getBoundingClientRect').mockImplementation(() => ({
+      x: 0, y: 0, top: 0, right: width, bottom: 50, left: 0, width, height: 50, toJSON: () => ({}),
+    }) as DOMRect)
+    registry.register('works-grid', element)
+    registry.measure()
+    expect(registry.get('works-grid')?.width).toBe(100)
+
+    width = 420
+    notifyResize?.([{ target: element } as unknown as ResizeObserverEntry])
+
+    expect(registry.get('works-grid')?.width).toBe(420)
+    registry.clear()
+    vi.unstubAllGlobals()
+  })
 })
