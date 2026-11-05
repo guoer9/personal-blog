@@ -34,6 +34,9 @@ export interface LiquidSceneController {
   resize(width: number, height: number, dpr: number): void
   setInput(input: Readonly<SceneInput>): void
   setQualityTier(tier: QualityTier): void
+  triggerRipple?(ndcX: number, ndcY: number): boolean
+  beginPress?(ndcX: number, ndcY: number): boolean
+  endPress?(): void
   render(time: number): void
   dispose(): void
 }

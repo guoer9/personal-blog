@@ -10,6 +10,11 @@ import ImmersiveScene from '@/components/immersive/ImmersiveScene.vue'
 import { usePageSceneState } from '@/graphics/runtime/usePageSceneState'
 import { visualPageSceneBridgeKey, visualRuntimeKey, type VisualRuntimeHandle } from '@/graphics/runtime/visualRuntimeHandle'
 import type { HomePageState } from '@/graphics/scenes/pageStates'
+import {
+  createHomeSphereInteractionBridge,
+  defaultHomeSphereInteractionOptions,
+  homeSphereInteractionOptionsKey,
+} from './homeInteraction'
 import MagneticLink from '@/components/immersive/MagneticLink.vue'
 import ProjectCardMotion from '@/components/immersive/ProjectCardMotion.vue'
 import ScrollReveal from '@/components/immersive/ScrollReveal.vue'
@@ -50,14 +55,23 @@ const storyStages = [
   { id: 'signal', index: '04', label: 'SIGNAL' },
 ]
 const runtime = inject<Ref<VisualRuntimeHandle | null>>(visualRuntimeKey, ref(null))
-const sceneBridge = usePageSceneState<HomePageState>({ paused: false })
+const sceneBridge = usePageSceneState<HomePageState>({ paused: false, interaction: null })
 provide(visualPageSceneBridgeKey, sceneBridge)
+const latestInteraction = ref<HomePageState['interaction']>(null)
+const sphereInteractionOptions = inject(homeSphereInteractionOptionsKey, defaultHomeSphereInteractionOptions)
 
 function publishSceneState() {
-  const state = { paused: motionPaused.value }
+  const state: HomePageState = { paused: motionPaused.value, interaction: latestInteraction.value }
   sceneBridge.setState(state)
   runtime.value?.setPageState('home', state)
 }
+const sphereInteraction = createHomeSphereInteractionBridge({
+  options: sphereInteractionOptions,
+  emit: (interaction) => {
+    latestInteraction.value = interaction
+    publishSceneState()
+  },
+})
 const MOTION_PAUSE_KEY = 'field-notes:motion-paused'
 let scrollFrame = 0
 let resizeObserver: ResizeObserver | null = null
@@ -134,6 +148,7 @@ watch(motionPaused, publishSceneState)
 watch(runtime, publishSceneState)
 
 onBeforeUnmount(() => {
+  sphereInteraction.dispose()
   worksController?.abort()
   if (scrollFrame) cancelAnimationFrame(scrollFrame)
   window.removeEventListener('scroll', scheduleNarrativeUpdate)
@@ -172,7 +187,15 @@ onBeforeUnmount(() => {
           <MagneticLink href="#writing">最新文章</MagneticLink>
         </div>
       </div>
-      <div class="hero-visual">
+      <div
+        class="hero-visual"
+        @pointerdown="sphereInteraction.onPointerDown"
+        @pointermove="sphereInteraction.onPointerMove"
+        @pointerup="sphereInteraction.onPointerUp"
+        @pointercancel="sphereInteraction.onPointerCancel"
+        @pointerleave="sphereInteraction.onPointerLeave"
+        @click.capture="sphereInteraction.onClickCapture"
+      >
         <ImmersiveScene :progress="storyProgress" :paused="motionPaused" />
         <span class="hero-signature">{{ profile.name }}</span>
       </div>

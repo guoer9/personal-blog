@@ -5,7 +5,8 @@ import type { PageSceneModule, SceneContext, SceneRenderContext, VisualState } f
 export class HomeScene implements PageSceneModule<HomePageState> {
   readonly id = 'home' as const
   private controller: LiquidSceneController | null = null
-  private pageState: HomePageState = { paused: false }
+  private pageState: HomePageState = { paused: false, interaction: null }
+  private lastInteractionSequence = 0
 
   mount(context: SceneContext): void {
     this.controller = createLiquidScene(context.renderer, { pointerX: 0, pointerY: 0, scroll: 0 })
@@ -13,9 +14,16 @@ export class HomeScene implements PageSceneModule<HomePageState> {
   enter(): void {}
   leave(): void {}
   update(visualState: Readonly<VisualState>, pageState: Readonly<HomePageState>): void {
-    this.pageState = { ...(pageState || { paused: false }) }
+    this.pageState = { ...(pageState || { paused: false, interaction: null }) }
     this.controller?.setQualityTier(visualState.qualityTier)
     this.controller?.setInput({ pointerX: visualState.pointerX, pointerY: visualState.pointerY, scroll: visualState.documentProgress })
+    const interaction = this.pageState.interaction
+    if (!interaction || interaction.sequence <= this.lastInteractionSequence) return
+    this.lastInteractionSequence = interaction.sequence
+    if (this.pageState.paused || visualState.reducedMotion) return
+    if (interaction.type === 'tap') this.controller?.triggerRipple?.(interaction.ndcX, interaction.ndcY)
+    if (interaction.type === 'press-start') this.controller?.beginPress?.(interaction.ndcX, interaction.ndcY)
+    if (interaction.type === 'press-end') this.controller?.endPress?.()
   }
   resize(width: number, height: number, dpr: number): void { this.controller?.resize(width, height, dpr) }
   render(context: SceneRenderContext): void {

@@ -78,7 +78,7 @@ describe('PageTransitionCoordinator', () => {
     return coordinator.preloadTarget().then(() => coordinator.afterEnter()).then(() => {
       coordinator.setVisualState(createVisualState())
       coordinator.updatePageState('home', { paused: true })
-      expect(updates).toEqual([{ paused: false }, { paused: true }])
+      expect(updates).toEqual([{ paused: false, interaction: null }, { paused: true }])
     })
   })
 

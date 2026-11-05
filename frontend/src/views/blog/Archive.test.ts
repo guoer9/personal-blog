@@ -23,7 +23,7 @@ describe('Archive scene bridge', () => {
     const runtime = { setPageState: vi.fn(), registerAnchor: vi.fn(() => vi.fn()), measureAnchors: vi.fn() }
     const router = createRouter({ history: createMemoryHistory(), routes: [
       { path: '/writing', component: Archive },
-      { path: '/post/:slug', component: { template: '<div />' } },
+      { path: '/post/:slug', name: 'PostDetail', component: { template: '<div />' } },
     ] })
     await router.push('/writing'); await router.isReady()
     wrapper = mount(Archive, { attachTo: document.body, global: { plugins: [router], provide: { [visualRuntimeKey as symbol]: ref(runtime) } } })
@@ -48,7 +48,7 @@ describe('Archive scene bridge', () => {
     }], total: 1 } })
     const router = createRouter({ history: createMemoryHistory(), routes: [
       { path: '/writing', component: Archive },
-      { path: '/post/:slug', component: { template: '<div />' } },
+      { path: '/post/:slug', name: 'PostDetail', component: { template: '<div />' } },
     ] })
     await router.push('/writing'); await router.isReady()
     wrapper = mount(Archive, { attachTo: document.body, global: { plugins: [router] } })
