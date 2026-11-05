@@ -119,6 +119,8 @@ async def get_post(
         ).where(NotionPage.post_id == post.id))
     else:
         document = await db.scalar(select(NotionDocument).where(NotionDocument.legacy_post_slug == slug))
+    if document is None:
+        document = await db.scalar(select(NotionDocument).where(NotionDocument.slug == slug))
     if document is not None:
         if document.status == "published" and not document.manual_unpublished:
             return RedirectResponse(

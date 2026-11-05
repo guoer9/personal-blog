@@ -105,6 +105,10 @@ async def test_public_document_detail_and_legacy_post_redirect(client, db_sessio
     assert legacy.status_code in (301, 302, 307, 308)
     assert legacy.headers["location"].endswith("/api/v1/documents/safe-note")
 
+    canonical_alias = await client.get("/api/v1/posts/safe-note", follow_redirects=False)
+    assert canonical_alias.status_code in (301, 302, 307, 308)
+    assert canonical_alias.headers["location"].endswith("/api/v1/documents/safe-note")
+
     missing = await client.get("/api/v1/documents/does-not-exist")
     assert missing.status_code == 404
 
