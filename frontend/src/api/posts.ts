@@ -1,5 +1,4 @@
 import request from '@/utils/request'
-import type { PublicDocument } from './documents'
 
 export interface Tag {
   id: number
@@ -80,11 +79,8 @@ export function searchPosts(params: { q: string; page?: number; page_size?: numb
   })
 }
 
-// 获取文章详情。详情页已提供固定的页面内错误状态，避免与全局 toast 重复通知。
-export function getPost(slug: string) {
-  return request.get<Post | PublicDocument>(`/posts/${encodeURIComponent(slug)}`, {
-    suppressErrorToast: true,
-  })
+export function getArticleTags() {
+  return request.get<ArticleTag[]>('/posts/topics/list')
 }
 
 // 管理员按 ID 获取文章（包含草稿）

@@ -1,7 +1,6 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import math
 
@@ -11,16 +10,15 @@ from app.schemas.post import (
     PostDetailResponse, PostPaginatedResponse
 )
 from app.crud.post import (
-    get_post_by_id, get_post_by_slug, get_posts, 
+    get_post_by_id, get_posts,
     create_post, update_post, delete_post,
     increment_view_count
 )
-from app.crud.article import get_public_articles, get_public_article_tags
+from app.crud.article import get_article_by_slug, get_public_articles, get_public_article_tags
 from app.schemas.articles import PublicArticlePage, PublicArticleTag
 from app.api.deps import get_current_admin
 from app.models.user import User
 from app.models.notion_library import NotionDocument
-from app.models.notion import NotionPage
 from app.core.config import settings
 
 router = APIRouter()
@@ -109,34 +107,24 @@ async def get_post(
     slug: str,
     db: AsyncSession = Depends(get_db),
 ):
-    """获取文章详情"""
-    # A migrated Notion page retains its old permalink but has one current
-    # body/comment/view target. A stale posts row cannot override its visibility.
-    post = await get_post_by_slug(db, slug, include_unpublished=True)
-    if post is not None:
-        document = await db.scalar(select(NotionDocument).join(
-            NotionPage, NotionDocument.notion_page_id == NotionPage.notion_page_id,
-        ).where(NotionPage.post_id == post.id))
-    else:
-        document = await db.scalar(select(NotionDocument).where(NotionDocument.legacy_post_slug == slug))
-    if document is None:
-        document = await db.scalar(select(NotionDocument).where(NotionDocument.slug == slug))
-    if document is not None:
-        if document.status == "published" and not document.manual_unpublished:
+    """兼容旧文章 API；公开页面统一使用 /documents。"""
+    article = await get_article_by_slug(db, slug)
+    if isinstance(article, NotionDocument):
+        if article.status == "published" and not article.manual_unpublished:
             return RedirectResponse(
-                url=f"{settings.API_V1_PREFIX}/documents/{document.slug}",
+                url=f"{settings.API_V1_PREFIX}/documents/{article.slug}",
                 status_code=307,
             )
         raise HTTPException(status_code=404, detail="文章不存在")
 
-    if post is None or not post.is_published:
+    if article is None or not article.is_published:
         raise HTTPException(status_code=404, detail="文章不存在")
     
     # 增加浏览次数
-    await increment_view_count(db, post)
+    await increment_view_count(db, article)
     await db.commit()
     
-    return post
+    return article
 
 
 @router.post("", response_model=PostDetailResponse, status_code=status.HTTP_201_CREATED)

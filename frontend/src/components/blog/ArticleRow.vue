@@ -2,7 +2,7 @@
 import type { PublicArticle } from '@/api/posts'
 import { formatDate } from '@/utils/format'
 
-defineProps<{ post: PublicArticle; index: number }>()
+withDefaults(defineProps<{ post: PublicArticle; index: number; headingTag?: 'h2' | 'h3' }>(), { headingTag: 'h3' })
 </script>
 
 <template>
@@ -15,7 +15,7 @@ defineProps<{ post: PublicArticle; index: number }>()
         <span>{{ post.view_count }} 次阅读</span>
       </div>
       <router-link :to="post.public_url" class="article-link">
-        <h3>{{ post.title }}</h3>
+        <component :is="headingTag" class="article-title">{{ post.title }}</component>
         <p v-if="post.summary">{{ post.summary }}</p>
       </router-link>
       <div v-if="post.tags.length" class="article-tags" aria-label="文章标签">
@@ -63,14 +63,14 @@ defineProps<{ post: PublicArticle; index: number }>()
 }
 .article-link { color: var(--ink); text-decoration: none; }
 .article-link:focus-visible { outline: 3px solid var(--electric-blue); outline-offset: 5px; }
-h3 {
+.article-title {
   font-family: var(--display-font);
   font-size: clamp(1.45rem, 3vw, 2.35rem);
   line-height: 1.06;
   letter-spacing: -0.04em;
   transition: color 180ms ease;
 }
-.article-row:hover h3 { color: var(--electric-blue); }
+.article-row:hover .article-title { color: var(--electric-blue); }
 p { max-width: 760px; margin-top: 12px; color: var(--muted); font-size: 0.94rem; }
 .article-tags { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 16px; }
 .tag-link {

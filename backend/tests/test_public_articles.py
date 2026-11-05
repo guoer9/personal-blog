@@ -190,6 +190,48 @@ async def test_unmapped_existing_slug_collision_keeps_manual_article_visible(cli
     assert detail.status_code == 200
     assert detail.json()["id"] == manual.id
     assert detail.json()["content"] == "Unrelated body"
+    canonical = await client.get("/api/v1/documents/reused")
+    assert canonical.status_code == 200
+    assert canonical.json()["kind"] == "post"
+    assert canonical.json()["id"] == manual.id
+    assert canonical.json()["content"] == "Unrelated body"
+
+
+@pytest.mark.parametrize("visibility", ["published", "isolated", "archived", "manual"])
+async def test_document_legacy_url_uses_mapped_source_visibility_and_identity(
+    client, db_session, articles, visibility,
+):
+    legacy = await articles("post", slug="old-mapped", content="Stale body", view_count=7)
+    document = await articles(
+        slug="canonical-mapped", legacy_post_slug="retired-name", content="Current body", view_count=11,
+        status="published" if visibility == "manual" else visibility,
+        manual_unpublished=visibility == "manual",
+    )
+    db_session.add(NotionPage(notion_page_id=document.notion_page_id, post_id=legacy.id, source_title=legacy.title))
+    await db_session.commit()
+    for slug in ("old-mapped", "retired-name", "canonical-mapped"):
+        response = await client.get(f"/api/v1/documents/{slug}")
+        if visibility != "published":
+            assert response.status_code == 404
+        else:
+            assert response.status_code == 200
+            assert response.json()["kind"] == "notion"
+            assert response.json()["id"] == document.id
+            assert response.json()["slug"] == "canonical-mapped"
+            assert response.json()["content"] == "Current body"
+    await db_session.refresh(legacy)
+    await db_session.refresh(document)
+    assert legacy.view_count == 7
+    assert document.view_count == (14 if visibility == "published" else 11)
+
+
+async def test_new_manual_slug_reserves_document_canonical_permalink(client, articles, admin_token):
+    await articles(slug="shared-name")
+    response = await client.post("/api/v1/posts", headers={"Authorization": f"Bearer {admin_token}"}, json={
+        "title": "Shared name", "content": "Manual body", "is_published": True,
+    })
+    assert response.status_code == 201
+    assert response.json()["slug"] == "shared-name-1"
 
 
 async def test_existing_category_permalink_survives_matching_tag_creation(client, db_session, articles):

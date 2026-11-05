@@ -31,11 +31,34 @@ describe('user-controlled work player', () => {
     expect(wrapper.get('audio').attributes('preload')).toBe('none')
     await wrapper.get('button[data-mode="video"]').trigger('click')
     expect(pause).toHaveBeenCalled()
+    expect(wrapper.emitted('playback')).toEqual([[{ playing: false, playbackProgress: 0 }]])
     expect(wrapper.find('audio').exists()).toBe(false)
     await wrapper.get('video').trigger('error')
     expect(wrapper.get('[role="status"]').text()).toContain('暂时无法播放')
     await wrapper.get('button[data-retry]').trigger('click')
     expect(load).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('emits playback state from the controlled media element', async () => {
+    const wrapper = mount(WorkPlayer, { props: { work: music } })
+    const audio = wrapper.get('audio').element as HTMLAudioElement
+    Object.defineProperty(audio, 'currentTime', { configurable: true, value: 10 })
+    Object.defineProperty(audio, 'duration', { configurable: true, value: 40 })
+    Object.defineProperty(audio, 'paused', { configurable: true, value: false })
+    await wrapper.get('audio').trigger('play')
+    await wrapper.get('audio').trigger('timeupdate')
+    await wrapper.get('audio').trigger('pause')
+    Object.defineProperty(audio, 'currentTime', { configurable: true, value: 40 })
+    await wrapper.get('audio').trigger('ended')
+    await wrapper.get('audio').trigger('error')
+    expect(wrapper.emitted('playback')).toEqual([
+      [{ playing: true, playbackProgress: 0.25 }],
+      [{ playing: true, playbackProgress: 0.25 }],
+      [{ playing: false, playbackProgress: 0.25 }],
+      [{ playing: false, playbackProgress: 1 }],
+      [{ playing: false, playbackProgress: 1 }],
+    ])
     wrapper.unmount()
   })
 })

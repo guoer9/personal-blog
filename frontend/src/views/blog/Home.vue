@@ -1,17 +1,25 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, inject, onBeforeUnmount, onMounted, provide, ref, watch, type Ref } from 'vue'
 import { getPosts, getArticleTags, type PublicArticle, type ArticleTag } from '@/api/posts'
 import { profile, resources } from '@/data/portfolio'
 import { getWorks } from '@/api/works'
 import type { Work } from '@/data/works'
 import WorkCard from '@/components/works/WorkCard.vue'
 import ImmersiveScene from '@/components/immersive/ImmersiveScene.vue'
+import { usePageSceneState } from '@/graphics/runtime/usePageSceneState'
+import { visualPageSceneBridgeKey, visualRuntimeKey, type VisualRuntimeHandle } from '@/graphics/runtime/visualRuntimeHandle'
+import type { HomePageState } from '@/graphics/scenes/pageStates'
+import {
+  createHomeSphereInteractionBridge,
+  defaultHomeSphereInteractionOptions,
+  homeSphereInteractionOptionsKey,
+} from './homeInteraction'
 import MagneticLink from '@/components/immersive/MagneticLink.vue'
 import ProjectCardMotion from '@/components/immersive/ProjectCardMotion.vue'
 import ScrollReveal from '@/components/immersive/ScrollReveal.vue'
 import ArticleRow from '@/components/blog/ArticleRow.vue'
 import StatePanel from '@/components/blog/StatePanel.vue'
-import { narrativeProgress, resolveMotionStage } from '@/graphics/motion'
+import { narrativeProgress, resolveMotionStage, stageFocus } from '@/graphics/motion'
 
 const posts = ref<PublicArticle[]>([])
 const featuredWorks = ref<Work[]>([])
@@ -39,6 +47,35 @@ const manualMotionPaused = ref(false)
 const systemReducedMotion = ref(false)
 const motionPaused = computed(() => manualMotionPaused.value || systemReducedMotion.value)
 const motionStage = computed(() => resolveMotionStage(storyProgress.value))
+const storyStages = [
+  { id: 'idea', index: '01', label: 'IDEA' },
+  { id: 'writing', index: '02', label: 'NOTES' },
+  { id: 'projects', index: '03', label: 'WORK' },
+  { id: 'signal', index: '04', label: 'SIGNAL' },
+]
+const runtime = inject<Ref<VisualRuntimeHandle | null>>(visualRuntimeKey, ref(null))
+const sceneBridge = usePageSceneState<HomePageState>({ paused: false, interaction: null })
+provide(visualPageSceneBridgeKey, sceneBridge)
+const latestInteraction = ref<HomePageState['interaction']>(null)
+const sphereGestureActive = ref(false)
+const sphereInteractionOptions = inject(homeSphereInteractionOptionsKey, defaultHomeSphereInteractionOptions)
+
+function publishSceneState() {
+  const state: HomePageState = { paused: motionPaused.value, interaction: latestInteraction.value }
+  sceneBridge.setState(state)
+  runtime.value?.setPageState('home', state)
+}
+const sphereInteraction = createHomeSphereInteractionBridge({
+  options: sphereInteractionOptions,
+  onGestureActive: (active) => {
+    sphereGestureActive.value = active
+    document.body?.classList.toggle('sphere-gesture-active', active)
+  },
+  emit: (interaction) => {
+    latestInteraction.value = interaction
+    publishSceneState()
+  },
+})
 const MOTION_PAUSE_KEY = 'field-notes:motion-paused'
 let scrollFrame = 0
 let resizeObserver: ResizeObserver | null = null
@@ -72,6 +109,10 @@ function scheduleNarrativeUpdate() {
   scrollFrame = requestAnimationFrame(updateNarrative)
 }
 
+function stageStyle(index: number) {
+  return { '--stage-focus': stageFocus(storyProgress.value, index) }
+}
+
 function setSystemReducedMotion(event: MediaQueryListEvent | MediaQueryList) {
   systemReducedMotion.value = event.matches
 }
@@ -97,6 +138,11 @@ onMounted(() => {
   reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
   setSystemReducedMotion(reducedMotionQuery)
   reducedMotionQuery.addEventListener('change', setSystemReducedMotion)
+  document.addEventListener('pointerdown', sphereInteraction.onPointerDown, true)
+  document.addEventListener('pointermove', sphereInteraction.onPointerMove, true)
+  document.addEventListener('pointerup', sphereInteraction.onPointerUp, true)
+  document.addEventListener('pointercancel', sphereInteraction.onPointerCancel, true)
+  document.addEventListener('click', sphereInteraction.onClickCapture, true)
   updateNarrative()
   window.addEventListener('scroll', scheduleNarrativeUpdate, { passive: true })
   window.addEventListener('resize', scheduleNarrativeUpdate, { passive: true })
@@ -104,9 +150,20 @@ onMounted(() => {
     resizeObserver = new ResizeObserver(scheduleNarrativeUpdate)
     resizeObserver.observe(home.value)
   }
+  publishSceneState()
 })
 
+watch(motionPaused, publishSceneState)
+watch(runtime, publishSceneState)
+
 onBeforeUnmount(() => {
+  sphereInteraction.dispose()
+  document.removeEventListener('pointerdown', sphereInteraction.onPointerDown, true)
+  document.removeEventListener('pointermove', sphereInteraction.onPointerMove, true)
+  document.removeEventListener('pointerup', sphereInteraction.onPointerUp, true)
+  document.removeEventListener('pointercancel', sphereInteraction.onPointerCancel, true)
+  document.removeEventListener('click', sphereInteraction.onClickCapture, true)
+  document.body?.classList.remove('sphere-gesture-active')
   worksController?.abort()
   if (scrollFrame) cancelAnimationFrame(scrollFrame)
   window.removeEventListener('scroll', scheduleNarrativeUpdate)
@@ -120,6 +177,7 @@ onBeforeUnmount(() => {
   <div
     ref="home"
     class="home"
+    :class="{ 'home--sphere-gesture-active': sphereGestureActive }"
     :data-stage="motionStage"
     :data-motion-paused="motionPaused"
     :style="{ '--story-progress': storyProgress }"
@@ -127,10 +185,9 @@ onBeforeUnmount(() => {
     <div class="story-rail" aria-hidden="true">
       <span class="story-rail__line"><i /></span>
       <ol class="story-rail__stages">
-        <li data-stage-label="idea"><span>01</span> IDEA</li>
-        <li data-stage-label="writing"><span>02</span> NOTES</li>
-        <li data-stage-label="projects"><span>03</span> WORK</li>
-        <li data-stage-label="signal"><span>04</span> SIGNAL</li>
+        <li v-for="(stage, index) in storyStages" :key="stage.id" :data-stage-label="stage.id" :style="stageStyle(index)">
+          <span>{{ stage.index }}</span> {{ stage.label }}
+        </li>
       </ol>
     </div>
     <section class="hero page-shell" aria-labelledby="hero-title">
@@ -146,7 +203,9 @@ onBeforeUnmount(() => {
           <MagneticLink href="#writing">最新文章</MagneticLink>
         </div>
       </div>
-      <div class="hero-visual">
+      <div
+        class="hero-visual"
+      >
         <ImmersiveScene :progress="storyProgress" :paused="motionPaused" />
         <span class="hero-signature">{{ profile.name }}</span>
       </div>
@@ -321,6 +380,7 @@ onBeforeUnmount(() => {
   letter-spacing: 0.08em;
   pointer-events: none;
   transform: translateY(-50%);
+  transition: color 520ms ease;
 }
 .motion-toggle {
   display: inline-flex;
@@ -349,6 +409,7 @@ onBeforeUnmount(() => {
   height: 164px;
   background: rgba(17, 17, 17, 0.24);
   overflow: hidden;
+  transition: background-color 520ms ease;
 }
 .story-rail__line i {
   position: absolute;
@@ -356,6 +417,7 @@ onBeforeUnmount(() => {
   background: var(--electric-blue);
   transform: scaleY(var(--story-progress));
   transform-origin: top;
+  transition: background-color 520ms ease;
 }
 .story-rail__stages {
   display: grid;
@@ -368,20 +430,21 @@ onBeforeUnmount(() => {
   position: relative;
   display: flex;
   gap: 7px;
-  opacity: 0.46;
-  transition: color 240ms ease, opacity 240ms ease, transform 240ms ease;
+  opacity: calc(0.46 + var(--stage-focus, 0) * 0.54);
+  transform: translateX(calc(var(--stage-focus, 0) * -4px));
 }
 .story-rail__stages li::before {
   position: absolute;
   top: 50%;
   left: -16px;
-  width: 5px;
-  height: 5px;
+  width: calc(4px + var(--stage-focus, 0) * 1px);
+  height: calc(4px + var(--stage-focus, 0) * 1px);
   border: 1px solid currentColor;
   border-radius: 50%;
   background: var(--paper);
   content: '';
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) scale(calc(0.88 + var(--stage-focus, 0) * 0.12));
+  box-shadow: 0 0 0 calc(var(--stage-focus, 0) * 3px) rgba(55, 103, 255, calc(var(--stage-focus, 0) * 0.16));
 }
 .story-rail__stages li span { color: inherit; opacity: 0.62; }
 .home[data-stage='projects'] .story-rail,
@@ -390,30 +453,8 @@ onBeforeUnmount(() => {
 .home[data-stage='signal'] .story-rail__line { background: rgba(244, 241, 234, 0.25); }
 .home[data-stage='projects'] .story-rail__line i,
 .home[data-stage='signal'] .story-rail__line i { background: var(--acid); }
-.home[data-stage='projects'] [data-stage-label='projects'],
-.home[data-stage='signal'] [data-stage-label='signal'] { color: var(--paper); }
-.home[data-stage='projects'] [data-stage-label='projects']::before,
-.home[data-stage='signal'] [data-stage-label='signal']::before { border-color: var(--acid); background: var(--acid); box-shadow: 0 0 0 3px rgba(199, 255, 46, 0.16); }
 .home[data-stage='projects'] .story-rail__stages li::before,
 .home[data-stage='signal'] .story-rail__stages li::before { background: var(--ink); }
-.home[data-stage='idea'] [data-stage-label='idea'],
-.home[data-stage='writing'] [data-stage-label='writing'],
-.home[data-stage='projects'] [data-stage-label='projects'],
-.home[data-stage='signal'] [data-stage-label='signal'] {
-  color: var(--ink);
-  opacity: 1;
-  transform: translateX(-4px);
-}
-.home[data-stage='idea'] [data-stage-label='idea']::before,
-.home[data-stage='writing'] [data-stage-label='writing']::before,
-.home[data-stage='projects'] [data-stage-label='projects']::before,
-.home[data-stage='signal'] [data-stage-label='signal']::before {
-  border-color: var(--electric-blue);
-  background: var(--electric-blue);
-  box-shadow: 0 0 0 3px rgba(55, 103, 255, 0.16);
-}
-.home[data-stage='projects'] [data-stage-label='projects'],
-.home[data-stage='signal'] [data-stage-label='signal'] { color: var(--paper); }
 .home[data-motion-paused='true'] .marquee-track,
 .home[data-motion-paused='true'] .loading-lines span,
 .home[data-motion-paused='true'] :deep(.scene-orbit),
@@ -468,7 +509,8 @@ h1 span, h1 em { display: block; }
 h1 em, .section-heading em { color: var(--electric-blue); font-weight: 400; }
 .hero-intro { max-width: 480px; color: var(--muted); font-size: clamp(1rem, 1.5vw, 1.22rem); line-height: 1.8; }
 .hero-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 26px; margin-top: 38px; }
-.hero-visual { position: relative; min-width: 0; min-height: 480px; }
+.hero-visual { position: relative; min-width: 0; min-height: 480px; touch-action: pan-y; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+:global(body.sphere-gesture-active), :global(body.sphere-gesture-active *) { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .hero-visual :deep(.immersive-scene) { height: min(680px, 72vh); }
 .hero-signature { position: absolute; right: 10%; bottom: 18%; z-index: 1; color: rgba(17, 17, 17, 0.1); font: 800 clamp(3rem, 7vw, 7rem) var(--display-font); letter-spacing: -0.05em; pointer-events: none; }
 .hero-footnote { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font: 0.58rem var(--mono-font); letter-spacing: 0.07em; }
@@ -575,6 +617,6 @@ h1 em, .section-heading em { color: var(--electric-blue); font-weight: 400; }
   .marquee-track { animation: none; }
   .loading-lines span { animation: none; }
   .motion-toggle { display: none; }
-  .story-rail__line i, .story-rail__stages li, .projects-section::before { transition: none; }
+  .story-rail, .story-rail__line, .story-rail__line i, .projects-section::before { transition: none; }
 }
 </style>

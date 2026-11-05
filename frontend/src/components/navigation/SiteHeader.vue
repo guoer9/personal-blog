@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { navigation, profile } from '@/data/portfolio'
+import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 const menuOpen = ref(false)
 const searchOpen = ref(false)
 const searchKeyword = ref('')
 const searchInput = ref<HTMLInputElement | null>(null)
 const searchToggle = ref<HTMLButtonElement | null>(null)
-const isDark = computed(() => ['PostDetail'].includes(String(route.name)))
 
 function submitSearch() {
   const query = searchKeyword.value.trim()
@@ -18,6 +19,12 @@ function submitSearch() {
   menuOpen.value = false
   searchOpen.value = false
   router.push({ name: 'Search', query: { q: query } })
+}
+
+function logout() {
+  userStore.logout()
+  menuOpen.value = false
+  searchOpen.value = false
 }
 
 async function toggleSearch() {
@@ -50,12 +57,21 @@ onBeforeUnmount(() => document.removeEventListener('keydown', closeOnEscape))
 </script>
 
 <template>
-  <header class="site-header" :class="{ 'site-header--dark': isDark, 'site-header--open': menuOpen }">
+  <header class="site-header" :class="{ 'site-header--open': menuOpen }">
     <div class="header-inner">
-      <router-link to="/" class="brand" title="返回首页">
-        <span class="brand-mark">{{ profile.monogram }}</span>
-        <span class="brand-name">{{ profile.name }}</span>
-      </router-link>
+      <div class="header-identity">
+        <router-link to="/" class="brand" title="返回首页">
+          <span class="brand-mark">{{ profile.monogram }}</span>
+          <span class="brand-name">{{ profile.name }}</span>
+        </router-link>
+        <router-link v-if="!userStore.isLoggedIn" to="/login" class="account-link">登录</router-link>
+        <template v-else>
+          <span class="account-link account-link--user" :title="userStore.userInfo?.username || '正在读取用户信息'">
+            {{ userStore.userInfo?.username || '读取中…' }}
+          </span>
+          <button class="logout-button" data-action="logout" type="button" @click="logout">退出</button>
+        </template>
+      </div>
 
       <nav class="desktop-navigation" aria-label="主导航">
         <router-link
@@ -105,11 +121,6 @@ onBeforeUnmount(() => document.removeEventListener('keydown', closeOnEscape))
   background: rgba(244, 241, 234, 0.9);
   backdrop-filter: blur(18px);
 }
-.site-header--dark {
-  border-color: rgba(255, 255, 255, 0.16);
-  color: #f4f1ea;
-  background: rgba(16, 17, 18, 0.92);
-}
 .header-inner {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -120,6 +131,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', closeOnEscape))
   margin: 0 auto;
 }
 .brand { display: inline-flex; align-items: center; gap: 12px; width: fit-content; color: inherit; text-decoration: none; }
+.header-identity { display: flex; align-items: center; gap: clamp(14px, 2vw, 28px); min-width: 0; }
 .brand-mark {
   display: grid;
   place-items: center;
@@ -130,8 +142,12 @@ onBeforeUnmount(() => document.removeEventListener('keydown', closeOnEscape))
   color: var(--acid);
   font: 800 0.78rem var(--mono-font);
 }
-.site-header--dark .brand-mark { background: var(--acid); color: var(--ink); }
 .brand-name { font: 700 0.76rem var(--mono-font); letter-spacing: 0.14em; }
+.account-link { justify-self: start; color: inherit; font-size: .95rem; text-decoration: none; white-space: nowrap; }
+.account-link:hover, .account-link:focus-visible { text-decoration: underline; text-underline-offset: 5px; }
+.account-link--user { overflow: hidden; max-width: 150px; text-overflow: ellipsis; }
+.logout-button { padding: 0; border: 0; background: transparent; color: inherit; font: .62rem var(--mono-font); cursor: pointer; text-decoration: underline; text-underline-offset: 4px; }
+.logout-button:hover, .logout-button:focus-visible { color: var(--electric-blue); }
 .desktop-navigation { display: flex; align-items: stretch; gap: 34px; }
 .nav-link {
   position: relative;
@@ -157,7 +173,6 @@ onBeforeUnmount(() => document.removeEventListener('keydown', closeOnEscape))
 .nav-link:hover::after, .nav-link.is-active::after { transform: scaleX(1); transform-origin: left; }
 .nav-link span { font-size: 0.86rem; }
 .nav-link small { color: var(--muted); font: 0.59rem var(--mono-font); letter-spacing: 0.04em; text-transform: uppercase; }
-.site-header--dark .nav-link small { color: #979b9b; }
 .header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 16px; }
 .icon-button, .menu-toggle { border: 1px solid currentColor; background: transparent; color: inherit; cursor: pointer; }
 .icon-button { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; }
@@ -192,6 +207,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', closeOnEscape))
 }
 @media (max-width: 520px) {
   .brand-name { display: none; }
+  .account-link { margin-left: 4px; }
   .header-actions { gap: 10px; }
   .header-search { grid-template-columns: 1fr auto; }
 }

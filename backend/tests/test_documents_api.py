@@ -114,6 +114,34 @@ async def test_public_document_detail_and_legacy_post_redirect(client, db_sessio
 
 
 @pytest.mark.asyncio
+async def test_public_document_detail_reads_manual_published_articles(client, db_session, admin_token):
+    from app.models import Post, User
+
+    author = await db_session.scalar(select(User).where(User.username == "admin"))
+    db_session.add(Post(
+        title="手写文章也使用资料库详情页",
+        slug="manual-library-detail",
+        content="# 正文\n\n手写文章正文",
+        summary="摘要",
+        is_published=True,
+        author_id=author.id,
+    ))
+    await db_session.commit()
+
+    response = await client.get("/api/v1/documents/manual-library-detail")
+
+    assert response.status_code == 200
+    assert response.json()["kind"] == "post"
+    assert response.json()["content"] == "# 正文\n\n手写文章正文"
+    assert response.json()["public_url"] == "/documents/manual-library-detail"
+    assert response.json()["external_url"] is None
+    assert response.json()["view_count"] == 1
+    again = await client.get("/api/v1/documents/manual-library-detail")
+    assert again.json()["view_count"] == 2
+    assert again.json()["updated_at"] == response.json()["updated_at"]
+
+
+@pytest.mark.asyncio
 async def test_notion_document_comments_are_supported_and_counted(
     client, db_session, admin_token
 ):

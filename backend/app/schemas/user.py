@@ -12,6 +12,7 @@ class UserBase(BaseModel):
 # 用户创建（注册）
 class UserCreate(UserBase):
     password: str = Field(..., min_length=6, max_length=100)
+    verification_phrase: str = Field(..., min_length=1, max_length=200)
 
 
 # 用户更新

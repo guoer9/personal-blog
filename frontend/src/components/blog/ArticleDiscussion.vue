@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { createComment, deleteComment, getComments, getNotionComments, type Comment } from '@/api/comments'
 import { useUserStore } from '@/stores/user'
 import { confirmAction, showError, showSuccess } from '@/ui/feedback'
@@ -8,6 +9,7 @@ import { formatDate } from '@/utils/format'
 const props = defineProps<{ kind: 'post' | 'notion'; articleId: number; initialCount: number }>()
 const emit = defineEmits<{ countChange: [count: number] }>()
 const user = useUserStore()
+const route = useRoute()
 const comments = ref<Comment[]>([])
 const loading = ref(false)
 const failed = ref(false)
@@ -90,7 +92,7 @@ onBeforeUnmount(() => { sequence += 1 })
       <textarea id="document-comment" ref="textarea" v-model="content" rows="4" maxlength="2000" placeholder="写下你的想法…" :disabled="sending" />
       <div class="form-footer"><span>{{ content.length }} / 2000</span><button type="submit" class="editorial-button" :disabled="sending || !content.trim()">{{ sending ? '发送中…' : '发布评论' }}</button></div>
     </form>
-    <p v-else class="anonymous-note">当前仅展示已有讨论，登录后可以发表评论。</p>
+    <p v-else class="anonymous-note"><router-link :to="{ path: '/login', query: { redirect: route.fullPath } }">登录后发表评论 ↗</router-link></p>
     <div v-if="loading" role="status">正在读取评论…</div>
     <div v-else-if="failed" role="alert"><p>评论暂时没有加载成功。</p><button type="button" class="editorial-button" @click="load">重新加载评论</button></div>
     <div v-else-if="!rows.length" role="status">还没有评论。第一条想法会从这里开始。</div>

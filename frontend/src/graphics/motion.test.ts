@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clamp, damp, pointerToNdc } from './motion'
+import { clamp, damp, MotionEnergy, pointerToNdc } from './motion'
 
 describe('damp', () => {
   it('is effectively independent of frame subdivision', () => {
@@ -26,6 +26,48 @@ describe('damp', () => {
 
     expect(next).toBeGreaterThan(0)
     expect(next).toBeLessThan(10)
+  })
+})
+
+describe('MotionEnergy', () => {
+  it('turns pointer or scroll speed into a bounded visual impulse', () => {
+    const pointerEnergy = new MotionEnergy()
+
+    pointerEnergy.pulse(0.6, 0.5, 1.2)
+    expect(pointerEnergy.advance(1000)).toBeCloseTo(1, 12)
+
+    const scrollEnergy = new MotionEnergy()
+    scrollEnergy.pulse(0.12, 0.1, 1.5)
+    expect(scrollEnergy.advance(1000)).toBeCloseTo(0.8, 12)
+  })
+
+  it('keeps the strongest recent input and decays independently of frame subdivision', () => {
+    const oneFrame = new MotionEnergy()
+    const manyFrames = new MotionEnergy()
+    oneFrame.pulse(0.3, 0.5, 1.2)
+    manyFrames.pulse(0.3, 0.5, 1.2)
+
+    const afterOneSecond = oneFrame.advance(0)
+    const oneSecondLater = oneFrame.advance(1000)
+    manyFrames.advance(0)
+    for (let time = 1000 / 60; time <= 1000; time += 1000 / 60) {
+      manyFrames.advance(time)
+    }
+
+    expect(afterOneSecond).toBeCloseTo(0.5, 12)
+    expect(oneSecondLater).toBeCloseTo(manyFrames.advance(1000), 12)
+  })
+
+  it('ignores invalid samples and resets between scene lifetimes', () => {
+    const energy = new MotionEnergy()
+    energy.pulse(10, 0, 1)
+    energy.pulse(Number.NaN, 1, 1)
+    expect(energy.advance(0)).toBe(0)
+
+    energy.pulse(0.4, 0.5, 1)
+    expect(energy.advance(0)).toBeCloseTo(0.8, 12)
+    energy.reset()
+    expect(energy.advance(100)).toBe(0)
   })
 })
 
@@ -59,7 +101,7 @@ describe('pointerToNdc', () => {
   })
 })
 
-import { narrativeProgress, projectCardTransform, qualityProfile, resolveMotionStage, sceneMood, springStep } from './motion'
+import { narrativeProgress, projectCardTransform, qualityProfile, resolveMotionStage, sceneMood, sceneMoodAt, springStep, stageFocus } from './motion'
 
 describe('resolveMotionStage', () => {
   it('keeps a distinct visual state for each part of the homepage story', () => {
@@ -72,6 +114,32 @@ describe('resolveMotionStage', () => {
   it('clamps progress outside the narrative range', () => {
     expect(resolveMotionStage(-1)).toBe('idea')
     expect(resolveMotionStage(2)).toBe('signal')
+  })
+})
+
+describe('continuous story motion', () => {
+  it('keeps the scene mood continuous at every stage boundary', () => {
+    for (const boundary of [0.18, 0.48, 0.78]) {
+      const before = sceneMoodAt(boundary - 0.0001)
+      const after = sceneMoodAt(boundary + 0.0001)
+
+      expect(Math.abs(after.scale - before.scale)).toBeLessThan(0.002)
+      expect(Math.abs(after.rotationSpeed - before.rotationSpeed)).toBeLessThan(0.002)
+    }
+  })
+
+  it('crossfades adjacent story labels instead of switching their focus abruptly', () => {
+    const boundaries = [0.18, 0.48, 0.78]
+    for (const boundary of boundaries) {
+      const stageIndex = boundaries.indexOf(boundary)
+      const previous = stageFocus(boundary, stageIndex)
+      const next = stageFocus(boundary, stageIndex + 1)
+      const beforePrevious = stageFocus(boundary - 0.001, stageIndex)
+      const afterPrevious = stageFocus(boundary + 0.001, stageIndex)
+
+      expect(previous).toBeCloseTo(next, 3)
+      expect(Math.abs(afterPrevious - beforePrevious)).toBeLessThan(0.05)
+    }
   })
 })
 

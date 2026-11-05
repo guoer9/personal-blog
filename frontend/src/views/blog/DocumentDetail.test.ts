@@ -1,30 +1,73 @@
 // @vitest-environment happy-dom
 import { flushPromises, mount } from '@vue/test-utils'
+import { ref } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import DocumentDetail from './DocumentDetail.vue'
+import { visualRuntimeKey } from '@/graphics/runtime/visualRuntimeHandle'
+import type { PublicDocument } from '@/api/documents'
 const api = vi.hoisted(() => ({ getDocument: vi.fn() }))
 vi.mock('@/api/documents', () => api)
-const commentsApi = vi.hoisted(() => ({ getNotionComments: vi.fn(), createComment: vi.fn(), deleteComment: vi.fn() }))
+const commentsApi = vi.hoisted(() => ({ getComments: vi.fn(), getNotionComments: vi.fn(), createComment: vi.fn(), deleteComment: vi.fn() }))
 vi.mock('@/api/comments', () => commentsApi)
 const user = vi.hoisted(() => ({ isLoggedIn: false, isAdmin: false, userInfo: null as { id: number; username: string } | null }))
 vi.mock('@/stores/user', () => ({ useUserStore: () => user }))
 vi.mock('@/ui/feedback', () => ({ showSuccess: vi.fn(), showError: vi.fn(), confirmAction: vi.fn().mockResolvedValue(true) }))
-const entry = { id: 8, slug: 'note', title: '公开资料', content: '## 正文\n\n**安全**内容', summary: null, categories: ['技术'], author: { id: 1, username: 'guoer9' }, author_label: 'guoer9', view_count: 12, comment_count: 0, public_url: '/documents/note', external_url: 'https://www.notion.so/11111111111111111111111111111111', created_at: '2026-11-01T00:00:00Z', updated_at: '2026-11-02T00:00:00Z' }
+const entry: PublicDocument = { id: 8, kind: 'notion', slug: 'note', title: '公开资料', content: '## 正文\n\n**安全**内容', summary: null, categories: ['技术'], author: { id: 1, username: 'guoer9' }, author_label: 'guoer9', view_count: 12, comment_count: 0, public_url: '/documents/note', external_url: 'https://www.notion.so/11111111111111111111111111111111', created_at: '2026-11-01T00:00:00Z', updated_at: '2026-11-02T00:00:00Z' }
 let wrapper: ReturnType<typeof mount>
-async function start() {
+async function start(path = '/documents/note') {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/documents', component: { template: '<div />' } }, { path: '/documents/:slug', component: DocumentDetail }] })
-  await router.push('/documents/note'); await router.isReady()
-  wrapper = mount(DocumentDetail, { global: { plugins: [router] } }); await flushPromises(); return router
+  await router.push(path); await router.isReady()
+  wrapper = mount(DocumentDetail, { attachTo: document.body, global: { plugins: [router] } }); await flushPromises(); return router
 }
 beforeEach(() => {
   api.getDocument.mockReset(); api.getDocument.mockResolvedValue({ data: entry })
   commentsApi.getNotionComments.mockReset(); commentsApi.getNotionComments.mockResolvedValue({ data: [] })
+  commentsApi.getComments.mockReset(); commentsApi.getComments.mockResolvedValue({ data: [] })
   commentsApi.createComment.mockReset(); commentsApi.createComment.mockResolvedValue({ data: {} })
   user.isLoggedIn = false; user.isAdmin = false; user.userInfo = null
 })
 afterEach(() => wrapper?.unmount())
 describe('document detail', () => {
+  it('renders manual articles and posts comments to their original identity', async () => {
+    api.getDocument.mockResolvedValue({ data: { ...entry, kind: 'post', external_url: null, content: '# 手写正文' } })
+    user.isLoggedIn = true; user.userInfo = { id: 1, username: 'guoer9' }
+    await start()
+    expect(wrapper.get('.document-content h1').text()).toBe('手写正文')
+    expect(wrapper.find('a[target="_blank"]').exists()).toBe(false)
+    expect(commentsApi.getComments).toHaveBeenCalledWith(8)
+    expect(commentsApi.getNotionComments).not.toHaveBeenCalled()
+    await wrapper.get('textarea').setValue('手写文章评论')
+    await wrapper.get('.comment-form').trigger('submit'); await flushPromises()
+    expect(commentsApi.createComment).toHaveBeenCalledWith({ post_id: 8, content: '手写文章评论', parent_id: undefined })
+  })
+
+  it('replaces a legacy slug once while preserving query, hash and discussion identity', async () => {
+    const router = await start('/documents/legacy?from=archive#discussion')
+    expect(router.currentRoute.value.fullPath).toBe('/documents/note?from=archive#discussion')
+    expect(api.getDocument).toHaveBeenCalledTimes(1)
+    expect(commentsApi.getNotionComments).toHaveBeenCalledTimes(1)
+    expect(document.activeElement).toBe(wrapper.get('#discussion').element)
+  })
+
+  it('links anonymous readers back to the canonical article after login', async () => {
+    await start('/documents/note?from=search')
+    const login = wrapper.get('.anonymous-note a')
+    expect(new URL(login.attributes('href')!, 'http://localhost').searchParams.get('redirect')).toBe('/documents/note?from=search')
+  })
+  it('publishes library detail state and remeasures anchors after content loads', async () => {
+    const runtime = { setPageState: vi.fn(), measureAnchors: vi.fn() }
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/documents/:slug', component: DocumentDetail }] })
+    await router.push('/documents/note'); await router.isReady()
+    wrapper = mount(DocumentDetail, { attachTo: document.body, global: { plugins: [router], provide: { [visualRuntimeKey as symbol]: ref(runtime) } } })
+    await flushPromises()
+
+    expect(runtime.setPageState).toHaveBeenLastCalledWith('library', {
+      mode: 'detail', category: '技术', itemCount: 1, page: 1, readingProgress: 0,
+    })
+    expect(runtime.measureAnchors).toHaveBeenCalled()
+  })
+
   it('renders Markdown, category navigation and an anonymous discussion', async () => {
     await start()
     expect(wrapper.get('h1').text()).toBe('公开资料')

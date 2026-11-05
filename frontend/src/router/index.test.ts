@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 
 const sourceRoot = resolve(__dirname, '..')
 const readSource = (file: string) => readFileSync(resolve(sourceRoot, file), 'utf8')
@@ -17,16 +18,15 @@ describe('public blog access boundary', () => {
       'views/blog/Archive.vue',
       'views/blog/Search.vue',
       'views/blog/TagPosts.vue',
-      'views/blog/PostDetail.vue',
+      'views/blog/DocumentDetail.vue',
     ]) {
       expect(readSource(file)).not.toMatch(/from ['"](?:element-plus|@element-plus\/icons-vue)/)
     }
   })
 
-  it('keeps authentication in the private admin area', () => {
+  it('keeps administrator authentication on its private route', () => {
     const router = readSource('router/index.ts')
     expect(router).toMatch(/path:\s*['"]\/admin\/login['"][\s\S]*?name:\s*['"]AdminLogin['"]/)
-    expect(router).not.toMatch(/path:\s*['"]\/login['"]/)
     expect(router).toMatch(/return next\(\{\s*name:\s*['"]AdminLogin['"]/)
   })
 
@@ -35,16 +35,11 @@ describe('public blog access boundary', () => {
     expect(request.match(/startsWith\('\/admin'\)/g)).toHaveLength(2)
   })
 
-  it('does not link public pages to login or register', () => {
-    for (const file of [
-      'components/navigation/SiteHeader.vue',
-      'layouts/MainLayout.vue',
-      'views/blog/PostDetail.vue',
-    ]) {
-      expect(readSource(file)).not.toMatch(
-        /(?:to|name):\s*['"](?:\/login|Login|Register|\/register)['"]/,
-      )
-    }
+  it('resolves the public login route outside the protected admin routes', async () => {
+    const { default: router } = await import('./index')
+    const route = router.resolve('/login')
+    expect(route.name).toBe('Login')
+    expect(route.matched.some(record => record.meta.requiresAuth)).toBe(false)
   })
 })
 
@@ -60,6 +55,16 @@ describe('public transfer route', () => {
     const route = router.resolve('/transfer')
     expect(route.name).toBe('Transfer')
     expect(route.matched.some(record => record.meta.requiresAuth)).toBe(false)
+  })
+})
+
+describe('canonical article route', () => {
+  it('keeps old post links as redirects to the document detail route', async () => {
+    setActivePinia(createPinia())
+    const { default: router } = await import('./index')
+    await router.push('/post/legacy-note?source=archive#discussion')
+    expect(router.currentRoute.value.name).toBe('DocumentDetail')
+    expect(router.currentRoute.value.fullPath).toBe('/documents/legacy-note?source=archive#discussion')
   })
 })
 

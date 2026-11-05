@@ -1,14 +1,18 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 from app.schemas.user import UserBrief
+
+
+ArticleKind = Literal["post", "notion"]
 
 
 class PublicDocumentSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: int
+    kind: ArticleKind
     slug: str
     title: str
     summary: str | None = None
@@ -22,7 +26,7 @@ class PublicDocumentSummary(BaseModel):
     view_count: int
     comment_count: int
     public_url: str
-    external_url: str
+    external_url: str | None
 
 
 class PublicDocumentDetail(PublicDocumentSummary):

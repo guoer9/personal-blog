@@ -1,10 +1,12 @@
 // @vitest-environment happy-dom
 import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
+import { ref } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PublicArticle } from '@/api/posts'
 import Search from './Search.vue'
+import { visualRuntimeKey } from '@/graphics/runtime/visualRuntimeHandle'
 
 const searchPosts = vi.fn()
 
@@ -16,7 +18,6 @@ const routes = [
   { path: '/', component: { template: '<div />' } },
   { path: '/search', name: 'Search', component: Search },
   { path: '/writing', name: 'Archive', component: { template: '<div />' } },
-  { path: '/post/:slug', name: 'PostDetail', component: { template: '<div />' } },
   { path: '/documents/:slug', name: 'DocumentDetail', component: { template: '<div />' } },
 ]
 
@@ -25,6 +26,25 @@ describe('Search results focus', () => {
     searchPosts.mockReset()
     searchPosts.mockResolvedValue({ data: { items: [], total: 0 } })
     document.body.innerHTML = ''
+  })
+
+  it('publishes archive search query and pagination state', async () => {
+    searchPosts.mockResolvedValue({ data: { items: [], total: 25, total_pages: 3 } })
+    const runtime = { setPageState: vi.fn(), measureAnchors: vi.fn() }
+    const router = createRouter({ history: createMemoryHistory(), routes })
+    await router.push('/search?q=alpha&page=2')
+    await router.isReady()
+    const wrapper = mount(Search, {
+      attachTo: document.body,
+      global: { plugins: [router], provide: { [visualRuntimeKey as symbol]: ref(runtime) } },
+    })
+    await flushPromises()
+
+    expect(runtime.setPageState).toHaveBeenLastCalledWith('archive', {
+      mode: 'search', query: 'alpha', resultCount: 25, page: 2, totalPages: 3,
+    })
+
+    wrapper.unmount()
   })
 
   it('moves focus to the result status after an in-page search', async () => {
@@ -126,7 +146,7 @@ describe('Search results focus', () => {
           id: page === 2 ? 13 : 1,
           key: page === 2 ? 'post:13' : 'post:1',
           kind: 'post',
-          public_url: page === 2 ? '/post/second-page' : '/post/first-page',
+          public_url: page === 2 ? '/documents/second-page' : '/documents/first-page',
           title: page === 2 ? 'Second page article' : 'First page article',
           slug: page === 2 ? 'second-page' : 'first-page',
           summary: 'Test summary',
@@ -180,7 +200,7 @@ describe('Search results focus', () => {
           id: 13,
           key: 'post:13',
           kind: 'post',
-          public_url: '/post/second-page',
+          public_url: '/documents/second-page',
           title: 'Second page article',
           slug: 'second-page',
           summary: 'Test summary',
@@ -232,8 +252,8 @@ describe('Search results focus', () => {
     wrapper.unmount()
   })
 
-  it.each(['post', 'documents'])('restores focus to the %s article that opened the detail page', async (prefix) => {
-    const permalink = `/${prefix}/second-page`
+  it('restores focus to the article that opened the canonical detail page', async () => {
+    const permalink = '/documents/second-page'
     window.history.replaceState(
       { ...window.history.state, searchReturnFocus: permalink },
       '',
@@ -242,8 +262,8 @@ describe('Search results focus', () => {
       data: {
         items: [{
           id: 13,
-          key: prefix === 'post' ? 'post:13' : 'notion:13',
-          kind: prefix === 'post' ? 'post' : 'notion',
+          key: 'post:13',
+          kind: 'post',
           public_url: permalink,
           title: 'Second page article',
           slug: 'second-page',
@@ -282,11 +302,11 @@ describe('Search results focus', () => {
 function article(id: number, title: string): PublicArticle {
   return {
     id,
+    key: `post:${id}`,
+    kind: 'post',
+    public_url: '/documents/article-' + id,
     title,
     slug: 'article-' + id,
-    key: 'post:' + id,
-    kind: 'post',
-    public_url: '/post/article-' + id,
     summary: 'Search summary',
     is_published: true,
     view_count: 0,

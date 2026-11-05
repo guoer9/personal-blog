@@ -76,7 +76,7 @@ async function handleSubmit() {
 
     <aside class="login-note" aria-label="访问说明">
       <span>01</span>
-      <p>公开博客不显示登录或注册入口。只有管理员访问 <code>/admin</code> 时，系统才会要求认证。</p>
+      <p>读者可从公开页面登录并参与讨论；此入口仅用于管理员访问 <code>/admin</code> 管理内容。</p>
       <span>02</span>
       <p>会话失效后，后台请求会回到此页面，并在验证成功后恢复原管理路径。</p>
     </aside>

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import SiteHeader from './SiteHeader.vue'
 import { useUserStore } from '@/stores/user'
 
-const routes = ['/', '/writing', '/about', '/search'].map((path) => ({
+const routes = ['/', '/writing', '/about', '/search', '/works', '/documents', '/login'].map((path) => ({
   path,
   component: { template: '<div />' },
 }))
@@ -21,6 +21,42 @@ describe('SiteHeader search panel', () => {
     const wrapper = mount(SiteHeader, { global: { plugins: [pinia, router] } })
     expect(wrapper.findAll('a').some((link) => link.attributes('href')?.startsWith('/admin'))).toBe(false)
     expect(wrapper.text()).not.toContain('控制台')
+    wrapper.unmount()
+  })
+
+  it('shows the login link while signed out and the username after sign-in', async () => {
+    const router = createRouter({ history: createMemoryHistory(), routes: [
+      ...routes,
+    ] })
+    await router.push('/')
+    const pinia = createPinia()
+    const store = useUserStore(pinia)
+    const wrapper = mount(SiteHeader, { global: { plugins: [pinia, router] } })
+
+    expect(wrapper.get('.account-link').text()).toBe('登录')
+    expect(wrapper.get('.account-link').attributes('href')).toBe('/login')
+
+    store.token = 'access-token'
+    store.userInfo = { id: 7, username: 'reader7', is_admin: false } as typeof store.userInfo
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.get('.account-link').text()).toBe('reader7')
+    wrapper.unmount()
+  })
+
+  it('lets a signed-in reader log out from the public header', async () => {
+    const router = createRouter({ history: createMemoryHistory(), routes })
+    await router.push('/')
+    const pinia = createPinia()
+    const store = useUserStore(pinia)
+    store.token = 'access-token'
+    store.userInfo = { id: 7, username: 'reader7', is_admin: false } as typeof store.userInfo
+    const wrapper = mount(SiteHeader, { global: { plugins: [pinia, router] } })
+
+    await wrapper.get('[data-action="logout"]').trigger('click')
+
+    expect(store.isLoggedIn).toBe(false)
+    expect(wrapper.get('.account-link').text()).toBe('登录')
     wrapper.unmount()
   })
   afterEach(() => {

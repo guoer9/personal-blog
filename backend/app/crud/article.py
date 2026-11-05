@@ -13,6 +13,26 @@ from app.models.post import Post, Tag
 from app.services.article_search import literal_pattern, search_expressions, search_tokens
 
 
+async def get_article_by_slug(db: AsyncSession, slug: str) -> Post | NotionDocument | None:
+    """Resolve identity before checking visibility, so stale copies stay hidden."""
+    post = await db.scalar(select(Post).where(Post.slug == slug).options(
+        selectinload(Post.author), selectinload(Post.tags), selectinload(Post.comments),
+    ))
+    document_query = select(NotionDocument).options(
+        selectinload(NotionDocument.author), selectinload(NotionDocument.comments),
+    )
+    if post is not None:
+        document = await db.scalar(document_query.join(
+            NotionPage, NotionDocument.notion_page_id == NotionPage.notion_page_id,
+        ).where(NotionPage.post_id == post.id))
+        # A reused legacy slug alone is not proof this manual article migrated.
+        return document if document is not None else post
+    document = await db.scalar(document_query.where(NotionDocument.slug == slug))
+    if document is None:
+        document = await db.scalar(document_query.where(NotionDocument.legacy_post_slug == slug))
+    return document
+
+
 def public_document_conditions():
     return (NotionDocument.status == "published", NotionDocument.manual_unpublished.is_(False))
 
@@ -139,7 +159,7 @@ async def get_public_articles(
                 "view_count": post.view_count or 0, "author": post.author,
                 "tags": [{"name": tag.name, "slug": tag.slug} for tag in post.tags],
                 "created_at": post.created_at, "updated_at": post.updated_at,
-                "public_url": f"/post/{post.slug}",
+                "public_url": f"/documents/{post.slug}",
             }
     document_ids = [ref.id for ref in refs if ref.kind == "notion"]
     if document_ids:

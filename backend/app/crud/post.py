@@ -93,7 +93,9 @@ async def generate_unique_slug(db: AsyncSession, title: str, post_id: Optional[i
         if post_id:
             query = query.where(Post.id != post_id)
         result = await db.execute(query)
-        legacy_id = await db.scalar(select(NotionDocument.id).where(NotionDocument.legacy_post_slug == slug))
+        legacy_id = await db.scalar(select(NotionDocument.id).where(
+            (NotionDocument.legacy_post_slug == slug) | (NotionDocument.slug == slug)
+        ))
         if result.scalar_one_or_none() is None and legacy_id is None:
             break
         slug = f"{base_slug}-{counter}"
