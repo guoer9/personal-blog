@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { Post } from '@/api/posts'
+import type { PublicArticle } from '@/api/posts'
 import { formatDate } from '@/utils/format'
 
-defineProps<{ post: Post; index: number }>()
+defineProps<{ post: PublicArticle; index: number }>()
 </script>
 
 <template>
@@ -14,22 +14,22 @@ defineProps<{ post: Post; index: number }>()
         <span class="dot" aria-hidden="true">•</span>
         <span>{{ post.view_count }} 次阅读</span>
       </div>
-      <router-link :to="`/post/${post.slug}`" class="article-link">
+      <router-link :to="post.public_url" class="article-link">
         <h3>{{ post.title }}</h3>
         <p v-if="post.summary">{{ post.summary }}</p>
       </router-link>
       <div v-if="post.tags.length" class="article-tags" aria-label="文章标签">
         <router-link
           v-for="tag in post.tags"
-          :key="tag.id"
-          :to="`/tag/${tag.slug}`"
+          :key="tag.slug"
+          :to="`/tag/${encodeURIComponent(tag.slug)}`"
           class="tag-link"
         >
           # {{ tag.name }}
         </router-link>
       </div>
     </div>
-    <router-link :to="`/post/${post.slug}`" class="article-arrow" :aria-label="`阅读 ${post.title}`">↗</router-link>
+    <router-link :to="post.public_url" class="article-arrow" :aria-label="`阅读 ${post.title}`">↗</router-link>
   </article>
 </template>
 

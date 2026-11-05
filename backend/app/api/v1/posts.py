@@ -13,31 +13,30 @@ from app.schemas.post import (
 from app.crud.post import (
     get_post_by_id, get_post_by_slug, get_posts, 
     create_post, update_post, delete_post,
-    increment_view_count, search_posts
+    increment_view_count
 )
+from app.crud.article import get_public_articles, get_public_article_tags
+from app.schemas.articles import PublicArticlePage, PublicArticleTag
 from app.api.deps import get_current_admin
 from app.models.user import User
 from app.models.notion_library import NotionDocument
+from app.models.notion import NotionPage
 from app.core.config import settings
 
 router = APIRouter()
 
 
-@router.get("", response_model=PostPaginatedResponse)
+@router.get("", response_model=PublicArticlePage)
 async def list_posts(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
     tag: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
-    """获取文章列表"""
-    posts, total = await get_posts(
-        db, page, page_size, 
-        tag_slug=tag, 
-        include_unpublished=False
-    )
+    """公开文章索引：手写文章和资料库中的 Notion 文章。"""
+    posts, total = await get_public_articles(db, page, page_size, tag_slug=tag)
     
-    return PostPaginatedResponse(
+    return PublicArticlePage(
         items=posts,
         total=total,
         page=page,
@@ -46,7 +45,13 @@ async def list_posts(
     )
 
 
-@router.get("/search", response_model=PostPaginatedResponse)
+@router.get("/topics/list", response_model=list[PublicArticleTag])
+async def list_article_tags(db: AsyncSession = Depends(get_db)):
+    """公开主题索引；不向管理端标签选择器添加虚构的标签 ID。"""
+    return await get_public_article_tags(db)
+
+
+@router.get("/search", response_model=PublicArticlePage)
 async def search(
     q: str = Query(..., min_length=1, max_length=120),
     page: int = Query(1, ge=1),
@@ -54,9 +59,9 @@ async def search(
     db: AsyncSession = Depends(get_db)
 ):
     """搜索文章"""
-    posts, total = await search_posts(db, q, page, page_size)
+    posts, total = await get_public_articles(db, page, page_size, keyword=q)
     
-    return PostPaginatedResponse(
+    return PublicArticlePage(
         items=posts,
         total=total,
         page=page,
@@ -105,20 +110,24 @@ async def get_post(
     db: AsyncSession = Depends(get_db),
 ):
     """获取文章详情"""
-    post = await get_post_by_slug(db, slug, include_unpublished=False)
-    
-    if not post:
-        document = await db.scalar(
-            select(NotionDocument).where(
-                NotionDocument.legacy_post_slug == slug,
-                NotionDocument.status == "published",
-            )
-        )
-        if document is not None:
+    # A migrated Notion page retains its old permalink but has one current
+    # body/comment/view target. A stale posts row cannot override its visibility.
+    post = await get_post_by_slug(db, slug, include_unpublished=True)
+    if post is not None:
+        document = await db.scalar(select(NotionDocument).join(
+            NotionPage, NotionDocument.notion_page_id == NotionPage.notion_page_id,
+        ).where(NotionPage.post_id == post.id))
+    else:
+        document = await db.scalar(select(NotionDocument).where(NotionDocument.legacy_post_slug == slug))
+    if document is not None:
+        if document.status == "published" and not document.manual_unpublished:
             return RedirectResponse(
                 url=f"{settings.API_V1_PREFIX}/documents/{document.slug}",
                 status_code=307,
             )
+        raise HTTPException(status_code=404, detail="文章不存在")
+
+    if post is None or not post.is_published:
         raise HTTPException(status_code=404, detail="文章不存在")
     
     # 增加浏览次数

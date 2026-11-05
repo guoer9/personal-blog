@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { getPosts, type Post } from '@/api/posts'
+import { getPosts, type PublicArticle } from '@/api/posts'
 import ArticleRow from '@/components/blog/ArticleRow.vue'
 import StatePanel from '@/components/blog/StatePanel.vue'
 import ScrollReveal from '@/components/immersive/ScrollReveal.vue'
 
-const posts = ref<Post[]>([])
+const posts = ref<PublicArticle[]>([])
 const loading = ref(true)
 const error = ref(false)
 const currentPage = ref(1)
@@ -63,7 +63,7 @@ onMounted(loadPosts)
           <button type="button" class="text-action" @click="loadPosts">重新加载 ↗</button>
         </div>
         <div v-else-if="posts.length" class="article-list">
-          <ArticleRow v-for="(post, index) in posts" :key="post.id" :post="post" :index="(currentPage - 1) * pageSize + index" />
+          <ArticleRow v-for="(post, index) in posts" :key="post.key" :post="post" :index="(currentPage - 1) * pageSize + index" />
         </div>
         <StatePanel
           v-else

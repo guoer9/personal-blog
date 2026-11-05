@@ -1,4 +1,4 @@
-"""Public Notion library documents, isolated from ordinary blog posts."""
+"""Notion library view and canonical detail for imported public articles."""
 
 import math
 import unicodedata

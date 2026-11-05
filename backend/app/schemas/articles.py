@@ -4,10 +4,32 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from app.schemas.user import UserBrief
+from app.schemas.post import PostListResponse
 
 
 ArticleKind = Literal["post", "notion"]
 ArticleStatus = Literal["published", "draft", "isolated", "archived"]
+
+
+class PublicArticleTag(BaseModel):
+    name: str
+    slug: str
+
+
+class PublicArticleResponse(PostListResponse):
+    key: str
+    kind: ArticleKind
+    public_url: str
+    author: UserBrief | None
+    tags: list[PublicArticleTag] = []
+
+
+class PublicArticlePage(BaseModel):
+    items: list[PublicArticleResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
 
 
 class AdminArticleResponse(BaseModel):

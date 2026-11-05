@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Post } from '@/api/posts'
+import type { PublicArticle } from '@/api/posts'
 import Search from './Search.vue'
 
 const searchPosts = vi.fn()
@@ -17,6 +17,7 @@ const routes = [
   { path: '/search', name: 'Search', component: Search },
   { path: '/writing', name: 'Archive', component: { template: '<div />' } },
   { path: '/post/:slug', name: 'PostDetail', component: { template: '<div />' } },
+  { path: '/documents/:slug', name: 'DocumentDetail', component: { template: '<div />' } },
 ]
 
 describe('Search results focus', () => {
@@ -123,6 +124,9 @@ describe('Search results focus', () => {
       data: {
         items: [{
           id: page === 2 ? 13 : 1,
+          key: page === 2 ? 'post:13' : 'post:1',
+          kind: 'post',
+          public_url: page === 2 ? '/post/second-page' : '/post/first-page',
           title: page === 2 ? 'Second page article' : 'First page article',
           slug: page === 2 ? 'second-page' : 'first-page',
           summary: 'Test summary',
@@ -174,6 +178,9 @@ describe('Search results focus', () => {
       data: {
         items: [{
           id: 13,
+          key: 'post:13',
+          kind: 'post',
+          public_url: '/post/second-page',
           title: 'Second page article',
           slug: 'second-page',
           summary: 'Test summary',
@@ -225,15 +232,19 @@ describe('Search results focus', () => {
     wrapper.unmount()
   })
 
-  it('restores focus to the article that opened the detail page', async () => {
+  it.each(['post', 'documents'])('restores focus to the %s article that opened the detail page', async (prefix) => {
+    const permalink = `/${prefix}/second-page`
     window.history.replaceState(
-      { ...window.history.state, searchReturnFocus: '/post/second-page' },
+      { ...window.history.state, searchReturnFocus: permalink },
       '',
     )
     searchPosts.mockResolvedValue({
       data: {
         items: [{
           id: 13,
+          key: prefix === 'post' ? 'post:13' : 'notion:13',
+          kind: prefix === 'post' ? 'post' : 'notion',
+          public_url: permalink,
           title: 'Second page article',
           slug: 'second-page',
           summary: 'Test summary',
@@ -260,7 +271,7 @@ describe('Search results focus', () => {
     await flushPromises()
     await nextTick()
 
-    const article = wrapper.get('a[href="/post/second-page"]')
+    const article = wrapper.get(`a[href="${permalink}"]`)
     expect(document.activeElement).toBe(article.element)
     expect(window.history.state.searchReturnFocus).toBeUndefined()
 
@@ -268,11 +279,14 @@ describe('Search results focus', () => {
   })
 })
 
-function article(id: number, title: string): Post {
+function article(id: number, title: string): PublicArticle {
   return {
     id,
     title,
     slug: 'article-' + id,
+    key: 'post:' + id,
+    kind: 'post',
+    public_url: '/post/article-' + id,
     summary: 'Search summary',
     is_published: true,
     view_count: 0,
@@ -283,7 +297,7 @@ function article(id: number, title: string): Post {
   }
 }
 
-function result(items: Post[], total = items.length) {
+function result(items: PublicArticle[], total = items.length) {
   return { data: { items, total, page: 1, page_size: 12, total_pages: Math.ceil(total / 12) } }
 }
 

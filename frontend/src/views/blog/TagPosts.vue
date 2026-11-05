@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { getPosts, type Post } from '@/api/posts'
+import { getPosts, type PublicArticle } from '@/api/posts'
 import ArticleRow from '@/components/blog/ArticleRow.vue'
 import StatePanel from '@/components/blog/StatePanel.vue'
 
 const route = useRoute()
-const posts = ref<Post[]>([])
+const posts = ref<PublicArticle[]>([])
 const loading = ref(true)
 const error = ref(false)
 const total = ref(0)
 const tagSlug = computed(() => String(route.params.slug || ''))
+const tagName = computed(() => posts.value.flatMap(post => post.tags).find(tag => tag.slug === tagSlug.value)?.name || tagSlug.value)
 const pageSize = 12
 const totalPages = computed(() => Math.ceil(total.value / pageSize))
 const currentPage = ref(1)
@@ -47,7 +48,7 @@ watch(tagSlug, () => loadTagPosts())
         <router-link to="/writing" class="back-link">← 返回归档 / ARCHIVE</router-link>
         <p class="section-kicker">Topic index / tagged notes</p>
         <div class="heading-row">
-          <h1>#{{ tagSlug }}</h1>
+          <h1>#{{ tagName }}</h1>
           <span class="result-count">{{ total }} 篇相关文章</span>
         </div>
         <p class="page-lede">同一主题下的文章会在这里归到一起，方便沿着问题继续阅读。</p>
@@ -62,7 +63,7 @@ watch(tagSlug, () => loadTagPosts())
           <button type="button" class="text-action" @click="loadTagPosts(currentPage)">重试 ↗</button>
         </div>
         <div v-else-if="posts.length" class="article-list">
-          <ArticleRow v-for="(post, index) in posts" :key="post.id" :post="post" :index="index" />
+          <ArticleRow v-for="(post, index) in posts" :key="post.key" :post="post" :index="index" />
         </div>
         <StatePanel
           v-else

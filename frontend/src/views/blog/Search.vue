@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
-import { searchPosts, type Post } from '@/api/posts'
+import { searchPosts, type PublicArticle } from '@/api/posts'
 import ArticleRow from '@/components/blog/ArticleRow.vue'
 import StatePanel from '@/components/blog/StatePanel.vue'
 
 const route = useRoute()
 const router = useRouter()
-const posts = ref<Post[]>([])
+const posts = ref<PublicArticle[]>([])
 const loading = ref(false)
 const error = ref(false)
 const total = ref(0)
@@ -55,7 +55,7 @@ async function restoreReturnFocus(requestId: number) {
   }
   await nextTick()
   if (requestId !== latestRequestId) return
-  const link = Array.from(articleList.value?.querySelectorAll<HTMLAnchorElement>('a[href^="/post/"]') || [])
+  const link = Array.from(articleList.value?.querySelectorAll<HTMLAnchorElement>('a.article-link, a.article-arrow') || [])
     .find((candidate) => candidate.getAttribute('href') === target)
   if (link) {
     link.focus({ preventScroll: true })
@@ -143,7 +143,7 @@ async function changePage(page: number) {
 function rememberReturnFocus(event: MouseEvent) {
   const target = event.target
   if (!(target instanceof Element)) return
-  const link = target.closest<HTMLAnchorElement>('a[href^="/post/"]')
+  const link = target.closest<HTMLAnchorElement>('a.article-link, a.article-arrow')
   if (!link || !link.closest('.article-list')) return
   window.history.replaceState(
     { ...window.history.state, searchReturnFocus: link.getAttribute('href') },
@@ -210,7 +210,7 @@ onBeforeUnmount(() => {
           <button type="button" class="text-action" @click="retryResults">重试 ↗</button>
         </div>
         <div v-else-if="posts.length" ref="articleList" class="article-list">
-          <ArticleRow v-for="(post, index) in posts" :key="post.id" :post="post" :index="index" />
+          <ArticleRow v-for="(post, index) in posts" :key="post.key" :post="post" :index="index" />
         </div>
         <StatePanel
           v-else-if="keyword"

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { getPosts, type Post } from '@/api/posts'
-import { getTags, type Tag } from '@/api/tags'
+import { getPosts, getArticleTags, type PublicArticle, type ArticleTag } from '@/api/posts'
 import { profile, resources } from '@/data/portfolio'
 import { getWorks } from '@/api/works'
 import type { Work } from '@/data/works'
@@ -14,7 +13,7 @@ import ArticleRow from '@/components/blog/ArticleRow.vue'
 import StatePanel from '@/components/blog/StatePanel.vue'
 import { narrativeProgress, resolveMotionStage } from '@/graphics/motion'
 
-const posts = ref<Post[]>([])
+const posts = ref<PublicArticle[]>([])
 const featuredWorks = ref<Work[]>([])
 const worksError = ref(false)
 const worksLoading = ref(true)
@@ -31,7 +30,7 @@ async function loadWorks() {
   catch { if (!current.signal.aborted) worksError.value = true }
   finally { if (!current.signal.aborted) worksLoading.value = false }
 }
-const tags = ref<Tag[]>([])
+const tags = ref<ArticleTag[]>([])
 const loading = ref(true)
 const error = ref(false)
 const home = ref<HTMLElement | null>(null)
@@ -49,7 +48,7 @@ async function loadHomeContent() {
   loading.value = true
   error.value = false
   try {
-    const [postResponse, tagResponse] = await Promise.all([getPosts({ page_size: 4 }), getTags()])
+    const [postResponse, tagResponse] = await Promise.all([getPosts({ page_size: 4 }), getArticleTags()])
     posts.value = postResponse.data.items
     tags.value = tagResponse.data
   } catch {
@@ -187,7 +186,7 @@ onBeforeUnmount(() => {
       </ScrollReveal>
       <div class="writing-grid">
         <div class="article-list">
-          <ArticleRow v-for="(post, index) in posts" :key="post.id" :post="post" :index="index" />
+          <ArticleRow v-for="(post, index) in posts" :key="post.key" :post="post" :index="index" />
           <div v-if="loading" class="loading-lines" aria-label="正在载入文章">
             <span v-for="index in 3" :key="index" />
           </div>
@@ -208,7 +207,7 @@ onBeforeUnmount(() => {
             <span>INDEX / TOPICS</span>
             <span>↘</span>
           </div>
-          <router-link v-for="(tag, index) in tags" :key="tag.id" :to="`/tag/${tag.slug}`" class="topic-row">
+          <router-link v-for="(tag, index) in tags" :key="tag.slug" :to="`/tag/${encodeURIComponent(tag.slug)}`" class="topic-row">
             <span>{{ String(index + 1).padStart(2, '0') }}</span>
             <strong>{{ tag.name }}</strong>
             <span aria-hidden="true">↗</span>
