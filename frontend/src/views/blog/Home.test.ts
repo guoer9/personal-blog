@@ -5,7 +5,7 @@ import { nextTick, shallowRef } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Home from './Home.vue'
 import { visualRuntimeKey } from '@/graphics/runtime/visualRuntimeHandle'
-import { homeSphereInteractionOptionsKey } from './homeInteraction'
+import { createHomeSphereInteractionBridge, homeSphereInteractionOptionsKey } from './homeInteraction'
 
 const api = vi.hoisted(() => ({ getPosts: vi.fn(), getTags: vi.fn(), getWorks: vi.fn() }))
 vi.mock('@/api/posts', () => ({ getPosts: api.getPosts }))
@@ -68,6 +68,11 @@ describe('Home sphere interaction bridge', () => {
     return wrapper
   }
 
+  it('keeps the project backdrop independent from the content layer', async () => {
+    const mounted = await mountHome()
+    expect(mounted.get('.projects-section__backdrop').attributes('aria-hidden')).toBe('true')
+  })
+
   it('emits one tap with full viewport NDC when released before the injected long press duration', async () => {
     const mounted = await mountHome()
     const visual = mounted.get('.hero-visual')
@@ -107,17 +112,68 @@ describe('Home sphere interaction bridge', () => {
     expect(interactions.map((interaction) => interaction.type)).toEqual(['drag', 'drag'])
   })
 
-  it('marks active page gestures as non-selectable and clears the state after release', async () => {
+  it('limits repeated-click selection prevention to decorative text', async () => {
     const mounted = await mountHome()
-    const home = mounted.get('.home')
-
-    await home.trigger('pointerdown', { pointerId: 15, pointerType: 'mouse', button: 0, isPrimary: true, clientX: 500, clientY: 400 })
-    expect(document.body.classList.contains('sphere-gesture-active')).toBe(true)
-    await home.trigger('pointerup', { pointerId: 15, pointerType: 'mouse', clientX: 500, clientY: 400 })
-    vi.advanceTimersByTime(120)
-    await nextTick()
-
+    const text = mounted.get('h1')
+    const first = new MouseEvent('mousedown', { bubbles: true, cancelable: true, detail: 1 })
+    const repeated = new MouseEvent('mousedown', { bubbles: true, cancelable: true, detail: 2 })
+    text.element.dispatchEvent(first)
+    text.element.dispatchEvent(repeated)
+    expect(first.defaultPrevented).toBe(false)
+    expect(repeated.defaultPrevented).toBe(true)
+    for (const selector of ['.hero-intro', '.principle-intro p']) {
+      const repeatedBodyClick = new MouseEvent('mousedown', { bubbles: true, cancelable: true, detail: 2 })
+      mounted.get(selector).element.dispatchEvent(repeatedBodyClick)
+      expect(repeatedBodyClick.defaultPrevented).toBe(false)
+    }
     expect(document.body.classList.contains('sphere-gesture-active')).toBe(false)
+  })
+
+  it('emits one ripple for label activation and preserves native activation and keyboard clicks', async () => {
+    await mountHome()
+    const label = document.createElement('label')
+    label.htmlFor = 'sphere-search-test'
+    const input = document.createElement('input')
+    input.id = label.htmlFor
+    const activation = vi.fn()
+    input.addEventListener('click', activation)
+    document.body.append(label, input)
+    label.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1, clientX: 120, clientY: 140 }))
+    const taps = () => runtime.setPageState.mock.calls.map((call) => call[1]?.interaction).filter((item) => item?.type === 'tap')
+    expect(taps()).toHaveLength(1)
+    expect(activation).toHaveBeenCalledOnce()
+    expect((activation.mock.calls[0]?.[0] as MouseEvent).defaultPrevented).toBe(false)
+    expect(taps()[0]).toMatchObject({ ndcX: -0.76, ndcY: 0.65 })
+    input.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }))
+    expect(taps()).toHaveLength(2)
+  })
+
+  it('deduplicates label forwarding that preserves the physical click coordinates', () => {
+    const emit = vi.fn()
+    const bridge = createHomeSphereInteractionBridge({ options: { longPressDurationMs: 60, allowableMovementCssPx: 8 }, emit })
+    const label = document.createElement('label')
+    label.htmlFor = 'sphere-search-coordinate-test'
+    const input = document.createElement('input')
+    input.id = label.htmlFor
+    document.body.append(label, input)
+    // Model Chromium's event stream explicitly; Happy DOM forwards zero coordinates.
+    const sourceClick = new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1, clientX: 120, clientY: 140 })
+    Object.defineProperty(sourceClick, 'target', { value: label })
+    bridge.onClickCapture(sourceClick)
+    const forwardedClick = new MouseEvent('click', { bubbles: true, detail: 1, clientX: 120, clientY: 140 })
+    Object.defineProperty(forwardedClick, 'target', { value: input })
+    bridge.onClickCapture(forwardedClick)
+    expect(emit).toHaveBeenCalledTimes(1)
+    bridge.dispose()
+  })
+
+  it('releases a held dent when the window loses focus', async () => {
+    const mounted = await mountHome()
+    await mounted.get('.hero-visual').trigger('pointerdown', { pointerId: 21, isPrimary: true, button: 0, clientX: 500, clientY: 400 })
+    vi.advanceTimersByTime(60)
+    window.dispatchEvent(new Event('blur'))
+    const interactions = runtime.setPageState.mock.calls.map((call) => call[1]?.interaction?.type).filter(Boolean)
+    expect(interactions).toEqual(['press-start', 'press-end'])
   })
 
   it('emits press-start and press-end once after the injected long press duration without a tap', async () => {
@@ -163,21 +219,25 @@ describe('Home sphere interaction bridge', () => {
     await nextTick()
     await visual.trigger('pointerup', { pointerId: 11, clientX: 500, clientY: 400 })
 
-    const click = new MouseEvent('click', { bubbles: true, cancelable: true })
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1, clientX: 500, clientY: 400 })
     visual.element.dispatchEvent(click)
     expect(click.defaultPrevented).toBe(false)
     expect(runtime.setPageState.mock.calls.map((call) => call[1]?.interaction?.type).filter(Boolean)).toEqual(['press-start', 'press-end'])
   })
 
-  it('tracks the pointer globally while preserving native click behavior', async () => {
+  it('tracks the pointer globally without capturing and preserves native clicks', async () => {
     const mounted = await mountHome()
     const visual = mounted.get('.hero-visual')
+    const capturePointer = vi.fn()
+    Object.defineProperty(visual.element, 'setPointerCapture', { configurable: true, value: capturePointer })
+
     await visual.trigger('pointerdown', { pointerId: 12, button: 0, isPrimary: true, clientX: 500, clientY: 400 })
     await visual.trigger('pointerup', { pointerId: 12, clientX: 500, clientY: 400 })
 
     const click = new MouseEvent('click', { bubbles: true, cancelable: true })
     visual.element.dispatchEvent(click)
     expect(click.defaultPrevented).toBe(false)
+    expect(capturePointer).not.toHaveBeenCalled()
     expect(runtime.setPageState.mock.calls.map((call) => call[1]?.interaction?.type).filter(Boolean)).toEqual(['tap'])
   })
 

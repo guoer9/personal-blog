@@ -79,10 +79,6 @@ export function searchPosts(params: { q: string; page?: number; page_size?: numb
   })
 }
 
-export function getArticleTags() {
-  return request.get<ArticleTag[]>('/posts/topics/list')
-}
-
 // 管理员按 ID 获取文章（包含草稿）
 export function getPostById(id: number) {
   return request.get<Post>(`/posts/id/${id}`)

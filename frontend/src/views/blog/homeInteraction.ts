@@ -9,8 +9,8 @@ export interface HomeSphereInteractionOptions {
 export const homeSphereInteractionOptionsKey: InjectionKey<HomeSphereInteractionOptions> = Symbol('home-sphere-interaction-options')
 
 export const defaultHomeSphereInteractionOptions: HomeSphereInteractionOptions = {
-  longPressDurationMs: 520,
-  allowableMovementCssPx: 12,
+  longPressDurationMs: 350,
+  allowableMovementCssPx: 16,
 }
 
 interface ActivePointer {
@@ -25,7 +25,6 @@ interface ActivePointer {
 interface HomeSphereInteractionBridgeOptions {
   options: HomeSphereInteractionOptions
   emit: (interaction: HomeSphereInteraction) => void
-  onGestureActive?: (active: boolean) => void
   viewport?: () => { width: number; height: number }
 }
 
@@ -46,55 +45,39 @@ function toViewportNdc(event: Pick<PointerEvent, 'clientX' | 'clientY'>, viewpor
   }
 }
 
-export function createHomeSphereInteractionBridge({ options, emit, onGestureActive, viewport = viewportSize }: HomeSphereInteractionBridgeOptions) {
+export function createHomeSphereInteractionBridge({ options, emit, viewport = viewportSize }: HomeSphereInteractionBridgeOptions) {
   let active: ActivePointer | null = null
   let timer: ReturnType<typeof setTimeout> | null = null
-  let gestureTimer: ReturnType<typeof setTimeout> | null = null
   let sequence = 0
-  let suppressNextClick = false
+  let suppressedClick: { x: number; y: number; time: number } | null = null
+  let labelActivation: { control: HTMLElement; source: MouseEvent; time: number } | null = null
 
   const clearTimer = () => {
     if (timer !== null) clearTimeout(timer)
     timer = null
   }
-
   const publish = (type: HomeSphereInteractionType, event: Pick<PointerEvent, 'clientX' | 'clientY'>) => {
     const point = toViewportNdc(event, viewport)
     sequence += 1
     emit({ sequence, type, ndcX: point.x, ndcY: point.y })
   }
-
-  const finishGesture = () => {
-    if (gestureTimer !== null) clearTimeout(gestureTimer)
-    gestureTimer = setTimeout(() => {
-      gestureTimer = null
-      onGestureActive?.(false)
-    }, 100)
-  }
-
-  const cancelActive = (event?: PointerEvent, suppressClick = false) => {
-    if (!active) return
+  const cancel = () => {
     clearTimer()
-    if (active.longPressStarted && event) {
-      publish('press-end', event)
-      suppressNextClick = suppressClick
-    }
+    if (active?.longPressStarted) publish('press-end', { clientX: active.startX, clientY: active.startY })
     active = null
-    finishGesture()
+    suppressedClick = null
+    labelActivation = null
   }
+  const isControl = (event: Event) => (event.target as Element | null)?.closest?.('a, button, input, textarea, select, label, summary, [contenteditable]:not([contenteditable="false"]), [role="button"]')
 
   return {
     onPointerDown(event: PointerEvent) {
-      if (active || event.isPrimary === false || (event.button !== undefined && event.button !== 0)) return
-      suppressNextClick = false
-      const eventTarget = event.target as Element | null
-      if (eventTarget?.closest('input, textarea, select, [contenteditable="true"]')) return
-      if (gestureTimer !== null) clearTimeout(gestureTimer)
-      gestureTimer = null
-      onGestureActive?.(true)
+      if (event.isPrimary === false) { cancel(); return }
+      if (active || (event.button !== undefined && event.button !== 0)) return
+      suppressedClick = null
+      labelActivation = null
+      if (isControl(event)) return
       const id = pointerId(event)
-      const target = event.currentTarget as (HTMLElement & { setPointerCapture?: (pointerId: number) => void }) | null
-      try { target?.setPointerCapture?.(id) } catch { /* The browser may have ended the pointer stream. */ }
       active = { id, startX: event.clientX, startY: event.clientY, longPressStarted: false, dragging: false, pointerType: event.pointerType || 'mouse' }
       timer = setTimeout(() => {
         if (!active || active.id !== id || active.dragging) return
@@ -110,11 +93,7 @@ export function createHomeSphereInteractionBridge({ options, emit, onGestureActi
         clearTimer()
         if (active.longPressStarted) publish('press-end', event)
         active.longPressStarted = false
-        if (active.pointerType === 'touch' && Math.abs(deltaY) >= Math.abs(deltaX)) {
-          active = null
-          finishGesture()
-          return
-        }
+        if (active.pointerType === 'touch' && Math.abs(deltaY) >= Math.abs(deltaX)) { cancel(); return }
         active.dragging = true
       }
       if (active.dragging) publish('drag', event)
@@ -122,34 +101,39 @@ export function createHomeSphereInteractionBridge({ options, emit, onGestureActi
     onPointerUp(event: PointerEvent) {
       if (!active || active.id !== pointerId(event)) return
       clearTimer()
-      if (active.longPressStarted) {
-        publish('press-end', event)
-        suppressNextClick = true
-      }
+      if (active.longPressStarted) publish('press-end', event)
+      if (active.longPressStarted || active.dragging) suppressedClick = { x: event.clientX, y: event.clientY, time: Date.now() }
       active = null
-      finishGesture()
     },
     onPointerCancel(event: PointerEvent) {
-      suppressNextClick = false
-      cancelActive(event)
+      if (active?.id === pointerId(event)) cancel()
+    },
+    onMouseDown(event: MouseEvent) {
+      if (event.detail > 1 && !isControl(event)
+        && (event.target as Element | null)?.closest?.('.hero h1, .hero-visual')) event.preventDefault()
+    },
+    onContextMenu(event: MouseEvent) {
+      if (active && !isControl(event) && (event.target as Element | null)?.closest?.('.hero')) event.preventDefault()
     },
     onClickCapture(event: MouseEvent) {
-      if (suppressNextClick) {
-        suppressNextClick = false
-        return
-      }
+      const activation = labelActivation
+      labelActivation = null
+      if (activation && event.target === activation.control
+        && Date.now() - activation.time < 300
+        && ((event.detail === 0 && event.clientX === 0 && event.clientY === 0)
+          || (event.detail === activation.source.detail && event.clientX === activation.source.clientX && event.clientY === activation.source.clientY))) return
+      const label = (event.target as Element | null)?.closest?.('label') as HTMLLabelElement | null
+      if (label?.control && label.control !== event.target) labelActivation = { control: label.control, source: event, time: Date.now() }
+      const suppressed = suppressedClick
+      suppressedClick = null
+      if (suppressed && event.detail > 0 && Date.now() - suppressed.time < 800
+        && Math.hypot(event.clientX - suppressed.x, event.clientY - suppressed.y) < 24) return
       const point = event.detail === 0 && event.clientX === 0 && event.clientY === 0
         ? { clientX: viewport().width / 2, clientY: viewport().height / 2 }
         : event
       publish('tap', point)
     },
-    dispose() {
-      clearTimer()
-      if (gestureTimer !== null) clearTimeout(gestureTimer)
-      onGestureActive?.(false)
-      gestureTimer = null
-      active = null
-      suppressNextClick = false
-    },
+    cancel,
+    dispose: cancel,
   }
 }

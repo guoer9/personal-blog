@@ -129,7 +129,7 @@ function focusMainContent() {
 </script>
 
 <template>
-  <div class="main-layout">
+  <div class="main-layout" :class="{ 'main-layout--home': route.name === 'Home' }">
     <a class="skip-link" href="#main-content" @click="focusMainContent">跳到正文</a>
     <SiteHeader />
     <canvas ref="canvas" class="visual-runtime-canvas" aria-hidden="true" :data-runtime-failed="runtimeFailed" />
@@ -166,6 +166,8 @@ function focusMainContent() {
 <style scoped>
 .main-layout { min-height: 100vh; display: flex; flex-direction: column; }
 .site-main { position: relative; z-index: 2; flex: 1; }
+.main-layout--home .site-main { z-index: auto; }
+.main-layout--home .footer { position: relative; z-index: 2; }
 .visual-runtime-canvas { position: fixed; z-index: 1; inset: 0; width: 100%; height: 100%; pointer-events: none; opacity: .7; }
 .skip-link { position: fixed; z-index: 1000; top: 12px; left: 12px; padding: 10px 15px; background: var(--ink); color: var(--paper); transform: translateY(-160%); }
 .skip-link:focus { transform: none; }

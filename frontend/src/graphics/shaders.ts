@@ -1,6 +1,6 @@
 export const flowVertexShader = /* glsl */ `
 #define MAX_RIPPLES 6
-#define PRESS_DEPTH_MAX 0.18
+#define PRESS_DEPTH_MAX 0.28
   uniform float uTime;
   uniform float uPointerX;
   uniform float uPointerY;
@@ -21,6 +21,7 @@ export const flowVertexShader = /* glsl */ `
   varying float vFlow;
   varying float vEnergy;
   varying float vRippleLight;
+  varying float vPressAmount;
 
   float sphericalDistance(vec3 a, vec3 b) {
     return acos(clamp(dot(normalize(a), normalize(b)), -1.0, 1.0));
@@ -66,6 +67,7 @@ export const flowVertexShader = /* glsl */ `
     vFlow = formation * 8.0 + pointerPull + rippleDisplacement;
     vEnergy = abs(expansion) * 4.0 + pointerPull + rippleLight * 0.4;
     vRippleLight = rippleLight;
+    vPressAmount = pressDimple;
     gl_Position = projectionMatrix * viewMatrix * worldPosition;
   }
 `
@@ -80,6 +82,7 @@ export const flowFragmentShader = /* glsl */ `
   varying float vFlow;
   varying float vEnergy;
   varying float vRippleLight;
+  varying float vPressAmount;
 
   vec3 palette(float t) {
     vec3 ink = vec3(0.035, 0.040, 0.045);
@@ -94,7 +97,9 @@ export const flowFragmentShader = /* glsl */ `
 
   void main() {
     vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
-    float fresnel = pow(1.0 - max(dot(viewDirection, vNormal), 0.0), 2.6);
+    vec3 dentNormal = normalize(cross(dFdx(vWorldPosition), dFdy(vWorldPosition)));
+    vec3 surfaceNormal = normalize(mix(vNormal, dentNormal, clamp(abs(vPressAmount) * 5.0, 0.0, 1.0)));
+    float fresnel = pow(1.0 - max(dot(viewDirection, surfaceNormal), 0.0), 2.6);
     float bands = sin(vWorldPosition.y * 5.4 + uTime * 0.24 + vFlow) * 0.5 + 0.5;
     float facets = smoothstep(0.0, 0.6, abs(sin(vWorldPosition.x * 6.0 + vWorldPosition.z * 4.0)));
     vec3 color = palette(fresnel * 0.58 + bands * 0.25 + uTime * 0.018 + uScroll * 0.16);
@@ -104,6 +109,7 @@ export const flowFragmentShader = /* glsl */ `
     color += vec3(0.55, 0.8, 1.0) * uHoverStrength * 0.12;
     color += vec3(0.86, 1.0, 0.3) * vRippleLight * 0.42;
     color *= mix(0.88, 1.0, facets * smoothstep(0.35, 0.8, uScroll));
+    color *= 1.0 - clamp(vPressAmount * 1.3, -0.08, 0.32);
     gl_FragColor = vec4(color, 0.96);
   }
 `
@@ -148,5 +154,30 @@ export const particleFragmentShader = /* glsl */ `
     if (distanceToCenter > 0.5) discard;
     float glow = smoothstep(0.5, 0.05, distanceToCenter);
     gl_FragColor = vec4(0.78, 1.0, 0.18, glow * vTrailAlpha * 0.48);
+  }
+`
+
+export const pointerWakeVertexShader = /* glsl */ `
+  attribute float aBornAt;
+  uniform float uTime;
+  uniform float uPixelRatio;
+  varying float vWakeAge;
+  void main() {
+    vWakeAge = (uTime - aBornAt) / 0.85;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    gl_PointSize = (24.0 + clamp(vWakeAge, 0.0, 1.0) * 34.0) * uPixelRatio;
+  }
+`
+
+export const pointerWakeFragmentShader = /* glsl */ `
+  varying float vWakeAge;
+  void main() {
+    if (vWakeAge < 0.0 || vWakeAge > 1.0) discard;
+    float radius = length(gl_PointCoord - vec2(0.5)) * 2.0;
+    float front = 0.28 + vWakeAge * 0.58;
+    float ring = 1.0 - smoothstep(0.025, 0.09, abs(radius - front));
+    float inner = 1.0 - smoothstep(0.02, 0.07, abs(radius - front * 0.58));
+    float fade = (1.0 - vWakeAge) * smoothstep(0.0, 0.08, vWakeAge);
+    gl_FragColor = vec4(0.1, 0.36, 0.95, (ring + inner * 0.4) * fade * 0.4);
   }
 `

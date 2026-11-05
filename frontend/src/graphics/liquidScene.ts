@@ -2,12 +2,14 @@ import {
   AdditiveBlending,
   BufferAttribute,
   BufferGeometry,
+  DynamicDrawUsage,
   IcosahedronGeometry,
   Mesh,
   PerspectiveCamera,
   Points,
   Raycaster,
   Scene,
+  Sphere,
   ShaderMaterial,
   Vector2,
   Vector3,
@@ -18,6 +20,8 @@ import {
   flowVertexShader,
   particleFragmentShader,
   particleVertexShader,
+  pointerWakeVertexShader,
+  pointerWakeFragmentShader,
 } from './shaders'
 import type { QualityTier } from './quality'
 import type { RendererAdapter } from './runtime/types'
@@ -69,10 +73,12 @@ function createParticles(count: number) {
 
 const MAX_RIPPLES = 6
 const RIPPLE_LIFETIME_SECONDS = 1.8
-const PRESS_DEPTH_MAX = 0.18
-const PRESS_GROW_SECONDS = 0.72
-const PRESS_STIFFNESS = 18
-const PRESS_DAMPING = 8
+const WAKE_CAPACITY = 32
+const WAKE_LIFETIME_SECONDS = 0.85
+const PRESS_DEPTH_MAX = 0.28
+const PRESS_GROW_SECONDS = 0.45
+const PRESS_STIFFNESS = 90
+const PRESS_DAMPING = 12
 
 export function createLiquidScene(
   renderer: RendererAdapter,
@@ -92,12 +98,16 @@ export function createLiquidScene(
   camera.position.set(0, 0, 5.15)
   const raycaster = new Raycaster()
   const raycastNdc = new Vector2()
+  const worldSphere = new Sphere()
+  const surfacePoint = new Vector3()
+  const pressNdc = new Vector2()
+  const wakeNdc = new Vector2(initialState.pointerX, initialState.pointerY)
   const configuredRippleCapacity = clamp(Math.floor(quality.rippleCapacity ?? 4), 1, MAX_RIPPLES)
   let activeRippleCapacity = configuredRippleCapacity
   const rippleDirections = Array.from({ length: MAX_RIPPLES }, () => new Vector3(0, 0, 1))
   const rippleAges = new Float32Array(MAX_RIPPLES)
   const rippleStrengths = new Float32Array(MAX_RIPPLES)
-  const rippleSlots = Array.from({ length: MAX_RIPPLES }, () => ({ startedAt: 0, active: false }))
+  const rippleSlots = Array.from({ length: MAX_RIPPLES }, () => ({ startedAt: null as number | null, active: false }))
   const hoverDirection = new Vector3(0, 0, 1)
   const pressDirection = new Vector3(0, 0, 1)
   const trailDirection = new Vector2(1, 0)
@@ -165,6 +175,27 @@ export function createLiquidScene(
   const particles = new Points(particleGeometry, particleMaterial)
   scene.add(particles)
 
+  // A separate bounded point pool places expanding water rings on the actual cursor path.
+  const wakePositions = new Float32Array(WAKE_CAPACITY * 3)
+  const wakeBirths = new Float32Array(WAKE_CAPACITY).fill(-100)
+  const wakeGeometry = new BufferGeometry()
+  const wakePositionAttribute = new BufferAttribute(wakePositions, 3).setUsage(DynamicDrawUsage)
+  const wakeBirthAttribute = new BufferAttribute(wakeBirths, 1).setUsage(DynamicDrawUsage)
+  wakeGeometry.setAttribute('position', wakePositionAttribute)
+  wakeGeometry.setAttribute('aBornAt', wakeBirthAttribute)
+  const wakeMaterial = new ShaderMaterial({
+    vertexShader: pointerWakeVertexShader,
+    fragmentShader: pointerWakeFragmentShader,
+    uniforms: { uTime: uniforms.uTime, uPixelRatio: particleMaterial.uniforms.uPixelRatio },
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+  })
+  const wake = new Points(wakeGeometry, wakeMaterial)
+  wake.frustumCulled = false
+  wake.renderOrder = 2
+  scene.add(wake)
+
   const target: SceneInput = { ...initialState, pointerVelocity: { ...initialState.pointerVelocity } }
   const current: SceneInput = { ...initialState, pointerVelocity: { ...initialState.pointerVelocity } }
   const motionEnergy = new MotionEnergy()
@@ -185,9 +216,13 @@ export function createLiquidScene(
   let impactEnergy = 0
   let pressDepth = 0
   let pressVelocity = 0
-  let pressStartedAt = 0
+  let pressStartedAt: number | null = null
   let pressActive = false
   let disposed = false
+  let scrollVelocity = 0
+  let wakeCursor = 0
+  let wakeCapacity = WAKE_CAPACITY
+  let hasWakeOrigin = false
   let previousStage = resolveMotionStage(initialState.scroll)
 
   function hitSphere(ndcX: number, ndcY: number): Vector3 | null {
@@ -196,29 +231,48 @@ export function createLiquidScene(
     camera.updateMatrixWorld()
     mesh.updateMatrixWorld(true)
     raycaster.setFromCamera(raycastNdc, camera)
-    const hit = raycaster.intersectObject(mesh, false)[0]
-    if (!hit) return null
-    return mesh.worldToLocal(hit.point.clone()).normalize()
+    worldSphere.center.setFromMatrixPosition(mesh.matrixWorld)
+    worldSphere.radius = 1.48 * mesh.scale.x
+    // GPU vertex displacement is unavailable to CPU raycasting; use its base sphere.
+    if (!raycaster.ray.intersectSphere(worldSphere, surfacePoint)) return null
+    return mesh.worldToLocal(surfacePoint).normalize()
   }
 
   function resolveInteractionDirection(ndcX: number, ndcY: number): Vector3 | null {
     const directHit = hitSphere(ndcX, ndcY)
-    if (directHit) return directHit
-    let nearestHit = hitSphere(0, 0)
-    if (!nearestHit) return null
-    let hitDistance = 0
-    let missDistance = 1
-    for (let step = 0; step < 12; step += 1) {
-      const distance = (hitDistance + missDistance) * 0.5
-      const hit = hitSphere(ndcX * distance, ndcY * distance)
-      if (hit) {
-        nearestHit = hit
-        hitDistance = distance
-      } else {
-        missDistance = distance
+    if (directHit || disposed) return directHit
+    const depth = (worldSphere.center.z - raycaster.ray.origin.z) / raycaster.ray.direction.z
+    raycaster.ray.at(depth, surfacePoint).sub(worldSphere.center)
+    surfacePoint.z = 0
+    // Keep the fallback on the visible hemisphere so off-sphere taps remain legible.
+    surfacePoint.setLength(worldSphere.radius * 0.84)
+    surfacePoint.z = Math.sqrt(Math.max(0, worldSphere.radius ** 2 - surfacePoint.lengthSq()))
+    surfacePoint.add(worldSphere.center)
+    return mesh.worldToLocal(surfacePoint).normalize()
+  }
+
+  function updateWake(seconds: number) {
+    const distance = Math.hypot((target.pointerX - wakeNdc.x) * viewportWidth / 2, (target.pointerY - wakeNdc.y) * viewportHeight / 2)
+    if (hasWakeOrigin && distance >= 10 && viewportWidth > 0 && viewportHeight > 0) {
+      const samples = Math.min(8, Math.ceil(distance / 18))
+      for (let sample = 1; sample <= samples; sample += 1) {
+        const fraction = sample / samples
+        raycastNdc.set(wakeNdc.x + (target.pointerX - wakeNdc.x) * fraction, wakeNdc.y + (target.pointerY - wakeNdc.y) * fraction)
+        raycaster.setFromCamera(raycastNdc, camera)
+        raycaster.ray.at((2 - raycaster.ray.origin.z) / raycaster.ray.direction.z, surfacePoint)
+        surfacePoint.toArray(wakePositions, wakeCursor * 3)
+        wakeBirths[wakeCursor] = seconds - (1 - fraction) * 0.04
+        wakeCursor = (wakeCursor + 1) % wakeCapacity
       }
+      wakeNdc.set(target.pointerX, target.pointerY)
+      wakePositionAttribute.needsUpdate = true
+      wakeBirthAttribute.needsUpdate = true
     }
-    return nearestHit
+    let count = 0
+    for (let index = 0; index < wakeCapacity; index += 1) {
+      if (seconds - wakeBirths[index] < WAKE_LIFETIME_SECONDS) count += 1
+    }
+    canvas.dataset.sphereWakeCount = String(count)
   }
 
   function updateRippleUniforms(seconds: number) {
@@ -226,7 +280,8 @@ export function createLiquidScene(
     for (let index = 0; index < MAX_RIPPLES; index += 1) {
       const slot = rippleSlots[index]
       const active = index < activeRippleCapacity && slot.active
-      const age = active ? Math.max(0, seconds - slot.startedAt) : 0
+      if (active && slot.startedAt === null) slot.startedAt = seconds
+      const age = active ? Math.max(0, seconds - (slot.startedAt ?? seconds)) : 0
       if (active && age <= RIPPLE_LIFETIME_SECONDS) {
         rippleAges[index] = age
         rippleStrengths[index] = Math.min(1, Math.max(0, 1 - age / RIPPLE_LIFETIME_SECONDS))
@@ -242,13 +297,23 @@ export function createLiquidScene(
   }
 
   function updatePress(delta: number, seconds: number) {
+    if (pressActive) {
+      const direction = resolveInteractionDirection(pressNdc.x, pressNdc.y)
+      if (direction) pressDirection.copy(direction)
+    }
+    if (pressActive && pressStartedAt === null) pressStartedAt = seconds
     const targetDepth = pressActive
-      ? Math.min(PRESS_DEPTH_MAX, Math.max(0, (seconds - pressStartedAt) / PRESS_GROW_SECONDS) * PRESS_DEPTH_MAX)
+      ? PRESS_DEPTH_MAX * (0.3 + 0.7 * clamp((seconds - (pressStartedAt ?? seconds)) / PRESS_GROW_SECONDS, 0, 1))
       : 0
-    const acceleration = (targetDepth - pressDepth) * PRESS_STIFFNESS - pressVelocity * PRESS_DAMPING
-    pressVelocity = pressVelocity + acceleration * delta
-    pressDepth = clamp(pressDepth + pressVelocity * delta, 0, PRESS_DEPTH_MAX)
-    if (!pressActive && pressDepth < 0.0001 && Math.abs(pressVelocity) < 0.001) {
+    // Small integration steps keep the underdamped release stable on slower devices.
+    const steps = Math.max(1, Math.ceil(delta * 120))
+    const step = delta / steps
+    for (let index = 0; index < steps; index += 1) {
+      const acceleration = (targetDepth - pressDepth) * PRESS_STIFFNESS - pressVelocity * PRESS_DAMPING
+      pressVelocity += acceleration * step
+      pressDepth = clamp(pressDepth + pressVelocity * step, -0.045, PRESS_DEPTH_MAX)
+    }
+    if (!pressActive && Math.abs(pressDepth) < 0.0001 && Math.abs(pressVelocity) < 0.001) {
       pressDepth = 0
       pressVelocity = 0
     }
@@ -271,6 +336,11 @@ export function createLiquidScene(
         ? Math.max(1, configuredRippleCapacity - 1)
         : 1
     uniforms.uRippleCapacity.value = activeRippleCapacity
+    wakeCapacity = tier === 'high' ? WAKE_CAPACITY : tier === 'balanced' ? 24 : 12
+    wakeGeometry.setDrawRange(0, wakeCapacity)
+    wakeCursor %= wakeCapacity
+    for (let index = wakeCapacity; index < WAKE_CAPACITY; index += 1) wakeBirths[index] = -100
+    wakeBirthAttribute.needsUpdate = true
     particleGeometry.setDrawRange(0, particleCount)
     particleMaterial.uniforms.uPixelRatio.value = pixelRatio
     if (viewportWidth <= 0 || viewportHeight <= 0 || disposed) return
@@ -293,6 +363,10 @@ export function createLiquidScene(
     setInput(input) {
       const nextPointerX = clamp(input.pointerX, -1, 1)
       const nextPointerY = clamp(input.pointerY, -1, 1)
+      if (!hasWakeOrigin && (nextPointerX !== target.pointerX || nextPointerY !== target.pointerY)) {
+        wakeNdc.set(nextPointerX, nextPointerY)
+        hasWakeOrigin = true
+      }
       const nextScroll = clamp(input.scroll, 0, 1)
       const now = performance.now()
       const elapsedSeconds = (now - lastInputTime) / 1000
@@ -318,7 +392,7 @@ export function createLiquidScene(
       if (!direction) return false
       const slotIndex = rippleCursor % activeRippleCapacity
       rippleDirections[slotIndex].copy(direction)
-      rippleSlots[slotIndex].startedAt = lastTime
+      rippleSlots[slotIndex].startedAt = lastTime > 0 ? lastTime : null
       rippleSlots[slotIndex].active = true
       rippleStrengths[slotIndex] = 1
       rippleCursor = (slotIndex + 1) % activeRippleCapacity
@@ -332,7 +406,8 @@ export function createLiquidScene(
       const direction = resolveInteractionDirection(ndcX, ndcY)
       if (!direction) return false
       pressDirection.copy(direction)
-      pressStartedAt = lastTime
+      pressNdc.set(ndcX, ndcY)
+      pressStartedAt = lastTime > 0 ? lastTime : null
       pressActive = true
       return true
     },
@@ -342,13 +417,24 @@ export function createLiquidScene(
     render(time) {
       if (disposed) return
       const seconds = time / 1000
+      if (lastTime > 0 && seconds - lastTime > 0.25) {
+        wakeNdc.set(target.pointerX, target.pointerY)
+        hasWakeOrigin = false
+        wakeBirths.fill(-100)
+        wakeBirthAttribute.needsUpdate = true
+      }
       const delta = lastTime > 0 ? clamp(seconds - lastTime, 0, 0.05) : 1 / 60
       lastTime = seconds
       current.pointerX = damp(current.pointerX, target.pointerX, 5.5, delta)
       current.pointerY = damp(current.pointerY, target.pointerY, 5.5, delta)
       current.pointerVelocity.x = damp(current.pointerVelocity.x, target.pointerVelocity.x, 8, delta)
       current.pointerVelocity.y = damp(current.pointerVelocity.y, target.pointerVelocity.y, 8, delta)
-      current.scroll = damp(current.scroll, target.scroll, 4.2, delta)
+      // Exact critically damped integration preserves velocity across abrupt scroll reversals.
+      const scrollOffset = current.scroll - target.scroll
+      const scrollStep = (scrollVelocity + 7 * scrollOffset) * delta
+      const scrollDecay = Math.exp(-7 * delta)
+      current.scroll = clamp(target.scroll + (scrollOffset + scrollStep) * scrollDecay, 0, 1)
+      scrollVelocity = (scrollVelocity - 7 * scrollStep) * scrollDecay
 
       const stage = resolveMotionStage(current.scroll)
       const mood = sceneMoodAt(current.scroll)
@@ -359,9 +445,9 @@ export function createLiquidScene(
       const rotationX = -0.06 + current.pointerY * 0.18 + current.scroll * (0.9 + mood.rotationSpeed)
       const rotationY = 0.25 + current.pointerX * 0.23 - current.scroll * (0.65 + mood.rotationSpeed)
       const rotationZ = -0.04 + current.scroll * (0.8 + mood.rotationSpeed)
-      const viewportScale = window.innerWidth < 760 ? 0.68 : 1
+      const viewportScale = Math.min(1, camera.aspect)
       const moodScale = 1 + (mood.scale - 1) * 0.12
-      const scale = (0.66 + Math.sin(seconds * 0.55) * 0.012 + current.scroll * 0.06) * moodScale * viewportScale
+      const scale = (0.58 + Math.sin(seconds * 0.55) * 0.008 + current.scroll * 0.04) * moodScale * viewportScale
       const offsetY = Math.sin(seconds * 0.45 * (0.4 + mood.rotationSpeed)) * 0.04
 
       mesh.rotation.set(rotationX, rotationY, rotationZ)
@@ -377,6 +463,7 @@ export function createLiquidScene(
       hoverStrength = damp(hoverStrength, hoverTarget, 9, delta)
       updateRippleUniforms(seconds)
       updatePress(delta, seconds)
+      updateWake(seconds)
       const pointerSpeed = clamp(Math.hypot(current.pointerVelocity.x, current.pointerVelocity.y), 0, 4)
       if (pointerSpeed > 0.0001) trailDirection.set(current.pointerVelocity.x, current.pointerVelocity.y).normalize()
       trailVelocity.set(current.pointerVelocity.x, current.pointerVelocity.y)
@@ -416,9 +503,11 @@ export function createLiquidScene(
       geometry.dispose()
       wireGeometry.dispose()
       particleGeometry.dispose()
+      wakeGeometry.dispose()
       material.dispose()
       wireMaterial.dispose()
       particleMaterial.dispose()
+      wakeMaterial.dispose()
     },
   }
 }
