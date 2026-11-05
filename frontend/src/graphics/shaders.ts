@@ -116,28 +116,37 @@ export const particleVertexShader = /* glsl */ `
   uniform float uScroll;
   uniform float uPixelRatio;
   uniform float uEnergy;
-  varying float vAlpha;
+  uniform vec2 uPointerVelocity;
+  uniform vec2 uTrailDirection;
+  uniform float uTrailStrength;
+  uniform float uImpactEnergy;
+  varying float vTrailAlpha;
 
   void main() {
     vec3 p = position;
     float travel = smoothstep(0.08, 0.85, uScroll);
+    float speed = clamp(length(uPointerVelocity), 0.0, 4.0);
+    float trailAge = fract(uTime * (0.55 + aSeed * 0.8) + aSeed);
+    float trailLife = smoothstep(0.0, 0.12, trailAge) * (1.0 - smoothstep(0.55, 1.0, trailAge));
+    float trailDistance = (1.0 - trailAge) * (0.18 + speed * 0.28) * clamp(uTrailStrength, 0.0, 1.0);
+    p.xy += normalize(uTrailDirection + vec2(0.0001)) * trailDistance;
     p *= 1.0 + travel * (0.22 + aSeed * 0.28) + uEnergy * (0.06 + aSeed * 0.1);
     p.y += sin(uTime * (0.35 + aSeed * 0.5) + aSeed * 17.0) * (0.08 + travel * 0.18);
     p.x += cos(uTime * (0.25 + aSeed * 0.36) + aSeed * 11.0) * (0.04 + travel * 0.1);
     vec4 viewPosition = modelViewMatrix * vec4(p, 1.0);
     gl_Position = projectionMatrix * viewPosition;
-    gl_PointSize = aSize * uPixelRatio * (18.0 / max(1.0, -viewPosition.z)) * (1.0 + uEnergy * 0.9);
-    vAlpha = smoothstep(0.02, 0.22, uScroll) * (0.45 + aSeed * 0.55) * (0.65 + uEnergy * 0.35);
+    gl_PointSize = aSize * uPixelRatio * (18.0 / max(1.0, -viewPosition.z)) * (1.0 + uEnergy * 0.9) * (1.0 + clamp(uTrailStrength, 0.0, 1.0) * 0.6 + clamp(uImpactEnergy, 0.0, 1.0) * 0.4);
+    vTrailAlpha = smoothstep(0.02, 0.22, uScroll) * (0.45 + aSeed * 0.55) * (0.65 + uEnergy * 0.35) * trailLife * (0.22 + clamp(uTrailStrength, 0.0, 1.0) * 0.78 + clamp(uImpactEnergy, 0.0, 1.0) * 0.18);
   }
 `
 
 export const particleFragmentShader = /* glsl */ `
-  varying float vAlpha;
+  varying float vTrailAlpha;
 
   void main() {
     float distanceToCenter = distance(gl_PointCoord, vec2(0.5));
     if (distanceToCenter > 0.5) discard;
     float glow = smoothstep(0.5, 0.05, distanceToCenter);
-    gl_FragColor = vec4(0.78, 1.0, 0.18, glow * vAlpha * 0.48);
+    gl_FragColor = vec4(0.78, 1.0, 0.18, glow * vTrailAlpha * 0.48);
   }
 `

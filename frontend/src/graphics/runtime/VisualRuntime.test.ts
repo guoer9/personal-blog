@@ -83,6 +83,29 @@ describe('VisualRuntime', () => {
     expect(harness.queued.size).toBe(1)
   })
 
+  it('smooths pointer velocity for scenes and lets it decay without new input', async () => {
+    const harness = createHarness()
+    harness.runtime.mount(harness.canvas)
+    await activateRoute(harness.runtime, { routeName: 'Home', pageId: 'home', params: {} })
+    await vi.waitFor(() => expect(harness.calls).toContain('home:enter'))
+    harness.runtime.start()
+
+    harness.runtime.setPointer(0, 0)
+    harness.advance(16)
+    harness.runFrame()
+    harness.runtime.setPointer(1, 0)
+    harness.advance(16)
+    harness.runFrame()
+    const movingVelocity = harness.runtime.getVisualState().pointerVelocity.x
+    expect(movingVelocity).toBeGreaterThan(0)
+
+    for (let frame = 0; frame < 30; frame += 1) {
+      harness.advance(16)
+      harness.runFrame()
+    }
+    expect(harness.runtime.getVisualState().pointerVelocity.x).toBeLessThan(movingVelocity)
+  })
+
   it('keeps the renderer while handing off from Home to Works', async () => {
     const harness = createHarness()
     harness.runtime.mount(harness.canvas)

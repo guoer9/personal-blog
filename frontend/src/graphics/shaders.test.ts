@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { flowFragmentShader, flowVertexShader, particleVertexShader } from './shaders'
+import { flowFragmentShader, flowVertexShader, particleFragmentShader, particleVertexShader } from './shaders'
 
 describe('motion energy shaders', () => {
   it('keeps sphere deformation gradual across the 03 to 04 scroll interval', () => {
@@ -31,6 +31,15 @@ describe('motion energy shaders', () => {
     expect(flowFragmentShader).toContain('varying float vRippleLight;')
     expect(flowFragmentShader).toContain('uHoverStrength * 0.12')
     expect(flowFragmentShader).toContain('vRippleLight * 0.28')
+  })
+
+  it('cycles finite trail particles along pointer direction and fades their alpha', () => {
+    expect(particleVertexShader).toContain('uniform vec2 uPointerVelocity;')
+    expect(particleVertexShader).toContain('uniform float uTrailStrength;')
+    expect(particleVertexShader).toContain('fract(uTime *')
+    expect(particleVertexShader).toContain('smoothstep(0.55, 1.0, trailAge)')
+    expect(particleVertexShader).toContain('uTrailDirection')
+    expect(particleFragmentShader).toContain('vTrailAlpha')
   })
 
 })

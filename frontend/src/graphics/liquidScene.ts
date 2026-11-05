@@ -25,6 +25,7 @@ import type { RendererAdapter } from './runtime/types'
 export interface SceneInput {
   pointerX: number
   pointerY: number
+  pointerVelocity: { x: number; y: number }
   scroll: number
 }
 
@@ -99,6 +100,8 @@ export function createLiquidScene(
   const rippleSlots = Array.from({ length: MAX_RIPPLES }, () => ({ startedAt: 0, active: false }))
   const hoverDirection = new Vector3(0, 0, 1)
   const pressDirection = new Vector3(0, 0, 1)
+  const trailDirection = new Vector2(1, 0)
+  const trailVelocity = new Vector2()
 
   const uniforms = {
     uTime: { value: 0 },
@@ -150,6 +153,10 @@ export function createLiquidScene(
       uScroll: uniforms.uScroll,
       uEnergy: uniforms.uEnergy,
       uPixelRatio: { value: 1 },
+      uPointerVelocity: { value: new Vector2() },
+      uTrailDirection: { value: new Vector2(1, 0) },
+      uTrailStrength: { value: 0 },
+      uImpactEnergy: { value: 0 },
     },
     transparent: true,
     depthWrite: false,
@@ -158,8 +165,8 @@ export function createLiquidScene(
   const particles = new Points(particleGeometry, particleMaterial)
   scene.add(particles)
 
-  const target: SceneInput = { ...initialState }
-  const current: SceneInput = { ...initialState }
+  const target: SceneInput = { ...initialState, pointerVelocity: { ...initialState.pointerVelocity } }
+  const current: SceneInput = { ...initialState, pointerVelocity: { ...initialState.pointerVelocity } }
   const motionEnergy = new MotionEnergy()
   let lastInputTime = performance.now()
   const deviceDprCap = quality.pixelRatioCap
@@ -173,6 +180,8 @@ export function createLiquidScene(
   let rippleCursor = 0
   let rippleCount = 0
   let hoverStrength = 0
+  let trailStrength = 0
+  let impactEnergy = 0
   let pressDepth = 0
   let pressVelocity = 0
   let pressStartedAt = 0
@@ -275,6 +284,8 @@ export function createLiquidScene(
       lastInputTime = now
       target.pointerX = nextPointerX
       target.pointerY = nextPointerY
+      target.pointerVelocity.x = clamp(input.pointerVelocity.x, -4, 4)
+      target.pointerVelocity.y = clamp(input.pointerVelocity.y, -4, 4)
       target.scroll = nextScroll
     },
     setQualityTier(tier) {
@@ -292,6 +303,7 @@ export function createLiquidScene(
       rippleCursor = (slotIndex + 1) % activeRippleCapacity
       rippleCount = Math.min(activeRippleCapacity, rippleCount + 1)
       uniforms.uRippleCount.value = rippleCount
+      impactEnergy = clamp(impactEnergy + 0.65, 0, 1)
       return true
     },
     beginPress(ndcX, ndcY) {
@@ -312,6 +324,8 @@ export function createLiquidScene(
       lastTime = seconds
       current.pointerX = damp(current.pointerX, target.pointerX, 5.5, delta)
       current.pointerY = damp(current.pointerY, target.pointerY, 5.5, delta)
+      current.pointerVelocity.x = damp(current.pointerVelocity.x, target.pointerVelocity.x, 8, delta)
+      current.pointerVelocity.y = damp(current.pointerVelocity.y, target.pointerVelocity.y, 8, delta)
       current.scroll = damp(current.scroll, target.scroll, 4.2, delta)
 
       const stage = resolveMotionStage(current.scroll)
@@ -341,6 +355,12 @@ export function createLiquidScene(
       hoverStrength = damp(hoverStrength, hoverTarget, 9, delta)
       updateRippleUniforms(seconds)
       updatePress(delta, seconds)
+      const pointerSpeed = clamp(Math.hypot(current.pointerVelocity.x, current.pointerVelocity.y), 0, 4)
+      if (pointerSpeed > 0.0001) trailDirection.set(current.pointerVelocity.x, current.pointerVelocity.y).normalize()
+      trailVelocity.set(current.pointerVelocity.x, current.pointerVelocity.y)
+      const trailTarget = clamp(pointerSpeed / 2.4 + impactEnergy * 0.35, 0, 1)
+      trailStrength = damp(trailStrength, trailTarget, 8, delta)
+      impactEnergy = damp(impactEnergy, 0, 4.5, delta)
 
       particles.rotation.set(rotationX * 0.35, -rotationY * 0.3 + seconds * 0.018, rotationZ * 0.24)
       particles.position.y = offsetY * 0.8 + mood.particleLift * 0.1
@@ -355,6 +375,10 @@ export function createLiquidScene(
       uniforms.uEnergy.value = easedMotionEnergy
       uniforms.uHoverActive.value = hoverHit ? 1 : 0
       uniforms.uHoverStrength.value = hoverStrength
+      particleMaterial.uniforms.uPointerVelocity.value.copy(trailVelocity)
+      particleMaterial.uniforms.uTrailDirection.value.copy(trailDirection)
+      particleMaterial.uniforms.uTrailStrength.value = clamp(trailStrength, 0, 1)
+      particleMaterial.uniforms.uImpactEnergy.value = clamp(impactEnergy, 0, 1)
       renderer.render(scene, camera)
     },
     dispose() {

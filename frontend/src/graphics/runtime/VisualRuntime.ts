@@ -5,6 +5,7 @@ import { SceneRegistry } from './SceneRegistry'
 import { createVisualState, normalizeVisualState } from './VisualState'
 import type { PageSceneId, RendererAdapter, RouteVisualIdentity, SceneContext, VisualState } from './types'
 import { frameTimeEma, resolveQualityState, type QualityState } from '../quality'
+import { clamp, damp } from '../motion'
 
 export interface VisualRuntimeOptions {
   readonly sceneRegistry: SceneRegistry
@@ -37,6 +38,9 @@ export class VisualRuntime {
   private readonly effects = new EffectQueue()
   private readonly targetState: VisualState = createVisualState()
   private state: VisualState = createVisualState()
+  private readonly pointerVelocityTarget = { x: 0, y: 0 }
+  private pointerVelocity = { x: 0, y: 0 }
+  private lastPointerSample: { x: number; y: number; timeMs: number } | null = null
   private coordinator: PageTransitionCoordinator | null = null
   private renderer: RendererAdapter | null = null
   private canvas: HTMLCanvasElement | null = null
@@ -159,9 +163,24 @@ export class VisualRuntime {
   registerAnchor(id: string, element: HTMLElement): () => void { return this.anchors.register(id, element) }
   measureAnchors(): void { this.anchors.measure() }
   getVisualState(): Readonly<VisualState> { return { ...this.state, pointerVelocity: { ...this.state.pointerVelocity } } }
-  setPointer(pointerX: number, pointerY: number): void { Object.assign(this.targetState, { pointerX, pointerY }) }
+  setPointer(pointerX: number, pointerY: number): void {
+    const nextPointerX = clamp(Number.isFinite(pointerX) ? pointerX : 0, -1, 1)
+    const nextPointerY = clamp(Number.isFinite(pointerY) ? pointerY : 0, -1, 1)
+    const now = this.now()
+    if (this.lastPointerSample) {
+      const elapsedSeconds = Math.max(1 / 240, (now - this.lastPointerSample.timeMs) / 1000)
+      this.pointerVelocityTarget.x = clamp((nextPointerX - this.lastPointerSample.x) / elapsedSeconds, -6, 6)
+      this.pointerVelocityTarget.y = clamp((nextPointerY - this.lastPointerSample.y) / elapsedSeconds, -6, 6)
+    }
+    this.lastPointerSample = { x: nextPointerX, y: nextPointerY, timeMs: now }
+    Object.assign(this.targetState, { pointerX: nextPointerX, pointerY: nextPointerY })
+  }
   setScroll(scrollY: number, documentProgress = this.targetState.documentProgress): void { Object.assign(this.targetState, { scrollY, documentProgress }) }
   setReducedMotion(reducedMotion: boolean): void {
+    if (reducedMotion) {
+      this.pointerVelocityTarget.x = 0
+      this.pointerVelocityTarget.y = 0
+    }
     Object.assign(this.targetState, { reducedMotion })
     this.state = normalizeVisualState({ ...this.state, reducedMotion })
     this.coordinator?.setVisualState(this.state)
@@ -250,8 +269,13 @@ export class VisualRuntime {
       this.averageFrameTimeMs = frameTimeEma(this.averageFrameTimeMs, deltaSeconds * 1000)
       this.qualityState = resolveQualityState(this.qualityState, this.averageFrameTimeMs)
       const previousTier = this.state.qualityTier
+      this.pointerVelocity.x = damp(this.pointerVelocity.x, this.pointerVelocityTarget.x, 12, deltaSeconds)
+      this.pointerVelocity.y = damp(this.pointerVelocity.y, this.pointerVelocityTarget.y, 12, deltaSeconds)
+      this.pointerVelocityTarget.x = damp(this.pointerVelocityTarget.x, 0, 8, deltaSeconds)
+      this.pointerVelocityTarget.y = damp(this.pointerVelocityTarget.y, 0, 8, deltaSeconds)
       this.state = normalizeVisualState({
         ...this.targetState,
+        pointerVelocity: this.pointerVelocity,
         timeMs: frameTime,
         deltaSeconds,
         viewportWidth: this.viewport.width,
