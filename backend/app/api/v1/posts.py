@@ -104,21 +104,32 @@ async def get_post(
     slug: str,
     db: AsyncSession = Depends(get_db),
 ):
-    """获取文章详情"""
-    post = await get_post_by_slug(db, slug, include_unpublished=False)
-    
-    if not post:
+    """Resolve migrated articles to their canonical document-library page."""
+    public_document = (
+        NotionDocument.status == "published",
+        NotionDocument.manual_unpublished.is_(False),
+    )
+    document = await db.scalar(
+        select(NotionDocument).where(
+            NotionDocument.legacy_post_slug == slug,
+            *public_document,
+        )
+    )
+    if document is None:
         document = await db.scalar(
             select(NotionDocument).where(
-                NotionDocument.legacy_post_slug == slug,
-                NotionDocument.status == "published",
+                NotionDocument.slug == slug,
+                *public_document,
             )
         )
-        if document is not None:
-            return RedirectResponse(
-                url=f"{settings.API_V1_PREFIX}/documents/{document.slug}",
-                status_code=307,
-            )
+    if document is not None:
+        return RedirectResponse(
+            url=f"{settings.API_V1_PREFIX}/documents/{document.slug}",
+            status_code=307,
+        )
+
+    post = await get_post_by_slug(db, slug, include_unpublished=False)
+    if not post:
         raise HTTPException(status_code=404, detail="文章不存在")
     
     # 增加浏览次数

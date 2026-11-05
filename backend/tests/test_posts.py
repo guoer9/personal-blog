@@ -1,4 +1,9 @@
+from urllib.parse import quote
+
 import httpx
+from sqlalchemy import select
+
+from app.models import NotionDocument, NotionSource, Post, User
 from app.core.config import settings
 
 
@@ -28,6 +33,82 @@ async def test_title_edit_keeps_permalink_and_publication_can_be_withdrawn(clien
     assert (await client.get(f'/api/v1/posts/{post["slug"]}')).json()["title"] == "A new title"
     await client.put(f'/api/v1/posts/{post["id"]}', headers=headers, json={"is_published": False})
     assert (await client.get(f'/api/v1/posts/{post["slug"]}')).status_code == 404
+
+
+async def test_post_url_redirects_to_same_slug_in_public_document_library(client, db_session):
+    source = NotionSource(
+        connection_id="primary",
+        database_id="11111111-1111-1111-1111-111111111111",
+        title="日记和文档",
+        source_url="https://www.notion.so/11111111111111111111111111111111",
+    )
+    db_session.add(source)
+    await db_session.flush()
+    document = NotionDocument(
+        source_id=source.id,
+        notion_page_id="22222222-2222-2222-2222-222222222222",
+        slug="镜像源配置以及docker",
+        title="镜像源配置以及docker",
+        content="Docker 配置正文",
+        status="published",
+    )
+    db_session.add(document)
+    await db_session.commit()
+
+    response = await client.get(
+        f"/api/v1/posts/{quote(document.slug, safe='')}",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 307
+    assert response.headers["location"] == f"/api/v1/documents/{quote(document.slug, safe='')}"
+
+    canonical = await client.get(response.headers["location"])
+    assert canonical.status_code == 200
+    assert canonical.json()["content"] == "Docker 配置正文"
+
+
+async def test_post_url_prefers_document_when_old_post_and_document_share_slug(client, db_session):
+    admin = User(
+        username="legacy-author",
+        email="legacy-author@example.com",
+        hashed_password="test-hash",
+        is_admin=True,
+        is_active=True,
+    )
+    db_session.add(admin)
+    await db_session.flush()
+    source = NotionSource(
+        connection_id="primary",
+        database_id="33333333-3333-3333-3333-333333333333",
+        title="日记和文档",
+        source_url="https://www.notion.so/33333333333333333333333333333333",
+    )
+    db_session.add(source)
+    await db_session.flush()
+    db_session.add_all([
+        Post(
+            title="旧 Docker 文章",
+            slug="docker-mirror",
+            content="旧副本",
+            author_id=admin.id,
+            is_published=True,
+        ),
+        NotionDocument(
+            source_id=source.id,
+            notion_page_id="44444444-4444-4444-4444-444444444444",
+            slug="docker-mirror",
+            title="Docker 镜像配置",
+            content="资料库正文",
+            status="published",
+        ),
+    ])
+    await db_session.commit()
+
+    response = await client.get("/api/v1/posts/docker-mirror", follow_redirects=False)
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "/api/v1/documents/docker-mirror"
 
 
 async def test_admin_can_publish_and_public_can_list_post(
