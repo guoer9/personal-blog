@@ -76,7 +76,12 @@ function onPointerMove(event: PointerEvent) {
       touchPointer.dragging = true
     }
   }
-  runtime.value?.setPointer((event.clientX / Math.max(1, window.innerWidth)) * 2 - 1, -((event.clientY / Math.max(1, window.innerHeight)) * 2 - 1))
+  runtime.value?.setPointer(
+    (event.clientX / Math.max(1, window.innerWidth)) * 2 - 1,
+    -((event.clientY / Math.max(1, window.innerHeight)) * 2 - 1),
+    event.clientX,
+    event.clientY,
+  )
 }
 function onPointerEnd(event: PointerEvent) {
   if (touchPointer?.id === event.pointerId) touchPointer = null

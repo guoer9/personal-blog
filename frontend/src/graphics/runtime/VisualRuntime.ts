@@ -163,7 +163,7 @@ export class VisualRuntime {
   registerAnchor(id: string, element: HTMLElement): () => void { return this.anchors.register(id, element) }
   measureAnchors(): void { this.anchors.measure() }
   getVisualState(): Readonly<VisualState> { return { ...this.state, pointerVelocity: { ...this.state.pointerVelocity } } }
-  setPointer(pointerX: number, pointerY: number): void {
+  setPointer(pointerX: number, pointerY: number, pointerPixelX?: number, pointerPixelY?: number): void {
     const nextPointerX = clamp(Number.isFinite(pointerX) ? pointerX : 0, -1, 1)
     const nextPointerY = clamp(Number.isFinite(pointerY) ? pointerY : 0, -1, 1)
     const now = this.now()
@@ -173,7 +173,18 @@ export class VisualRuntime {
       this.pointerVelocityTarget.y = clamp((nextPointerY - this.lastPointerSample.y) / elapsedSeconds, -6, 6)
     }
     this.lastPointerSample = { x: nextPointerX, y: nextPointerY, timeMs: now }
-    Object.assign(this.targetState, { pointerX: nextPointerX, pointerY: nextPointerY })
+    const resolvedPixelX = Number.isFinite(pointerPixelX)
+      ? Math.max(0, Number(pointerPixelX))
+      : ((nextPointerX + 1) * 0.5) * this.viewport.width
+    const resolvedPixelY = Number.isFinite(pointerPixelY)
+      ? Math.max(0, Number(pointerPixelY))
+      : ((1 - nextPointerY) * 0.5) * this.viewport.height
+    Object.assign(this.targetState, {
+      pointerX: nextPointerX,
+      pointerY: nextPointerY,
+      pointerPixelX: resolvedPixelX,
+      pointerPixelY: resolvedPixelY,
+    })
   }
   setScroll(scrollY: number, documentProgress = this.targetState.documentProgress): void { Object.assign(this.targetState, { scrollY, documentProgress }) }
   setReducedMotion(reducedMotion: boolean): void {

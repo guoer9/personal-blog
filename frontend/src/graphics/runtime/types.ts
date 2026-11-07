@@ -14,6 +14,9 @@ export interface RendererAdapter {
   setPixelRatio(value: number): void
   setSize(width: number, height: number, updateStyle?: boolean): void
   render(scene?: unknown, camera?: unknown): void
+  setRenderTarget?(target: unknown | null): void
+  getRenderTarget?(): unknown | null
+  clear?(color?: boolean, depth?: boolean, stencil?: boolean): void
   dispose(): void
 }
 
@@ -24,6 +27,8 @@ export interface VisualState {
   readonly deltaSeconds: number
   readonly pointerX: number
   readonly pointerY: number
+  readonly pointerPixelX: number
+  readonly pointerPixelY: number
   readonly pointerVelocity: Vector2
   readonly scrollY: number
   readonly scrollVelocity: number

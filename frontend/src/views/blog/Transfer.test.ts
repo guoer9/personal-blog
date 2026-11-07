@@ -40,7 +40,7 @@ beforeEach(() => {
 })
 afterEach(() => { wrapper?.unmount(); wrapper = undefined; document.body.innerHTML = ''; vi.restoreAllMocks() })
 
-describe('public transfer visitor page', () => {
+describe('authenticated transfer page', () => {
   it('shows explicit byte limits, six-hour retention and an accessible completed code that can be copied', async () => {
     const copy = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: copy } })
@@ -65,14 +65,14 @@ describe('public transfer visitor page', () => {
 
   it('does a POST lookup and exposes a native ticket download link without fetching the file body', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
-    api.lookupTransfer.mockResolvedValue({ data: { filename: '片段.mov', size: 10737418240, expires_at: status.expires_at, download_url: '/api/v1/transfers/download/ticket' } })
+    api.lookupTransfer.mockResolvedValue({ data: { filename: '片段.mov', size: 10737418240, expires_at: status.expires_at, download_url: '/api/v1/transfers/download/ticket.signature_456' } })
     await render()
     await wrapper!.get('input[aria-label="输入取件码"]').setValue('  MY-CODE  ')
     await wrapper!.get('form[aria-label="取件"]').trigger('submit')
     await flushPromises()
     expect(api.lookupTransfer).toHaveBeenCalledWith('MY-CODE', expect.any(AbortSignal))
     const link = wrapper!.get('a[download]')
-    expect(link.attributes('href')).toContain('/api/v1/transfers/download/ticket')
+    expect(link.attributes('href')).toContain('/api/v1/transfers/download/ticket.signature_456')
     expect(link.attributes('download')).toBe('片段.mov')
     expect(link.attributes('referrerpolicy')).toBe('no-referrer')
     expect(wrapper!.text()).toContain('10 GiB')

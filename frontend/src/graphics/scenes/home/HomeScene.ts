@@ -9,14 +9,28 @@ export class HomeScene implements PageSceneModule<HomePageState> {
   private lastInteractionSequence = 0
 
   mount(context: SceneContext): void {
-    this.controller = createLiquidScene(context.renderer, { pointerX: 0, pointerY: 0, pointerVelocity: { x: 0, y: 0 }, scroll: 0 })
+    this.controller = createLiquidScene(context.renderer, {
+      pointerX: 0,
+      pointerY: 0,
+      pointerPixelX: 0,
+      pointerPixelY: 0,
+      pointerVelocity: { x: 0, y: 0 },
+      scroll: 0,
+    })
   }
   enter(): void {}
   leave(): void {}
   update(visualState: Readonly<VisualState>, pageState: Readonly<HomePageState>): void {
     this.pageState = { ...(pageState || { paused: false, interaction: null }) }
     this.controller?.setQualityTier(visualState.qualityTier)
-    this.controller?.setInput({ pointerX: visualState.pointerX, pointerY: visualState.pointerY, pointerVelocity: visualState.pointerVelocity, scroll: visualState.documentProgress })
+    this.controller?.setInput({
+      pointerX: visualState.pointerX,
+      pointerY: visualState.pointerY,
+      pointerPixelX: visualState.pointerPixelX,
+      pointerPixelY: visualState.pointerPixelY,
+      pointerVelocity: visualState.pointerVelocity,
+      scroll: visualState.documentProgress,
+    })
     const interaction = this.pageState.interaction
     if (!interaction || interaction.sequence <= this.lastInteractionSequence) return
     this.lastInteractionSequence = interaction.sequence

@@ -122,7 +122,7 @@ onBeforeUnmount(() => {
       <router-link to="/" class="back-link">← 返回首页 / HOME</router-link>
       <p class="section-kicker">A small bridge / 临时传输</p>
       <h1>Send a file.<br /><em>Keep it moving.</em></h1>
-      <p class="page-lede">上传后分享取件码。传输完成后文件限时保留，任何人都不能浏览公开文件列表。</p>
+      <p class="page-lede">登录账号后可发送或接收临时文件。请把取件码分享给已注册并登录的接收者。</p>
     </header>
 
     <div class="transfer-policy" aria-label="传输限制">

@@ -41,6 +41,25 @@ def create_access_token(
     return encoded_jwt
 
 
+def create_transfer_download_token(
+    subject: Union[str, int],
+    ticket: str,
+    expires_delta: timedelta,
+) -> str:
+    """Create a short-lived token bound to one transfer download ticket."""
+    expire = datetime.now(timezone.utc) + expires_delta
+    return jwt.encode(
+        {
+            "exp": expire,
+            "sub": str(subject),
+            "type": "transfer-download",
+            "ticket": ticket,
+        },
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM,
+    )
+
+
 def create_refresh_token(
     subject: Union[str, int],
     expires_delta: Optional[timedelta] = None

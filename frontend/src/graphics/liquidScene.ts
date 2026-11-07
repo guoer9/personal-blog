@@ -29,6 +29,8 @@ import type { RendererAdapter } from './runtime/types'
 export interface SceneInput {
   pointerX: number
   pointerY: number
+  pointerPixelX?: number
+  pointerPixelY?: number
   pointerVelocity: { x: number; y: number }
   scroll: number
 }

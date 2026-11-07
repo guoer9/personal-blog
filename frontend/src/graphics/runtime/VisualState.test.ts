@@ -42,7 +42,7 @@ describe('VisualState', () => {
 
   it('creates an independent complete state from defaults and partial values', () => {
     const state = createVisualState({ pointerX: 0.4, viewportWidth: 800 })
-    expect(state).toEqual(expect.objectContaining({ pointerX: 0.4, viewportWidth: 800 }))
+    expect(state).toEqual(expect.objectContaining({ pointerX: 0.4, pointerPixelX: 0, pointerPixelY: 0, viewportWidth: 800 }))
     expect(state.deltaSeconds).toBeGreaterThan(0)
     expect(state.qualityTier).toBe('high')
   })

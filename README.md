@@ -2,7 +2,7 @@
 
 一个基于 Vue 3 + FastAPI + PostgreSQL 的个人博客与内容管理系统。本次二次开发保留了原有文章、标签、搜索、评论、认证、上传和后台能力，并重新划分公共展示、动效与内容系统之间的边界。
 
-当前版本 **v1.3.0**，已合并至 `main`，后续直接在主分支继续开发。完整跟进内容见 [CHANGELOG.md](CHANGELOG.md)。
+当前版本 **v1.3.0**，已合并至 `main`，后续直接在主分支继续开发。先读 [文档入口](docs/README.md)，上线前按 [上线准备清单](docs/release-readiness.md) 验收；版本记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## v1.3 更新
 
@@ -11,7 +11,7 @@
 - 统一文章管理：手写与 Notion 文章共同展示作者、标签、评论数、阅读量、公开链接和原文链接，支持下架。
 - 共用评论表：两种文章均支持评论和回复；同步保留统计和评论，管理员可管理下架文章的评论。
 - 作品发布与私有文件库：素材上传、续传、草稿、预览、发布更新、下架和回收恢复。
-- 访客临时传输、搜索改进，以及本地浏览器、可访问性和构建质量检查脚本。
+- 登录用户临时传输、搜索改进，以及本地浏览器、可访问性和构建质量检查脚本。
 
 新版本优先使用独立本地环境：API `127.0.0.1:8001`、数据库 `127.0.0.1:5544`，启动和验收步骤见 [scripts/local/README.md](scripts/local/README.md)，Notion 接入见 [scripts/local/NOTION.md](scripts/local/NOTION.md)。本地密钥、数据库、私有媒体与验收截图不随源码发布。
 
@@ -24,7 +24,7 @@
 - 公开前台不显示登录、注册或账户入口，`/login` 不再存在。
 - WebGL 不可用或开启减少动态效果时，仍然完整可读的静态版本。
 
-`lusion.co-ddw/` 是本地研究资料，已被 Git 忽略。它不参与构建，项目也不复制其中的模型、音频、原始着色器、文案或设计资产。
+`ddw/` 和 `lusion.co-ddw/` 是本地研究资料，已被 Git 忽略。它们不参与构建，项目也不复制其中的模型、音频、原始着色器、文案或设计资产。
 
 ## 架构
 
@@ -73,7 +73,7 @@ REST API (FastAPI) → PostgreSQL
 - 项目卡使用有阻尼的倾斜、光场和回归动效；触控设备与减少动态模式关闭倾斜。
 - 磁性链接保留正常键盘与触控点击，精细指针才参与位移动效。
 
-动效实现与验收记录见 [docs/implementation/2026-10-31-lusion-motion.md](docs/implementation/2026-10-31-lusion-motion.md)。
+动效实现与验收记录见 [docs/implementation/2026-10-31-lusion-motion.md](docs/implementation/2026-10-31-lusion-motion.md)。后续开发上下文和文档状态见 [docs/README.md](docs/README.md)。
 
 `liquidScene.ts` 当前是原创二十面体顶点形变和线框叠层的轻量场景，不包含参考项目的 ping-pong 纹理模拟，也没有复制参考站页面或引擎代码。
 
@@ -151,23 +151,13 @@ python3 -m pytest -q
 git diff --check
 ```
 
-## v1.3 验证结果
+## 最近一次本地基线
 
-- 前端 30 个测试文件、230 项通过；后端 246 项通过、41 项跳过。跳过项不计为通过。
-- TypeScript、生产构建和入口体积预算通过；大型懒加载 chunk 提示仍存在。
-- 真实 Notion 重新同步、统一文章管理、评论与回复、桌面和手机布局以及图片解码已在本地 Chrome 验收。测试创建的数据已清理。
-- 当前迁移版本为 `comment_targets_v7`。更新已有实例前备份数据库与文件目录，再使用目标实例环境执行 `alembic upgrade head`。
-- 详细证据与限制见 [统一文章与评论验收](docs/research/35-unified-article-comments-acceptance.md) 和 [Notion 工作区与格式验收](docs/research/34-notion-workspace-ui-acceptance.md)。
+- 最近一轮本地 Notion、统一文章、评论和公开索引验收记录见 [34](docs/research/34-notion-workspace-ui-acceptance.md)、[35](docs/research/35-unified-article-comments-acceptance.md) 和 [36](docs/research/36-public-article-index-acceptance.md)。这些记录保留当时环境和限制，不能替代发布前重跑。
+- 当前应重新执行 [上线准备清单](docs/release-readiness.md) 中的命令；历史测试数字已经移入 [归档](docs/archive/README.md)。
+- 更新已有实例前必须备份数据库和文件目录，再使用目标实例环境执行 `alembic upgrade head`。
 
-## v1.2 历史验证结果
-
-- v1.2 基线计划见 [2026-11-01-blog-v1.2.md](docs/superpowers/plans/2026-11-01-blog-v1.2.md)；冻结基线见 [16-v1.2-baseline-freeze.md](docs/research/16-v1.2-baseline-freeze.md)，最终验收见 [23-v1.2-release-acceptance.md](docs/research/23-v1.2-release-acceptance.md)。
-- 前端单元测试 `13` 个文件、`59` 项通过；类型检查、生产构建和公共入口包体积门禁通过。后端使用仓库虚拟环境测试为 `13` 项通过。
-- 最终三次构建均得到公共主 JS `154,485 B`（gzip level 9 `60,288 B`）、全局 CSS `6,226 B`（gzip level 9 `2,253 B`）、`liquidScene` `526,771 B`（Vite gzip `132.18 kB`）。主 JS gzip 比 Task 5 少 `10 B`，原 `+1 B` 风险已消除；必要错误修复的原始体积增加 `12 B` 单独保留。
-- 最终本地性能覆盖首页/归档/文章 × 两视口 × 三次，共 `18` 个冷上下文样本；首页 LCP 中位数为桌面 `1,276 ms`、移动 `1,272 ms`，INP candidate 为 `48 ms`、`56 ms`。归档/文章 LCP 中位数也均低于 `2,500 ms`；桌面首页两条超过 `200 ms` 的长任务仍待归因。
-- 发布验收覆盖 `10` 条公共路线 × `3` 种动态偏好，共 `30/30` 个场景；横向溢出和非预期错误均为 `0`，公共路线没有加载 Element Plus 资源。后台文章创建/编辑/删除、上传、标签、认证成功/失败、空表单和退出登录均已复测。修复闭环见 [24-v1.2-review-closure.md](docs/research/24-v1.2-review-closure.md)。
-- 减少动态效果、WebGL 失败、手动暂停、离屏停帧、合成隐藏事件、路由卸载和键盘焦点路径均已验证；真实后台标签页功耗、Safari/Firefox、真实设备和生产网络仍未验证。
-- v1.2 开发验收为 `PASS WITH RESIDUAL RISK`：功能和包体积门禁通过，长任务来源及真实环境仍有限制；不把本地预览结果写成生产承诺。
+旧版 v1.2 计划、研究和验收记录见 [历史归档](docs/archive/README.md)。归档内容只用于追溯，不作为当前发布结论。
 
 ## 项目结构
 
@@ -199,7 +189,7 @@ personal-blog/
 │   │   └── schemas/              # Pydantic 模式
 │   └── alembic/                  # 数据库迁移
 ├── deploy/                       # Docker Compose、Nginx、Systemd 与部署脚本
-├── docs/implementation/          # 本次重建的实现记录
+├── docs/                         # 当前开发上下文、上线门禁与历史归档
 ├── docker-compose.yml
 └── README.md
 ```
@@ -265,14 +255,9 @@ docker compose --env-file deploy/.env.production \
 | MAX_UPLOAD_SIZE | 最大上传大小 | 10485760 (10MB) |
 
 ## 常见问题
-### 创建管理员账号
+### 初始化管理员账号
 
-1. 先通过网页注册一个普通用户
-2. 使用 psql 连接数据库，更新用户为管理员：
-
-```sql
-UPDATE users SET is_admin = true WHERE username = 'your-username';
-```
+生产环境使用 `deploy/README.md` 中的 `app.production_admin` 命令，通过服务器环境文件创建或更新管理员。自助注册默认关闭；不要再通过网页注册后手工改数据库权限。独立本地环境的管理员初始化见 [scripts/local/README.md](scripts/local/README.md)。
 
 ### 数据库迁移
 

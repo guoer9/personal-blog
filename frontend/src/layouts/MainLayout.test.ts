@@ -168,7 +168,7 @@ describe('MainLayout skip link', () => {
 
     wrapper.unmount()
     expect(callsBeforeDrag).toBe(0)
-    expect(setPointer).toHaveBeenCalledExactlyOnceWith(140 / window.innerWidth * 2 - 1, -(103 / window.innerHeight * 2 - 1))
+    expect(setPointer).toHaveBeenCalledExactlyOnceWith(140 / window.innerWidth * 2 - 1, -(103 / window.innerHeight * 2 - 1), 140, 103)
   })
 
   it.each(['mouse', 'pen'])('preserves immediate %s pointer movement', async (pointerType) => {
@@ -184,7 +184,7 @@ describe('MainLayout skip link', () => {
     window.dispatchEvent(new PointerEvent('pointermove', { pointerType, clientX: 140, clientY: 103 }))
 
     wrapper.unmount()
-    expect(setPointer).toHaveBeenCalledExactlyOnceWith(140 / window.innerWidth * 2 - 1, -(103 / window.innerHeight * 2 - 1))
+    expect(setPointer).toHaveBeenCalledExactlyOnceWith(140 / window.innerWidth * 2 - 1, -(103 / window.innerHeight * 2 - 1), 140, 103)
   })
 
   it('cancels touch pointer tracking when a second finger starts a native gesture', async () => {

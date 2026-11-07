@@ -49,6 +49,7 @@ worktrees/
 output/playwright/
 
 # User-supplied reverse engineering reference (large nested repository)
+/ddw/
 /lusion.co-ddw/
 .playwright-cli/
 frontend/coverage/

@@ -25,7 +25,7 @@ function interrupted(signal: AbortSignal) {
   return new Promise<never>((_, reject) => signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true }))
 }
 
-describe('bounded public transfer fingerprint', () => {
+describe('bounded transfer fingerprint', () => {
   it('includes content and mtime and samples at most three 64 KiB slices even at 10 GiB', async () => {
     const original = await fingerprintFile(file())
     expect(original).toBe('sha256:b18dec08683c95baca81e0afe3a86a50b98e0e75e1b722cbc8ff6e9d250c1753')
@@ -40,7 +40,7 @@ describe('bounded public transfer fingerprint', () => {
   })
 })
 
-describe('public transfer upload lifecycle', () => {
+describe('authenticated transfer upload lifecycle', () => {
   it('passes the bounded sampled sha256 fingerprint unchanged into upload creation', async () => {
     const { api, uploader } = setup()
     const sampledFingerprint = await fingerprintFile(file())

@@ -10,7 +10,7 @@
 - connection 列表只返回 `id`、`label`、`configured`。token 使用 `SecretStr` 保存于进程内，不进入数据库、API 响应、异常消息或日志。
 - 每个数据库必须由管理员选择 connection，并通过链接检查。检查接口只读；导入接口会重新验证 connection 和数据库链接后再注册来源。
 - 数据库的所有 `data_sources` 都会被读取并分页查询。页面保存来源的 `data_source_id`，来源结构或分页查询失败时保留上次成功的公开快照；单页读取或转换失败则隔离该页，其他页面继续导入。
-- 应用 lifespan 不再启动 Notion scheduler，只保留访客传输清理任务。新资料库同步只通过管理员手动接口触发。
+- 应用 lifespan 不再启动 Notion scheduler，只保留临时传输清理任务。新资料库同步只通过管理员手动接口触发。
 - 公开 API 只返回 `published` 文档；普通博客文章仍走原有 `/api/v1/posts`，旧 Notion slug 会 307 跳转到 `/api/v1/documents/{slug}`。
 - `/api/v1/admin/notion/status` 返回多连接资料库状态。早期单库客户端通过 `/api/v1/admin/notion/legacy/status` 和 `/api/v1/admin/notion/sync` 保持兼容；前端旧页面的状态请求已相应调整。
 - 已修复同批重名页面的 slug 冲突（包括长标题截断边界），并补上通用单页预览的 connection 绑定校验。

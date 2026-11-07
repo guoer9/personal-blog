@@ -2,8 +2,10 @@
 
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+
+vi.mock('@/ui/element-plus', () => ({ installElementPlusForRoute: vi.fn(async () => {}) }))
 
 const sourceRoot = resolve(__dirname, '..')
 const readSource = (file: string) => readFileSync(resolve(sourceRoot, file), 'utf8')
@@ -24,10 +26,13 @@ describe('public blog access boundary', () => {
     }
   })
 
-  it('keeps administrator authentication on its private route', () => {
-    const router = readSource('router/index.ts')
-    expect(router).toMatch(/path:\s*['"]\/admin\/login['"][\s\S]*?name:\s*['"]AdminLogin['"]/)
-    expect(router).toMatch(/return next\(\{\s*name:\s*['"]AdminLogin['"]/)
+  it('keeps administrator authentication on its private route', async () => {
+    setActivePinia(createPinia())
+    localStorage.removeItem('token')
+    localStorage.removeItem('refreshToken')
+    const { default: router } = await import('./index')
+    await router.push('/admin')
+    expect(router.currentRoute.value.name).toBe('AdminLogin')
   })
 
   it('redirects expired sessions only from private admin routes', () => {
@@ -43,18 +48,29 @@ describe('public blog access boundary', () => {
   })
 })
 
-describe('public transfer route', () => {
+describe('transfer route access', () => {
   it('resolves library list and detail without admin metadata', async () => {
     const { default: router } = await import('./index')
     expect(router.resolve('/documents').name).toBe('Documents')
     expect(router.resolve('/documents/a-note').name).toBe('DocumentDetail')
     expect(router.resolve('/documents/a-note').matched.some(record => record.meta.requiresAuth)).toBe(false)
   })
-  it('resolves the visitor transfer page without admin authentication metadata', async () => {
+  it('requires a regular authenticated account, not administrator privileges', async () => {
     const { default: router } = await import('./index')
     const route = router.resolve('/transfer')
     expect(route.name).toBe('Transfer')
-    expect(route.matched.some(record => record.meta.requiresAuth)).toBe(false)
+    expect(route.matched.some(record => record.meta.requiresAuth)).toBe(true)
+    expect(route.matched.some(record => record.meta.requiresAdmin)).toBe(false)
+  })
+
+  it('sends signed-out visitors to account login and preserves the transfer destination', async () => {
+    setActivePinia(createPinia())
+    localStorage.removeItem('token')
+    localStorage.removeItem('refreshToken')
+    const { default: router } = await import('./index')
+    await router.push('/transfer')
+    expect(router.currentRoute.value.name).toBe('Login')
+    expect(router.currentRoute.value.query.redirect).toBe('/transfer')
   })
 })
 

@@ -67,7 +67,7 @@ app.include_router(works.public_router, prefix=settings.API_V1_PREFIX, tags=["�
 app.include_router(works.admin_router, prefix=settings.API_V1_PREFIX, tags=["作品管理"])
 app.include_router(works.asset_admin_router, prefix=settings.API_V1_PREFIX, tags=["作品素材"])
 app.include_router(library.router, prefix=f"{settings.API_V1_PREFIX}/library", tags=["私有文件库"])
-app.include_router(transfers.router, prefix=f"{settings.API_V1_PREFIX}/transfers", tags=["临时访客传输"])
+app.include_router(transfers.router, prefix=f"{settings.API_V1_PREFIX}/transfers", tags=["账号临时传输"])
 app.include_router(notion.router, prefix=settings.API_V1_PREFIX, tags=["Notion文章同步"])
 app.include_router(notion_connections.router, prefix=settings.API_V1_PREFIX, tags=["Notion连接管理"])
 app.include_router(documents.router, prefix=settings.API_V1_PREFIX, tags=["公开资料库"])

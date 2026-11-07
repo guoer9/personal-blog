@@ -1,4 +1,4 @@
-"""Visitor transfers use real disk storage and the public HTTP contract."""
+"""Authenticated transfers use real disk storage and enforce account access."""
 
 import hashlib
 import json
@@ -10,8 +10,10 @@ import httpx
 import pytest
 import pytest_asyncio
 
+from app.core.security import create_access_token
 from app.core.config import settings
 from app.main import app
+from app.models import User
 
 PREFIX = "/api/v1/transfers"
 GIB = 1024**3
@@ -26,11 +28,28 @@ def transfer_root(tmp_path, monkeypatch):
 
 
 @pytest_asyncio.fixture
-async def visitor(transfer_root):
+async def visitor(client, db_session, transfer_root):
+    user = User(
+        username="transfer-reader",
+        email="transfer-reader@example.com",
+        hashed_password="unused",
+        is_admin=False,
+        is_active=True,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    client.headers["Authorization"] = f"Bearer {create_access_token(user.id)}"
+    yield client
+    client.headers.pop("Authorization", None)
+
+
+@pytest_asyncio.fixture
+async def anonymous(client, transfer_root):
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://testserver"
-    ) as client:
-        yield client
+    ) as unauthenticated_client:
+        yield unauthenticated_client
 
 
 async def create(visitor, size=4, **changes):
@@ -49,7 +68,7 @@ def browser_sample_fingerprint(filename, data, modified_ms):
 
 
 @pytest.mark.asyncio
-async def test_public_config_and_no_public_inventory(visitor):
+async def test_authenticated_config_and_no_transfer_inventory(visitor):
     response = await visitor.get(PREFIX + "/config")
     assert response.status_code == 200
     assert response.json() == {
@@ -57,6 +76,25 @@ async def test_public_config_and_no_public_inventory(visitor):
     }
     assert (await visitor.get(PREFIX + "/uploads")).status_code in (404, 405)
     assert (await visitor.get(PREFIX)).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_transfer_actions_and_download_require_a_registered_account(anonymous, visitor, transfer_root):
+    payload = {
+        "filename": "example.bin", "size": 4,
+        "fingerprint": hashlib.sha256(b"data").hexdigest(),
+    }
+    assert (await anonymous.get(PREFIX + "/config")).status_code == 401
+    assert (await anonymous.post(PREFIX + "/uploads", json=payload)).status_code == 401
+    assert (await anonymous.post(PREFIX + "/lookup", json={"code": "NO-SUCH-CODE"})).status_code == 401
+    assert (await anonymous.get(PREFIX + "/download/invalid.ticket")).status_code == 401
+    upload_path = PREFIX + "/uploads/00000000-0000-4000-8000-000000000000"
+    assert (await anonymous.get(upload_path)).status_code == 401
+    assert (await anonymous.put(upload_path + "/chunks/0", content=b"data")).status_code == 401
+    assert (await anonymous.post(upload_path + "/complete")).status_code == 401
+    assert (await anonymous.delete(upload_path)).status_code == 401
+    assert not list(transfer_root.rglob("*"))
+    assert (await visitor.get(PREFIX + "/config")).status_code == 200
 
 
 @pytest.mark.asyncio
@@ -123,7 +161,7 @@ async def test_raw_chunks_are_sequential_and_same_chunk_retry_is_idempotent(visi
 
 
 @pytest.mark.asyncio
-async def test_completed_file_lookup_has_short_ticket_and_supports_attachment_ranges(visitor):
+async def test_completed_file_lookup_issues_ticket_scoped_auth_and_supports_attachment_ranges(visitor, anonymous):
     data = b"temporary visitor transfer"
     upload = (await create(visitor, size=len(data), fingerprint=hashlib.sha256(data).hexdigest())).json()
     url = f"{PREFIX}/uploads/{upload['upload_id']}"
@@ -135,10 +173,20 @@ async def test_completed_file_lookup_has_short_ticket_and_supports_attachment_ra
     found = await visitor.post(PREFIX + "/lookup", json={"code": upload["code"]})
     assert found.status_code == 200
     result = found.json()
+    download_path = result["download_url"]
+    cookie = found.headers["set-cookie"]
+    assert "transfer_auth=" in cookie and "HttpOnly" in cookie and "SameSite=strict" in cookie
+    assert f"Path={download_path}" in cookie
+    assert (await anonymous.get(download_path)).status_code == 401
+    cookie_header = cookie.split(";", 1)[0]
+    assert (await anonymous.get(PREFIX + "/config", headers={"Cookie": cookie_header})).status_code == 401
+    assert (await anonymous.get(download_path + "-other", headers={"Cookie": cookie_header})).status_code == 401
     assert result["filename"] == "example.bin" and result["size"] == len(data)
     assert upload["code"] not in result["download_url"]
     assert "/download/" in result["download_url"]
-    downloaded = await visitor.get(result["download_url"], headers={"Range": "bytes=3-8"})
+    downloaded = await visitor.get(
+        download_path, headers={"Authorization": "", "Range": "bytes=3-8"}
+    )
     assert downloaded.status_code == 206 and downloaded.content == data[3:9]
     assert downloaded.headers["content-range"] == f"bytes 3-8/{len(data)}"
     assert "attachment" in downloaded.headers["content-disposition"]

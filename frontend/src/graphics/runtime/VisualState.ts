@@ -1,7 +1,7 @@
 import type { QualityTier, Vector2, VisualState } from './types'
 
 const DEFAULT_STATE: VisualState = {
-  timeMs: 0, deltaSeconds: 1 / 60, pointerX: 0, pointerY: 0,
+  timeMs: 0, deltaSeconds: 1 / 60, pointerX: 0, pointerY: 0, pointerPixelX: 0, pointerPixelY: 0,
   pointerVelocity: { x: 0, y: 0 }, scrollY: 0, scrollVelocity: 0,
   documentProgress: 0, viewportWidth: 0, viewportHeight: 0, dpr: 1,
   qualityTier: 'high', reducedMotion: false, documentHidden: false, canvasVisible: true,
@@ -24,6 +24,8 @@ export function normalizeVisualState(input: Partial<VisualState> = {}): VisualSt
     deltaSeconds: clamp(finite(input.deltaSeconds, DEFAULT_STATE.deltaSeconds), 0, 0.1),
     pointerX: clamp(finite(input.pointerX, DEFAULT_STATE.pointerX), -1, 1),
     pointerY: clamp(finite(input.pointerY, DEFAULT_STATE.pointerY), -1, 1),
+    pointerPixelX: Math.max(0, finite(input.pointerPixelX, DEFAULT_STATE.pointerPixelX)),
+    pointerPixelY: Math.max(0, finite(input.pointerPixelY, DEFAULT_STATE.pointerPixelY)),
     pointerVelocity: normalizeVector(input.pointerVelocity, DEFAULT_STATE.pointerVelocity),
     scrollY: Math.max(0, finite(input.scrollY, DEFAULT_STATE.scrollY)),
     scrollVelocity: finite(input.scrollVelocity, DEFAULT_STATE.scrollVelocity),

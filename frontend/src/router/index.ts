@@ -74,6 +74,7 @@ const router = createRouter({
           path: 'transfer',
           name: 'Transfer',
           component: () => import('@/views/blog/Transfer.vue'),
+          meta: { requiresAuth: true },
         },
       ],
     },
@@ -199,13 +200,18 @@ router.beforeEach(async (to, _from, next) => {
   
   // 如果需要认证
   if (to.meta.requiresAuth) {
+    const loginRoute = to.meta.requiresAdmin ? 'AdminLogin' : 'Login'
     if (!userStore.isLoggedIn) {
-      return next({ name: 'AdminLogin', query: { redirect: to.fullPath } })
+      return next({ name: loginRoute, query: { redirect: to.fullPath } })
     }
     
     // 等待用户信息加载
     if (!userStore.userInfo) {
       await userStore.fetchUserInfo()
+    }
+
+    if (!userStore.isLoggedIn) {
+      return next({ name: loginRoute, query: { redirect: to.fullPath } })
     }
     
     // 如果需要管理员权限

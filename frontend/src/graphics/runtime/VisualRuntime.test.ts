@@ -106,6 +106,27 @@ describe('VisualRuntime', () => {
     expect(harness.runtime.getVisualState().pointerVelocity.x).toBeLessThan(movingVelocity)
   })
 
+  it('keeps pixel pointer coordinates alongside normalized pointer state', async () => {
+    const harness = createHarness()
+    harness.runtime.mount(harness.canvas)
+    await activateRoute(harness.runtime, { routeName: 'Home', pageId: 'home', params: {} })
+    await vi.waitFor(() => expect(harness.calls).toContain('home:enter'))
+    harness.runtime.resize(1200, 800, 1)
+
+    harness.runtime.setPointer(0.25, -0.5, 750, 200)
+    harness.runtime.start()
+    harness.advance(16)
+    harness.runFrame()
+
+    expect(harness.runtime.getVisualState()).toEqual(expect.objectContaining({
+      pointerX: 0.25,
+      pointerY: -0.5,
+      pointerPixelX: 750,
+      pointerPixelY: 200,
+    }))
+    harness.runtime.dispose()
+  })
+
   it('keeps the renderer while handing off from Home to Works', async () => {
     const harness = createHarness()
     harness.runtime.mount(harness.canvas)
