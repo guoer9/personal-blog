@@ -124,4 +124,85 @@ describe('MainLayout skip link', () => {
     wrapper.unmount()
   })
 
+  it('does not feed vertical touch scrolling into the shared scene pointer', async () => {
+    await router.push('/test-layout')
+    await router.isReady()
+    const setPointer = vi.spyOn(VisualRuntime.prototype, 'setPointer')
+    const wrapper = mount(MainLayout, {
+      attachTo: document.body,
+      global: { plugins: [createPinia(), router] },
+    })
+    setPointer.mockClear()
+
+    window.dispatchEvent(new PointerEvent('pointerdown', {
+      pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: 100, clientY: 100,
+    }))
+    window.dispatchEvent(new PointerEvent('pointermove', {
+      pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: 103, clientY: 130,
+    }))
+    window.dispatchEvent(new PointerEvent('pointermove', {
+      pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: 160, clientY: 135,
+    }))
+
+    wrapper.unmount()
+    expect(setPointer).not.toHaveBeenCalled()
+  })
+
+  it.each(['pointerup', 'pointercancel'])('tracks deliberate horizontal touch drags until %s', async (endEvent) => {
+    await router.push('/test-layout')
+    await router.isReady()
+    const setPointer = vi.spyOn(VisualRuntime.prototype, 'setPointer')
+    const wrapper = mount(MainLayout, {
+      attachTo: document.body,
+      global: { plugins: [createPinia(), router] },
+    })
+    setPointer.mockClear()
+    const touch = { pointerId: 7, pointerType: 'touch', isPrimary: true }
+
+    window.dispatchEvent(new PointerEvent('pointerdown', { ...touch, clientX: 100, clientY: 100 }))
+    window.dispatchEvent(new PointerEvent('pointermove', { ...touch, clientX: 105, clientY: 103 }))
+    const callsBeforeDrag = setPointer.mock.calls.length
+    window.dispatchEvent(new PointerEvent('pointermove', { ...touch, clientX: 140, clientY: 103 }))
+    window.dispatchEvent(new PointerEvent(endEvent, touch))
+    window.dispatchEvent(new PointerEvent('pointermove', { ...touch, clientX: 170, clientY: 103 }))
+
+    wrapper.unmount()
+    expect(callsBeforeDrag).toBe(0)
+    expect(setPointer).toHaveBeenCalledExactlyOnceWith(140 / window.innerWidth * 2 - 1, -(103 / window.innerHeight * 2 - 1))
+  })
+
+  it.each(['mouse', 'pen'])('preserves immediate %s pointer movement', async (pointerType) => {
+    await router.push('/test-layout')
+    await router.isReady()
+    const setPointer = vi.spyOn(VisualRuntime.prototype, 'setPointer')
+    const wrapper = mount(MainLayout, {
+      attachTo: document.body,
+      global: { plugins: [createPinia(), router] },
+    })
+    setPointer.mockClear()
+
+    window.dispatchEvent(new PointerEvent('pointermove', { pointerType, clientX: 140, clientY: 103 }))
+
+    wrapper.unmount()
+    expect(setPointer).toHaveBeenCalledExactlyOnceWith(140 / window.innerWidth * 2 - 1, -(103 / window.innerHeight * 2 - 1))
+  })
+
+  it('cancels touch pointer tracking when a second finger starts a native gesture', async () => {
+    await router.push('/test-layout')
+    await router.isReady()
+    const setPointer = vi.spyOn(VisualRuntime.prototype, 'setPointer')
+    const wrapper = mount(MainLayout, {
+      attachTo: document.body,
+      global: { plugins: [createPinia(), router] },
+    })
+    setPointer.mockClear()
+    const touch = { pointerId: 7, pointerType: 'touch', isPrimary: true }
+
+    window.dispatchEvent(new PointerEvent('pointerdown', { ...touch, clientX: 100, clientY: 100 }))
+    window.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 8, pointerType: 'touch', isPrimary: false, clientX: 150, clientY: 100 }))
+    window.dispatchEvent(new PointerEvent('pointermove', { ...touch, clientX: 140, clientY: 103 }))
+
+    wrapper.unmount()
+    expect(setPointer).not.toHaveBeenCalled()
+  })
 })

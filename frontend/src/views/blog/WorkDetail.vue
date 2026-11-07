@@ -90,7 +90,8 @@ onBeforeUnmount(() => { controller?.abort(); unregisterDetailAnchor?.() })
 .detail-meta { display: flex; flex-wrap: wrap; gap: 12px 28px; margin: 25px 0; color: var(--muted); font: .68rem var(--mono-font); }
 .detail-player { margin-top: 40px; }
 .repository-feature { display: flex; flex-direction: column; align-items: flex-start; gap: 35px; padding: clamp(30px, 6vw, 80px); margin-top: 40px; min-height: 340px; border: 1px solid var(--ink); background: var(--paper-soft); }
-.repository-feature--lime { background: var(--acid); }
+.repository-feature--lime { background: var(--acid); color: var(--acid-ink); }
+.repository-feature--lime > a { color: var(--acid-ink); border-color: var(--acid-ink); }
 .repository-feature--blue { background: var(--electric-blue); color: white; }
 .repository-feature--blue > a { border-color: white; color: white; }
 .repository-feature > p { font: 400 clamp(2rem, 6vw, 5rem)/1.2 var(--display-font); letter-spacing: -.04em; overflow-wrap: anywhere; }

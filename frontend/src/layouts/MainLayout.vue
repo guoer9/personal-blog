@@ -23,6 +23,8 @@ const runtime = shallowRef<VisualRuntime | null>(null)
 const runtimeFailed = ref(false)
 let reducedMotionQuery: MediaQueryList | null = null
 let anchorMeasureFrame = 0
+const touchDragThreshold = 16
+let touchPointer: { id: number; startX: number; startY: number; dragging: boolean } | null = null
 const diagnosticReader = (): VisualRuntimeDiagnostics | null => runtime.value?.getDiagnostics() ?? null
 type DiagnosticWindow = Window & { __visualRuntimeDiagnostics?: () => VisualRuntimeDiagnostics | null }
 provide(visualRuntimeKey, runtime)
@@ -56,9 +58,30 @@ function updateRoute() { runtime.value?.setRoute(routeIdentity()) }
 function onPageBeforeLeave() { runtime.value?.beginTransitionLeave() }
 function onPageAfterLeave() { runtime.value?.finishTransitionLeave() }
 function onPageAfterEnter() { void runtime.value?.finishTransitionEnter() }
+function onPointerDown(event: PointerEvent) {
+  if (event.pointerType !== 'touch') return
+  touchPointer = event.isPrimary
+    ? { id: event.pointerId, startX: event.clientX, startY: event.clientY, dragging: false }
+    : null
+}
 function onPointerMove(event: PointerEvent) {
+  if (event.pointerType === 'touch') {
+    if (!event.isPrimary || !touchPointer || touchPointer.id !== event.pointerId) return
+    if (!touchPointer.dragging) {
+      const dx = event.clientX - touchPointer.startX
+      const dy = event.clientY - touchPointer.startY
+      if (Math.hypot(dx, dy) <= touchDragThreshold) return
+      // Let vertical swipes and native gestures scroll without disturbing the scene pointer.
+      if (Math.abs(dy) >= Math.abs(dx)) { touchPointer = null; return }
+      touchPointer.dragging = true
+    }
+  }
   runtime.value?.setPointer((event.clientX / Math.max(1, window.innerWidth)) * 2 - 1, -((event.clientY / Math.max(1, window.innerHeight)) * 2 - 1))
 }
+function onPointerEnd(event: PointerEvent) {
+  if (touchPointer?.id === event.pointerId) touchPointer = null
+}
+function onBlur() { touchPointer = null }
 function updateScrollState() {
   const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight)
   runtime.value?.setScroll(window.scrollY, window.scrollY / max)
@@ -98,7 +121,11 @@ onMounted(() => {
     updateRoute()
     onPageAfterEnter()
     onScroll()
+    window.addEventListener('pointerdown', onPointerDown, { passive: true })
     window.addEventListener('pointermove', onPointerMove, { passive: true })
+    window.addEventListener('pointerup', onPointerEnd, { passive: true })
+    window.addEventListener('pointercancel', onPointerEnd, { passive: true })
+    window.addEventListener('blur', onBlur)
     window.addEventListener('scroll', onScroll, { passive: true })
     window.addEventListener('resize', onResize, { passive: true })
   } catch {
@@ -108,7 +135,12 @@ onMounted(() => {
 })
 watch(() => [route.name, route.fullPath], updateRoute)
 onBeforeUnmount(() => {
+  window.removeEventListener('pointerdown', onPointerDown)
   window.removeEventListener('pointermove', onPointerMove)
+  window.removeEventListener('pointerup', onPointerEnd)
+  window.removeEventListener('pointercancel', onPointerEnd)
+  window.removeEventListener('blur', onBlur)
+  touchPointer = null
   window.removeEventListener('scroll', onScroll)
   window.removeEventListener('resize', onResize)
   if (anchorMeasureFrame) cancelAnimationFrame(anchorMeasureFrame)

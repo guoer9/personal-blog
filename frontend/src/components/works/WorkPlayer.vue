@@ -55,9 +55,9 @@ onBeforeUnmount(() => { stop(); document.removeEventListener('visibilitychange',
 <style scoped>
 .player-modes { display: flex; gap: 8px; margin-bottom: 16px; }
 .player-modes button { min-height: 44px; padding: 0 20px; border: 1px solid var(--ink); background: transparent; cursor: pointer; }
-.player-modes button[aria-pressed='true'] { background: var(--ink); color: var(--paper); }
+.player-modes button[aria-pressed='true'] { background: var(--void); color: var(--ink); }
 video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #111; }
-.audio-stage { position: relative; display: flex; flex-direction: column; justify-content: end; min-height: 400px; padding: clamp(20px, 5vw, 64px); overflow: hidden; background: var(--ink); color: var(--paper); }
+.audio-stage { position: relative; display: flex; flex-direction: column; justify-content: end; min-height: 400px; padding: clamp(20px, 5vw, 64px); overflow: hidden; background: var(--void); color: var(--ink); }
 .audio-stage > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .26; }
 .audio-caption, audio { position: relative; z-index: 1; }
 .audio-caption { padding: 48px 0; }

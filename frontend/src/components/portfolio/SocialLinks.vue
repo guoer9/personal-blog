@@ -32,7 +32,8 @@ async function copy(label: string, value: string) {
 .social-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 1px; border: 1px solid var(--line); margin-top: 30px; background: var(--line); }
 .social-grid > * { display: flex; grid-column: span 2; flex-direction: column; align-items: flex-start; gap: 20px; padding: 26px; background: var(--paper); min-width: 0; text-decoration: none; }
 .social-grid > a { grid-column: span 3; background: var(--paper-soft); transition: background-color 180ms; }
-.social-grid > a:hover { background: var(--acid); }
+.social-grid > a:hover { background: var(--acid); color: var(--acid-ink); }
+.social-grid > a:hover > span:last-child { color: var(--acid-ink); }
 .social-grid strong { font-size: clamp(.9rem, 2vw, 1.5rem); overflow-wrap: anywhere; font-weight: 500; }
 .social-grid > a > span:last-child { color: var(--muted); font-size: .8rem; }
 .copy-status { min-height: 2em; margin-top: 16px; color: var(--muted); font-size: .8rem; overflow-wrap: anywhere; }

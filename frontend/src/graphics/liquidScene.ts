@@ -207,6 +207,7 @@ export function createLiquidScene(
   let rawDpr = 1
   let currentQualityTier: QualityTier = 'high'
   let lastTime = 0
+  let floatPhase = 0
   let easedMotionEnergy = 0
   let rippleCursor = 0
   let rippleCount = 0
@@ -448,7 +449,9 @@ export function createLiquidScene(
       const viewportScale = Math.min(1, camera.aspect)
       const moodScale = 1 + (mood.scale - 1) * 0.12
       const scale = (0.58 + Math.sin(seconds * 0.55) * 0.008 + current.scroll * 0.04) * moodScale * viewportScale
-      const offsetY = Math.sin(seconds * 0.45 * (0.4 + mood.rotationSpeed)) * 0.04
+      // Integrate the changing speed so scroll never rewrites the accumulated phase.
+      floatPhase = (floatPhase + delta * 0.45 * (0.4 + mood.rotationSpeed)) % (Math.PI * 2)
+      const offsetY = Math.sin(floatPhase) * 0.04
 
       mesh.rotation.set(rotationX, rotationY, rotationZ)
       wireMesh.rotation.set(rotationX, rotationY, rotationZ)

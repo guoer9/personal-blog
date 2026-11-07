@@ -94,6 +94,39 @@ describe('shared liquid scene controller', () => {
     scene.dispose()
   })
 
+  it('keeps the sphere center smooth across story boundaries after the page has been open for minutes', () => {
+    for (const boundary of [0.18, 0.48, 0.78]) {
+      const renderer = makeRenderer()
+      const scene = createLiquidScene(renderer, {
+        pointerX: 0, pointerY: 0, pointerVelocity: { x: 0, y: 0 }, scroll: boundary - 0.08,
+      }, sceneQuality())
+      scene.resize(1200, 800, 1)
+      let time = 600_000
+      scene.render(time)
+      const readCenter = () => {
+        const renderedScene = lastRenderedScene(renderer) as unknown as { children: Array<{ position: { y: number } }> }
+        return renderedScene.children[0]!.position.y
+      }
+      let previousCenter = readCenter()
+      let largestStep = 0
+
+      for (let frame = 1; frame <= 120; frame += 1) {
+        scene.setInput({
+          pointerX: 0, pointerY: 0, pointerVelocity: { x: 0, y: 0 },
+          scroll: boundary - 0.08 + 0.16 * frame / 120,
+        })
+        time += 1000 / 60
+        scene.render(time)
+        const center = readCenter()
+        largestStep = Math.max(largestStep, Math.abs(center - previousCenter))
+        previousCenter = center
+      }
+
+      expect(largestStep, `center movement near story progress ${boundary}`).toBeLessThan(0.003)
+      scene.dispose()
+    }
+  })
+
   it('maps clicks outside the projected sphere to its nearest visible edge', () => {
     const renderer = makeRenderer()
     const scene = createLiquidScene(renderer, { pointerX: 0, pointerY: 0, pointerVelocity: { x: 0, y: 0 }, scroll: 0 }, sceneQuality())

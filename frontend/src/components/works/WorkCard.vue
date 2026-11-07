@@ -21,7 +21,7 @@ withDefaults(defineProps<{ work: Work; index: number; headingTag?: 'h2' | 'h3'; 
 .work-card__visual > img { width: 100%; height: 100%; object-fit: cover; transition: transform 400ms ease; }
 .work-card:hover img { transform: scale(1.035); }
 .work-card__badge { position: absolute; left: 16px; bottom: 16px; padding: 6px 10px; background: var(--paper); color: var(--ink); font: .65rem var(--mono-font); }
-.work-card__open { position: absolute; right: 16px; top: 16px; display: grid; place-items: center; width: 40px; height: 40px; background: var(--acid); color: var(--ink); border: 1px solid var(--ink); border-radius: 50%; font-size: 1.1rem; transition: transform 200ms; }
+.work-card__open { position: absolute; right: 16px; top: 16px; display: grid; place-items: center; width: 40px; height: 40px; background: var(--acid); color: var(--acid-ink); border: 1px solid var(--acid-ink); border-radius: 50%; font-size: 1.1rem; transition: transform 200ms; }
 .work-card:hover .work-card__open { transform: rotate(-10deg); }
 .work-card__copy { padding: 22px 0 12px; }
 .work-card__copy > .eyebrow { color: var(--muted); font-size: .58rem; }
@@ -31,7 +31,7 @@ withDefaults(defineProps<{ work: Work; index: number; headingTag?: 'h2' | 'h3'; 
 .work-card__tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
 .work-card__tags span { padding: 3px 8px; border: 1px solid var(--line); font: .6rem var(--mono-font); }
 .code-art { position: absolute; inset: 0; display: grid; place-items: center; background: var(--paper-soft); }
-.work-card--lime .code-art { background: var(--acid); }
+.work-card--lime .code-art { background: var(--acid); color: var(--acid-ink); }
 .work-card--blue .code-art { background: var(--electric-blue); color: white; }
 .code-art::before { position: absolute; inset: 0; content: ''; background-image: linear-gradient(currentColor 1px, transparent 1px), linear-gradient(90deg, currentColor 1px, transparent 1px); background-size: 48px 48px; opacity: .1; }
 .code-art > span { position: absolute; top: 20px; left: 20px; font: .7rem var(--mono-font); }

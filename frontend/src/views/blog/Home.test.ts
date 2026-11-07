@@ -21,13 +21,13 @@ vi.mock('@/components/works/WorkCard.vue', () => ({ default: { template: '<div /
 
 describe('Home sphere interaction bridge', () => {
   let wrapper: ReturnType<typeof mount> | undefined
-  let runtime: { setPageState: ReturnType<typeof vi.fn> }
+  let runtime: { setPageState: ReturnType<typeof vi.fn>; setCanvasVisible: ReturnType<typeof vi.fn> }
 
   beforeEach(() => {
     api.getPosts.mockResolvedValue({ data: { items: [] } })
     api.getTags.mockResolvedValue({ data: [] })
     api.getWorks.mockResolvedValue({ data: { items: [] } })
-    runtime = { setPageState: vi.fn() }
+    runtime = { setPageState: vi.fn(), setCanvasVisible: vi.fn() }
     vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
     vi.spyOn(window, 'matchMedia').mockReturnValue({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() } as unknown as MediaQueryList)
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1000 })
@@ -71,6 +71,17 @@ describe('Home sphere interaction bridge', () => {
   it('keeps the project backdrop independent from the content layer', async () => {
     const mounted = await mountHome()
     expect(mounted.get('.projects-section__backdrop').attributes('aria-hidden')).toBe('true')
+  })
+
+  it('hides the sphere canvas while motion is paused and shows it again when resumed', async () => {
+    const mounted = await mountHome()
+    runtime.setCanvasVisible.mockClear()
+
+    await mounted.get('.motion-toggle').trigger('click')
+    expect(runtime.setCanvasVisible).toHaveBeenLastCalledWith(false)
+
+    await mounted.get('.motion-toggle').trigger('click')
+    expect(runtime.setCanvasVisible).toHaveBeenLastCalledWith(true)
   })
 
   it('emits one tap with full viewport NDC when released before the injected long press duration', async () => {

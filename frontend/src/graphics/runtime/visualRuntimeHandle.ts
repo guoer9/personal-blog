@@ -5,6 +5,7 @@ import type { VisualRuntime } from './VisualRuntime'
 export type VisualRuntimeHandle = VisualRuntime
 export interface VisualRuntimeBridge {
   setPageState(pageId: string, state: unknown): void
+  setCanvasVisible?(canvasVisible: boolean): void
   registerAnchor?(id: string, element: HTMLElement): () => void
   measureAnchors?(): void
 }

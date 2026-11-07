@@ -212,13 +212,13 @@ onBeforeUnmount(() => { observer?.disconnect(); unregisterSectionAnchors.forEach
 .sidebar-index p { padding: 14px 0; margin: 0; color: var(--muted); font: 0.58rem var(--mono-font); letter-spacing: 0.06em; }
 .sidebar-index a { display: flex; gap: 13px; align-items: center; padding: 13px 0; border-top: 1px solid var(--line); font-size: 0.79rem; text-decoration: none; }
 .sidebar-index a span { color: var(--muted); font: 0.57rem var(--mono-font); }
-.sidebar-index a.active { color: #2852d4; }
+.sidebar-index a.active { color: #8eb1ff; }
 .share-link { padding: 14px 0 0; border: 0; background: transparent; color: var(--muted); font: 0.6rem var(--mono-font); cursor: pointer; }
 .about-content { min-width: 0; }
 .about-hero { min-height: 760px; padding-top: 66px; border-bottom: 1px solid var(--ink); }
-.portrait { position: relative; width: min(100%, 660px); height: 285px; margin: 6px 0 32px; overflow: hidden; border: 1px solid var(--ink); background: var(--acid); isolation: isolate; }
-.portrait::before { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 42px, rgba(17,17,17,.13) 43px); }
-.portrait span { position: absolute; z-index: 1; left: 45%; top: 45%; color: var(--ink); font: 17rem/0.7 var(--display-font); letter-spacing: -0.12em; transform: translate(-50%, -50%) rotate(-9deg); }
+.portrait { position: relative; width: min(100%, 660px); height: 285px; margin: 6px 0 32px; overflow: hidden; border: 1px solid var(--ink); background: var(--acid); color: var(--acid-ink); isolation: isolate; }
+.portrait::before { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 42px, rgba(8,8,8,.13) 43px); }
+.portrait span { position: absolute; z-index: 1; left: 45%; top: 45%; color: var(--acid-ink); font: 17rem/0.7 var(--display-font); letter-spacing: -0.12em; transform: translate(-50%, -50%) rotate(-9deg); }
 .portrait i { position: absolute; right: 12%; top: 20%; width: 170px; aspect-ratio: 1; border: 2px solid var(--ink); border-radius: 50%; box-shadow: 0 0 0 25px rgba(55,103,255,.35), 0 0 0 26px var(--ink); }
 .portrait b { position: absolute; right: 12px; bottom: 11px; z-index: 2; text-align: right; font: 0.58rem/1.5 var(--mono-font); }
 .about-hero h1 { margin-bottom: 32px; font: 400 clamp(4.2rem, 9vw, 8.4rem)/0.85 var(--display-font); letter-spacing: -0.065em; }
@@ -245,12 +245,12 @@ onBeforeUnmount(() => { observer?.disconnect(); unregisterSectionAnchors.forEach
 .practice-row h3 { margin: 0; font: 400 2.1rem/1 var(--display-font); }
 .practice-row > p { color: var(--muted); font-size: 0.82rem; }
 .practice-row > span { grid-column: 3; color: var(--muted); font: 0.58rem var(--mono-font); }
-.now-card { grid-column: 2; padding: 25px; background: var(--ink); color: var(--paper); }
+.now-card { grid-column: 2; padding: 25px; background: var(--void); color: var(--ink); }
 .now-status { display: flex; gap: 9px; align-items: center; color: var(--acid); font: 0.6rem var(--mono-font); letter-spacing: 0.06em; }
 .now-status span { width: 7px; height: 7px; border-radius: 50%; background: var(--acid); }
 .now-card > p { max-width: 680px; margin-top: 30px; color: #c3c6c1; font-size: .88rem; }
 .now-actions { display: flex; flex-wrap: wrap; gap: 28px; margin-top: 34px; }
-.now-actions :deep(.magnetic-link) { color: var(--paper); border-color: var(--acid); }
+.now-actions :deep(.magnetic-link) { color: var(--ink); border-color: var(--acid); }
 .about-end { display: flex; flex-direction: column; align-items: center; padding: 120px 0 40px; text-align: center; }
 .about-end > p { color: var(--muted); font: .58rem var(--mono-font); letter-spacing: .08em; }
 .about-end h2 { font: 400 clamp(4rem, 9vw, 8rem)/.85 var(--display-font); letter-spacing: -.06em; }

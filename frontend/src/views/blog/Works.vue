@@ -83,7 +83,7 @@ h1 em { color: var(--electric-blue); font-weight: 400; }
 .work-filters { display: flex; flex-wrap: wrap; gap: 8px; }
 .work-filters a { display: inline-flex; align-items: center; gap: 9px; min-height: 44px; padding: 7px 18px; border: 1px solid transparent; text-decoration: none; font-size: .85rem; }
 .work-filters small { font: .6rem var(--mono-font); }
-.work-filters a.selected { border-color: var(--ink); background: var(--acid); }
+.work-filters a.selected { border-color: var(--acid-ink); background: var(--acid); color: var(--acid-ink); }
 .work-filters a:hover { border-color: var(--ink); }
 .works-toolbar > p { margin: 0; white-space: nowrap; color: var(--muted); font: .7rem var(--mono-font); }
 .works-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 60px 32px; padding-top: 10px; }

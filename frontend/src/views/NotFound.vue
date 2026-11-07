@@ -51,7 +51,7 @@ function focusLostContent() {
 .error-orbit::after { content: ''; position: absolute; width: 67%; height: 45%; border: 2px solid var(--electric-blue); border-radius: 50%; transform: rotate(-24deg); }
 .error-orbit span { position: absolute; z-index: 1; width: 90%; aspect-ratio: 1.75; border: 1px solid var(--ink); border-radius: 50%; transform: rotate(-30deg); }
 .error-orbit span:first-child { transform: rotate(38deg); width: 58%; aspect-ratio: 1; border-width: 2px; }
-.error-orbit b { position: relative; z-index: 2; font: 400 clamp(12rem, 25vw, 24rem)/1 var(--display-font); transform: rotate(-10deg); }
+.error-orbit b { position: relative; z-index: 2; color: var(--acid-ink); font: 400 clamp(12rem, 25vw, 24rem)/1 var(--display-font); transform: rotate(-10deg); }
 .error-copy h1 { margin-bottom: 30px; font: 400 clamp(4.2rem, 9vw, 8rem)/.85 var(--display-font); letter-spacing: -.07em; }
 .error-copy h1 em { color: var(--electric-blue); font-weight: 400; }
 .error-copy > p:not(.section-kicker) { max-width: 500px; color: var(--muted); }

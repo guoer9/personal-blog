@@ -81,7 +81,7 @@ p { max-width: 760px; margin-top: 12px; color: var(--muted); font-size: 0.94rem;
   font-size: 0.63rem;
   text-decoration: none;
 }
-.tag-link:hover { border-color: var(--ink); background: var(--acid); }
+.tag-link:hover { border-color: var(--acid-ink); background: var(--acid); color: var(--acid-ink); }
 .article-arrow {
   display: grid;
   place-items: center;
@@ -94,7 +94,7 @@ p { max-width: 760px; margin-top: 12px; color: var(--muted); font-size: 0.94rem;
   text-decoration: none;
   transition: transform 180ms ease, background 180ms ease;
 }
-.article-arrow:hover { transform: rotate(45deg); background: var(--acid); }
+.article-arrow:hover { transform: rotate(45deg); background: var(--acid); color: var(--acid-ink); border-color: var(--acid-ink); }
 @media (max-width: 640px) {
   .article-row { grid-template-columns: 38px minmax(0, 1fr); gap: 12px; padding: 24px 0; }
   .article-arrow { display: none; }

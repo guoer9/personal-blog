@@ -118,7 +118,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', closeOnEscape))
   top: 0;
   z-index: 40;
   border-bottom: 1px solid var(--line);
-  background: rgba(244, 241, 234, 0.9);
+  background: rgba(8, 8, 8, 0.9);
   backdrop-filter: blur(18px);
 }
 .header-inner {

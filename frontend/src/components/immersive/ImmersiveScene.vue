@@ -55,14 +55,14 @@ const renderLabel = computed(() => {
   position: absolute;
   inset: 8%;
   z-index: 0;
-  border: 1px solid rgba(17, 17, 17, 0.16);
+  border: 1px solid rgba(242, 240, 233, 0.16);
   background-image:
-    linear-gradient(rgba(17, 17, 17, 0.075) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(17, 17, 17, 0.075) 1px, transparent 1px);
+    linear-gradient(rgba(242, 240, 233, 0.075) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(242, 240, 233, 0.075) 1px, transparent 1px);
   background-size: 44px 44px;
   mask-image: radial-gradient(circle, #000 35%, transparent 78%);
 }
-.scene-orbit { position: absolute; z-index: 1; border: 1px solid rgba(17, 17, 17, 0.28); border-radius: 50%; pointer-events: none; }
+.scene-orbit { position: absolute; z-index: 1; border: 1px solid rgba(242, 240, 233, 0.28); border-radius: 50%; pointer-events: none; }
 .scene-orbit--one { width: 76%; aspect-ratio: 1.68; top: 17%; left: 12%; transform: rotate(-17deg); animation: orbit 15s linear infinite; }
 .scene-orbit--two { width: 58%; aspect-ratio: 0.85; top: 19%; left: 21%; transform: rotate(42deg); border-color: rgba(55, 103, 255, 0.38); animation: orbit-reverse 19s linear infinite; }
 .scene-poster { z-index: 3; display: grid; place-items: center; transition: transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1); }
@@ -77,8 +77,8 @@ const renderLabel = computed(() => {
     radial-gradient(circle at 31% 27%, #f6ffe2 0, transparent 23%),
     radial-gradient(circle at 78% 70%, #d8ff4b 0, transparent 28%),
     conic-gradient(from 30deg, #111, #3767ff, #dbe3d5, #c7ff2e, #111);
-  box-shadow: 20px 22px 0 rgba(17, 17, 17, 0.12);
-  color: var(--paper);
+  box-shadow: 20px 22px 0 rgba(242, 240, 233, 0.12);
+  color: var(--ink);
   font-family: var(--display-font);
   font-size: clamp(5rem, 13vw, 9rem);
   line-height: 1;

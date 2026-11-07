@@ -63,6 +63,7 @@ function publishSceneState() {
   const state: HomePageState = { paused: motionPaused.value, interaction: latestInteraction.value }
   sceneBridge.setState(state)
   runtime.value?.setPageState('home', state)
+  runtime.value?.setCanvasVisible?.(!motionPaused.value)
 }
 const sphereInteraction = createHomeSphereInteractionBridge({
   options: sphereInteractionOptions,
@@ -362,8 +363,8 @@ onBeforeUnmount(() => {
 .home { position: relative; overflow-x: clip; }
 .home > section:not(.projects-section), .home > .marquee { position: relative; z-index: 2; }
 .projects-section > .page-shell { position: relative; z-index: 2; }
-.projects-section__backdrop { position: absolute; inset: 0; z-index: 0; background: var(--ink); pointer-events: none; }
-.featured-state { padding: 30px 0; color: var(--paper); font-size: .85rem; }
+.projects-section__backdrop { position: absolute; inset: 0; z-index: 0; background: var(--void); pointer-events: none; }
+.featured-state { padding: 30px 0; color: var(--ink); font-size: .85rem; }
 .media-section { padding-top: var(--section-space); }
 .media-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; }
 @media (max-width: 700px) { .media-grid { grid-template-columns: 1fr; gap: 36px; } }
@@ -391,16 +392,16 @@ onBeforeUnmount(() => {
   min-height: 44px;
   padding: 0 12px;
   border: 1px solid var(--ink);
-  background: rgba(244, 241, 234, 0.92);
+  background: rgba(8, 8, 8, 0.92);
   color: var(--ink);
-  box-shadow: 3px 3px 0 rgba(17, 17, 17, 0.12);
+  box-shadow: 3px 3px 0 rgba(242, 240, 233, 0.12);
   font: 700 0.58rem var(--mono-font);
   letter-spacing: 0.08em;
   cursor: pointer;
   backdrop-filter: blur(12px);
   transition: background-color 180ms ease, transform 180ms ease;
 }
-.motion-toggle:hover { background: var(--acid); transform: translateY(-2px); }
+.motion-toggle:hover { background: var(--acid); color: var(--acid-ink); border-color: var(--acid-ink); transform: translateY(-2px); }
 .motion-toggle:active { transform: translateY(0); }
 .motion-toggle__icon { display: grid; place-items: center; width: 16px; height: 16px; font: 0.55rem var(--mono-font); }
 .story-rail__line {
@@ -408,7 +409,7 @@ onBeforeUnmount(() => {
   display: block;
   width: 1px;
   height: 164px;
-  background: rgba(17, 17, 17, 0.24);
+  background: rgba(242, 240, 233, 0.24);
   overflow: hidden;
   transition: background-color 520ms ease;
 }
@@ -449,9 +450,9 @@ onBeforeUnmount(() => {
 }
 .story-rail__stages li span { color: inherit; opacity: 0.62; }
 .home[data-stage='projects'] .story-rail,
-.home[data-stage='signal'] .story-rail { color: rgba(244, 241, 234, 0.74); }
+.home[data-stage='signal'] .story-rail { color: rgba(242, 240, 233, 0.74); }
 .home[data-stage='projects'] .story-rail__line,
-.home[data-stage='signal'] .story-rail__line { background: rgba(244, 241, 234, 0.25); }
+.home[data-stage='signal'] .story-rail__line { background: rgba(242, 240, 233, 0.25); }
 .home[data-stage='projects'] .story-rail__line i,
 .home[data-stage='signal'] .story-rail__line i { background: var(--acid); }
 .home[data-stage='projects'] .story-rail__stages li::before,
@@ -514,9 +515,9 @@ h1 em, .section-heading em { color: var(--electric-blue); font-weight: 400; }
 .hero-visual { position: relative; min-width: 0; min-height: 480px; touch-action: pan-y pinch-zoom; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .hero h1 { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .hero-visual :deep(.immersive-scene) { height: min(680px, 72vh); }
-.hero-signature { position: absolute; right: 10%; bottom: 18%; z-index: 1; color: rgba(17, 17, 17, 0.1); font: 800 clamp(3rem, 7vw, 7rem) var(--display-font); letter-spacing: -0.05em; pointer-events: none; }
+.hero-signature { position: absolute; right: 10%; bottom: 18%; z-index: 1; color: rgba(242, 240, 233, 0.1); font: 800 clamp(3rem, 7vw, 7rem) var(--display-font); letter-spacing: -0.05em; pointer-events: none; }
 .hero-footnote { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font: 0.58rem var(--mono-font); letter-spacing: 0.07em; }
-.marquee { overflow: hidden; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); background: var(--acid); }
+.marquee { overflow: hidden; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); background: var(--acid); color: var(--acid-ink); }
 .marquee-track { display: flex; width: max-content; animation: marquee 24s linear infinite; }
 .marquee-track span { display: block; padding: 13px 0; font: 0.72rem var(--mono-font); letter-spacing: 0.12em; white-space: nowrap; }
 .marquee i { padding: 0 30px; font-style: normal; }
@@ -533,11 +534,11 @@ h1 em, .section-heading em { color: var(--electric-blue); font-weight: 400; }
 .topic-row:hover strong { color: var(--electric-blue); }
 .empty-topics { padding: 22px 0; color: var(--muted); font-size: 0.8rem; }
 .topic-search { display: flex; justify-content: space-between; margin-top: 24px; padding: 12px; border: 1px solid var(--ink); color: var(--ink); font: 0.65rem var(--mono-font); text-decoration: none; }
-.topic-search:hover { background: var(--acid); }
+.topic-search:hover { background: var(--acid); color: var(--acid-ink); border-color: var(--acid-ink); }
 .loading-lines { display: grid; gap: 1px; }
 .loading-lines span { display: block; height: 122px; background: linear-gradient(90deg, var(--paper-soft), rgba(255,255,255,0.42), var(--paper-soft)); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-top: 1px solid var(--line); }
 @keyframes shimmer { to { background-position: -200% 0; } }
-.projects-section { position: relative; margin-top: var(--section-space); padding: var(--section-space) 0; color: var(--paper); }
+.projects-section { position: relative; margin-top: var(--section-space); padding: var(--section-space) 0; color: var(--ink); }
 .section-title-row--light .section-kicker, .projects-note { color: #9ca09e; }
 .section-title-row--light .section-heading em { color: var(--acid); }
 .projects-note { max-width: 260px; text-align: right; font-size: 0.82rem; }
@@ -550,7 +551,7 @@ h1 em, .section-heading em { color: var(--electric-blue); font-weight: 400; }
   padding: 22px;
   overflow: hidden;
   border: 1px solid rgba(244, 241, 234, 0.35);
-  color: var(--paper);
+  color: var(--ink);
   text-decoration: none;
   transition: transform 250ms ease, border-color 250ms ease;
 }

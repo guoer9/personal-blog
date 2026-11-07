@@ -212,6 +212,10 @@ async function touchDrag(page, start, end) {
 async function touchSwipe(page, start, end) {
   const session = await page.context().newCDPSession(page)
   const before = await page.evaluate(() => window.scrollY)
+  const sphereBefore = await sphereDataset(page)
+  let maxTrailStrength = sphereBefore.trailStrength
+  let maxWakeCount = sphereBefore.wakeCount
+  let maxPressDepth = Math.abs(sphereBefore.pressDepth)
   try {
     await session.send('Input.dispatchTouchEvent', {
       type: 'touchStart',
@@ -224,10 +228,20 @@ async function touchSwipe(page, start, end) {
         touchPoints: [{ id: 2, x: start.x + (end.x - start.x) * amount, y: start.y + (end.y - start.y) * amount, radiusX: 4, radiusY: 4, force: 1 }],
       })
       await page.waitForTimeout(20)
+      const sphere = await sphereDataset(page)
+      maxTrailStrength = Math.max(maxTrailStrength, sphere.trailStrength)
+      maxWakeCount = Math.max(maxWakeCount, sphere.wakeCount)
+      maxPressDepth = Math.max(maxPressDepth, Math.abs(sphere.pressDepth))
     }
     await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
     await page.waitForFunction((scrollY) => window.scrollY > scrollY, before, { timeout: 5000 })
-    return await page.evaluate(() => window.scrollY)
+    return {
+      scrollY: await page.evaluate(() => window.scrollY),
+      maxTrailStrength,
+      maxWakeCount,
+      maxPressDepth,
+      newRipples: (await sphereDataset(page)).rippleSequence - sphereBefore.rippleSequence,
+    }
   } finally {
     await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }).catch(() => {})
     await session.detach()
@@ -254,6 +268,28 @@ async function runProfile(profile, fixtures) {
   const initialState = await diagnostics(page)
   check(`${profile.name}: diagnostics exposed`, Boolean(initialState), { diagnostic: initialState })
   check(`${profile.name}: Home is readable with one canvas`, await page.locator('main h1').count() > 0 && await page.locator('canvas').count() === 1)
+  const themeColors = await page.evaluate(() => ({
+    background: getComputedStyle(document.body).backgroundColor,
+    foreground: getComputedStyle(document.body).color,
+  }))
+  const backgroundChannels = themeColors.background.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? []
+  const backgroundLuminance = backgroundChannels.reduce((sum, channel) => sum + channel, 0) / Math.max(1, backgroundChannels.length)
+  check(`${profile.name}: site uses the black visual theme`, backgroundChannels.length === 3 && backgroundLuminance < 32, themeColors)
+  const acidSurfaceColors = await page.evaluate(() => ({
+    marquee: getComputedStyle(document.querySelector('.marquee-track span')).color,
+    marqueeBackground: getComputedStyle(document.querySelector('.marquee')).backgroundColor,
+    primaryAction: getComputedStyle(document.querySelector('.editorial-button--acid')).color,
+    primaryActionBackground: getComputedStyle(document.querySelector('.editorial-button--acid')).backgroundColor,
+  }))
+  const blueChannels = acidSurfaceColors.marquee.match(/[\d.]+/g).slice(0, 3).map(Number)
+  const marqueeContrast = contrastRatio(acidSurfaceColors.marquee, acidSurfaceColors.marqueeBackground)
+  const actionContrast = contrastRatio(acidSurfaceColors.primaryAction, acidSurfaceColors.primaryActionBackground)
+  check(`${profile.name}: acid surfaces use readable theme blue text`,
+    acidSurfaceColors.marquee === acidSurfaceColors.primaryAction
+      && blueChannels[2] > Math.max(blueChannels[0], blueChannels[1])
+      && marqueeContrast >= 4.5
+      && actionContrast >= 4.5,
+    { ...acidSurfaceColors, marqueeContrast, actionContrast })
   if (profile.reducedMotion && initialState) {
     check(`${profile.name}: reduced motion keeps runtime static`, initialState.rafActive === false && await page.locator('canvas').evaluate((element) => getComputedStyle(element).display === 'none'))
   }
@@ -378,6 +414,13 @@ async function runProfile(profile, fixtures) {
     await page.waitForTimeout(120)
 
     if (profile.isMobile) {
+      await page.waitForFunction(() => {
+        const canvas = document.querySelector('canvas')
+        return Number(canvas?.dataset.sphereTrailStrength) === 0
+          && Number(canvas?.dataset.sphereWakeCount) === 0
+          && Number(canvas?.dataset.sphereRippleCount) === 0
+          && Math.abs(Number(canvas?.dataset.spherePressDepth)) < 0.005
+      }, undefined, { timeout: 5000 })
       const heroVisual = await page.locator('.hero-visual').boundingBox()
       if (!heroVisual) throw new Error('The touch scroll region is not measurable.')
       const touchScrollBefore = await page.evaluate(() => window.scrollY)
@@ -388,7 +431,13 @@ async function runProfile(profile, fixtures) {
         x: heroVisual.x + heroVisual.width * 0.5,
         y: Math.min(profile.viewport.height - 24, heroVisual.y + heroVisual.height * 0.82) - 140,
       })
-      check(`${profile.name}: vertical touch swipe still scrolls the page`, touchScrollAfter > touchScrollBefore)
+      check(`${profile.name}: vertical touch swipe still scrolls the page`, touchScrollAfter.scrollY > touchScrollBefore)
+      check(`${profile.name}: vertical touch scrolling does not trigger sphere pointer feedback`,
+        touchScrollAfter.maxTrailStrength === 0
+          && touchScrollAfter.maxWakeCount === 0
+          && touchScrollAfter.maxPressDepth < 0.005
+          && touchScrollAfter.newRipples === 0,
+        touchScrollAfter)
       await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
       await page.waitForTimeout(120)
     }
@@ -418,6 +467,7 @@ async function runProfile(profile, fixtures) {
     const points = await sphereInteractionPoints(page)
     await page.locator('.motion-toggle').click()
     await page.waitForFunction(() => window.__visualRuntimeDiagnostics?.()?.rafActive === false)
+    check(`${profile.name}: manual pause hides the sphere canvas`, await page.locator('canvas').evaluate((element) => getComputedStyle(element).display === 'none'))
     const pausedRippleBefore = (await sphereDataset(page)).rippleCount
     await page.mouse.click(points.inside.x, points.inside.y)
     await page.waitForTimeout(120)
@@ -425,6 +475,7 @@ async function runProfile(profile, fixtures) {
     check(`${profile.name}: manual pause suppresses new sphere feedback`, (await sphereDataset(page)).rippleCount === pausedRippleBefore)
     await page.locator('.motion-toggle').click()
     await page.waitForFunction(() => window.__visualRuntimeDiagnostics?.()?.rafActive === true)
+    check(`${profile.name}: resuming motion shows the sphere canvas`, await page.locator('canvas').evaluate((element) => getComputedStyle(element).display !== 'none'))
     check(`${profile.name}: resuming motion restarts the shared RAF`, (await diagnostics(page))?.rafActive === true)
   }
 
