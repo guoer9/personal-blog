@@ -2,9 +2,14 @@ import {
   AdditiveBlending,
   BufferAttribute,
   BufferGeometry,
-  DynamicDrawUsage,
+  ClampToEdgeWrapping,
+  DoubleSide,
   IcosahedronGeometry,
+  LinearFilter,
+  Matrix4,
   Mesh,
+  OrthographicCamera,
+  PlaneGeometry,
   PerspectiveCamera,
   Points,
   Raycaster,
@@ -13,6 +18,7 @@ import {
   ShaderMaterial,
   Vector2,
   Vector3,
+  WebGLRenderTarget,
 } from 'three'
 import { clamp, damp, MotionEnergy, qualityProfile, resolveMotionStage, sceneMoodAt } from './motion'
 import {
@@ -20,9 +26,18 @@ import {
   flowVertexShader,
   particleFragmentShader,
   particleVertexShader,
-  pointerWakeVertexShader,
-  pointerWakeFragmentShader,
 } from './shaders'
+import {
+  glassBlobFragmentShader,
+  glassBlobVertexShader,
+  glassCompositeFragmentShader,
+  glassCompositeVertexShader,
+  glassFacetFragmentShader,
+  glassFacetVertexShader,
+  velocityAdvectFragmentShader,
+  velocityAdvectVertexShader,
+  velocitySplatFragmentShader,
+} from './glassShaders'
 import type { QualityTier } from './quality'
 import type { RendererAdapter } from './runtime/types'
 
@@ -73,14 +88,39 @@ function createParticles(count: number) {
   return geometry
 }
 
+function createFacetGeometry(count: number): BufferGeometry {
+  const positions: number[] = []
+  const uvs: number[] = []
+  for (let index = 0; index < count; index += 1) {
+    const angle = index * 2.399963
+    const radius = 1.55 + (index % 4) * 0.12
+    const width = 0.12 + (index % 3) * 0.045
+    const height = 0.16 + (index % 5) * 0.04
+    const center = new Vector3(Math.cos(angle) * radius, Math.sin(angle * 1.7) * radius * 0.6, Math.sin(angle) * radius)
+    const tangent = new Vector3(-Math.sin(angle), 0, Math.cos(angle)).multiplyScalar(width)
+    const lift = new Vector3(0, height, 0)
+    const a = center.clone().sub(tangent)
+    const b = center.clone().add(tangent)
+    const c = center.clone().add(lift)
+    positions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z)
+    uvs.push(0, 0, 1, 0, 0.5, 1)
+  }
+  const geometry = new BufferGeometry()
+  geometry.setAttribute('position', new BufferAttribute(new Float32Array(positions), 3))
+  geometry.setAttribute('uv', new BufferAttribute(new Float32Array(uvs), 2))
+  geometry.computeBoundingSphere()
+  return geometry
+}
+
 const MAX_RIPPLES = 6
 const RIPPLE_LIFETIME_SECONDS = 1.8
-const WAKE_CAPACITY = 32
-const WAKE_LIFETIME_SECONDS = 0.85
 const PRESS_DEPTH_MAX = 0.28
 const PRESS_GROW_SECONDS = 0.45
 const PRESS_STIFFNESS = 90
 const PRESS_DAMPING = 12
+const VELOCITY_DISSIPATION_PER_FRAME = 0.975
+const WEIGHT_1_DISSIPATION_PER_FRAME = 0.95
+const WEIGHT_2_DISSIPATION_PER_FRAME = 0.8
 
 export function createLiquidScene(
   renderer: RendererAdapter,
@@ -90,6 +130,7 @@ export function createLiquidScene(
   const sharedRenderer = renderer as RendererAdapter & {
     setClearColor?: (color: number, alpha: number) => void
     outputColorSpace?: string
+    autoClear?: boolean
   }
   sharedRenderer.setClearColor?.(0x000000, 0)
   sharedRenderer.outputColorSpace = 'srgb'
@@ -103,7 +144,6 @@ export function createLiquidScene(
   const worldSphere = new Sphere()
   const surfacePoint = new Vector3()
   const pressNdc = new Vector2()
-  const wakeNdc = new Vector2(initialState.pointerX, initialState.pointerY)
   const configuredRippleCapacity = clamp(Math.floor(quality.rippleCapacity ?? 4), 1, MAX_RIPPLES)
   let activeRippleCapacity = configuredRippleCapacity
   const rippleDirections = Array.from({ length: MAX_RIPPLES }, () => new Vector3(0, 0, 1))
@@ -177,29 +217,177 @@ export function createLiquidScene(
   const particles = new Points(particleGeometry, particleMaterial)
   scene.add(particles)
 
-  // A separate bounded point pool places expanding water rings on the actual cursor path.
-  const wakePositions = new Float32Array(WAKE_CAPACITY * 3)
-  const wakeBirths = new Float32Array(WAKE_CAPACITY).fill(-100)
-  const wakeGeometry = new BufferGeometry()
-  const wakePositionAttribute = new BufferAttribute(wakePositions, 3).setUsage(DynamicDrawUsage)
-  const wakeBirthAttribute = new BufferAttribute(wakeBirths, 1).setUsage(DynamicDrawUsage)
-  wakeGeometry.setAttribute('position', wakePositionAttribute)
-  wakeGeometry.setAttribute('aBornAt', wakeBirthAttribute)
-  const wakeMaterial = new ShaderMaterial({
-    vertexShader: pointerWakeVertexShader,
-    fragmentShader: pointerWakeFragmentShader,
-    uniforms: { uTime: uniforms.uTime, uPixelRatio: particleMaterial.uniforms.uPixelRatio },
+  const glassScene = new Scene()
+  const blobGeometry = new IcosahedronGeometry(0.42, 2)
+  const blobMaterial = new ShaderMaterial({
+    vertexShader: glassBlobVertexShader,
+    fragmentShader: glassBlobFragmentShader,
+    uniforms: {
+      uSceneTexture: { value: null },
+      uBlurTexture: { value: null },
+      uResolution: { value: new Vector2(1, 1) },
+      uViewProjectionMatrix: { value: new Matrix4() },
+      uRefractionRatio: { value: 2.4 },
+      uThickness: { value: 0.3 },
+      uOpacity: { value: 0 },
+      uEdgeColor: { value: new Vector3(0.38, 0.78, 1.0) },
+    },
     transparent: true,
-    depthTest: false,
     depthWrite: false,
+    side: DoubleSide,
   })
-  const wake = new Points(wakeGeometry, wakeMaterial)
-  wake.frustumCulled = false
-  wake.renderOrder = 2
-  scene.add(wake)
+  const glassBlob = new Mesh(blobGeometry, blobMaterial)
+  glassBlob.visible = false
+  glassBlob.renderOrder = 10
+  glassScene.add(glassBlob)
 
-  const target: SceneInput = { ...initialState, pointerVelocity: { ...initialState.pointerVelocity } }
-  const current: SceneInput = { ...initialState, pointerVelocity: { ...initialState.pointerVelocity } }
+  const facetGeometry = createFacetGeometry(16)
+  const facetMaterial = new ShaderMaterial({
+    vertexShader: glassFacetVertexShader,
+    fragmentShader: glassFacetFragmentShader,
+    uniforms: {
+      uSceneTexture: { value: null },
+      uResolution: { value: new Vector2(1, 1) },
+      uEdgeColor: { value: new Vector3(0.78, 0.94, 0.62) },
+      uOpacity: { value: 0 },
+      uRefractionStrength: { value: 18 },
+    },
+    transparent: true,
+    depthWrite: false,
+    side: DoubleSide,
+  })
+  const glassFacets = new Mesh(facetGeometry, facetMaterial)
+  glassFacets.visible = false
+  glassFacets.renderOrder = 11
+  glassScene.add(glassFacets)
+
+  const postGeometry = new PlaneGeometry(2, 2)
+  const postCamera = new OrthographicCamera(-1, 1, 1, -1, 0, 1)
+  const postScene = new Scene()
+  const postMesh = new Mesh(postGeometry, new ShaderMaterial({ vertexShader: glassCompositeVertexShader, fragmentShader: glassCompositeFragmentShader }))
+  postMesh.frustumCulled = false
+  postScene.add(postMesh)
+
+  const createTarget = () => {
+    const target = new WebGLRenderTarget(1, 1, {
+      minFilter: LinearFilter,
+      magFilter: LinearFilter,
+      wrapS: ClampToEdgeWrapping,
+      wrapT: ClampToEdgeWrapping,
+      depthBuffer: false,
+      stencilBuffer: false,
+    })
+    target.texture.generateMipmaps = false
+    return target
+  }
+  const sceneTarget = createTarget()
+  const blurTarget = createTarget()
+  const glassTarget = createTarget()
+  let velocityPrev = createTarget()
+  let velocityCurr = createTarget()
+  let lowPrev = createTarget()
+  let lowCurr = createTarget()
+  let lowBlurTarget = createTarget()
+  const velocityAdvectMaterial = new ShaderMaterial({
+    vertexShader: velocityAdvectVertexShader,
+    fragmentShader: velocityAdvectFragmentShader,
+    uniforms: {
+      uPrevPaint: { value: null }, uLowPaint: { value: null }, uTexelSize: { value: new Vector2(1, 1) },
+      uVelocityDissipation: { value: VELOCITY_DISSIPATION_PER_FRAME },
+      uWeight1Dissipation: { value: WEIGHT_1_DISSIPATION_PER_FRAME },
+      uWeight2Dissipation: { value: WEIGHT_2_DISSIPATION_PER_FRAME },
+      uPushStrength: { value: 25 },
+      uCurlScale: { value: 0.02 }, uCurlStrength: { value: 3 },
+    },
+  })
+  const velocitySplatMaterial = new ShaderMaterial({
+    vertexShader: velocityAdvectVertexShader,
+    fragmentShader: velocitySplatFragmentShader,
+    uniforms: {
+      uPrevPaint: { value: null }, uPointer: { value: new Vector2() }, uPrevPointer: { value: new Vector2() },
+      uVelocity: { value: new Vector2() }, uResolution: { value: new Vector2(1, 1) },
+      uPrevBrushRadius: { value: 0 }, uBrushRadius: { value: 0 },
+    },
+  })
+  const lowFieldBlurMaterial = new ShaderMaterial({
+    vertexShader: glassCompositeVertexShader,
+    fragmentShader: /* glsl */ `
+      varying vec2 vUv;
+      uniform sampler2D uTexture;
+      uniform vec2 uDelta;
+      void main() {
+        vec4 color = texture2D(uTexture, vUv) * 0.1633;
+        vec2 delta = uDelta;
+        color += texture2D(uTexture, vUv - delta) * 0.1531;
+        color += texture2D(uTexture, vUv + delta) * 0.1531;
+        delta += uDelta;
+        color += texture2D(uTexture, vUv - delta) * 0.12245;
+        color += texture2D(uTexture, vUv + delta) * 0.12245;
+        delta += uDelta;
+        color += texture2D(uTexture, vUv - delta) * 0.0918;
+        color += texture2D(uTexture, vUv + delta) * 0.0918;
+        delta += uDelta;
+        color += texture2D(uTexture, vUv - delta) * 0.051;
+        color += texture2D(uTexture, vUv + delta) * 0.051;
+        gl_FragColor = color;
+      }
+    `,
+    uniforms: { uTexture: { value: null }, uDelta: { value: new Vector2() } },
+  })
+  const paintClearMaterial = new ShaderMaterial({
+    vertexShader: glassCompositeVertexShader,
+    fragmentShader: /* glsl */ `
+      void main() { gl_FragColor = vec4(0.5, 0.5, 0.0, 0.0); }
+    `,
+  })
+  const blurMaterial = new ShaderMaterial({
+    vertexShader: glassCompositeVertexShader,
+    fragmentShader: /* glsl */ `
+      varying vec2 vUv;
+      uniform sampler2D uTexture;
+      uniform vec2 uTexelSize;
+      void main() {
+        vec3 color = vec3(0.0);
+        color += texture2D(uTexture, vUv - uTexelSize * 2.0).rgb * 0.08;
+        color += texture2D(uTexture, vUv - uTexelSize).rgb * 0.16;
+        color += texture2D(uTexture, vUv).rgb * 0.52;
+        color += texture2D(uTexture, vUv + uTexelSize).rgb * 0.16;
+        color += texture2D(uTexture, vUv + uTexelSize * 2.0).rgb * 0.08;
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `,
+    uniforms: { uTexture: { value: null }, uTexelSize: { value: new Vector2(1, 1) } },
+  })
+  const copyMaterial = new ShaderMaterial({
+    vertexShader: glassCompositeVertexShader,
+    fragmentShader: /* glsl */ `
+      varying vec2 vUv;
+      uniform sampler2D uTexture;
+      void main() { gl_FragColor = texture2D(uTexture, vUv); }
+    `,
+    uniforms: { uTexture: { value: null } },
+  })
+  const glassCompositeMaterial = new ShaderMaterial({
+    vertexShader: glassCompositeVertexShader,
+    fragmentShader: glassCompositeFragmentShader,
+    uniforms: {
+      uTexture: { value: null }, uVelocityTexture: { value: null },
+      uFieldTexelSize: { value: new Vector2(1, 1) }, uScrollOffset: { value: new Vector2(0, 0) },
+      uAmount: { value: 3 }, uMultiplier: { value: 5 }, uRgbShift: { value: 0.5 },
+      uColorMultiplier: { value: 10 }, uShade: { value: 1.25 }, uOpacity: { value: 1 },
+    },
+  })
+
+  const target: SceneInput = {
+    ...initialState,
+    pointerPixelX: initialState.pointerPixelX ?? 0,
+    pointerPixelY: initialState.pointerPixelY ?? 0,
+    pointerVelocity: { ...initialState.pointerVelocity },
+  }
+  const current: SceneInput = {
+    ...target,
+    pointerVelocity: { ...target.pointerVelocity },
+  }
   const motionEnergy = new MotionEnergy()
   let lastInputTime = performance.now()
   const deviceDprCap = quality.pixelRatioCap
@@ -223,9 +411,13 @@ export function createLiquidScene(
   let pressActive = false
   let disposed = false
   let scrollVelocity = 0
-  let wakeCursor = 0
-  let wakeCapacity = WAKE_CAPACITY
-  let hasWakeOrigin = false
+  let fieldPointer = new Vector2(0.5, 0.5)
+  let previousFieldPointer = new Vector2(0.5, 0.5)
+  let fieldBrushRadius = 0
+  const fieldVelocity = new Vector2()
+  const pointerDelta = new Vector2()
+  let hasFieldOrigin = false
+  let facetCapacity = 16
   let previousStage = resolveMotionStage(initialState.scroll)
 
   function hitSphere(ndcX: number, ndcY: number): Vector3 | null {
@@ -254,28 +446,143 @@ export function createLiquidScene(
     return mesh.worldToLocal(surfacePoint).normalize()
   }
 
-  function updateWake(seconds: number) {
-    const distance = Math.hypot((target.pointerX - wakeNdc.x) * viewportWidth / 2, (target.pointerY - wakeNdc.y) * viewportHeight / 2)
-    if (hasWakeOrigin && distance >= 10 && viewportWidth > 0 && viewportHeight > 0) {
-      const samples = Math.min(8, Math.ceil(distance / 18))
-      for (let sample = 1; sample <= samples; sample += 1) {
-        const fraction = sample / samples
-        raycastNdc.set(wakeNdc.x + (target.pointerX - wakeNdc.x) * fraction, wakeNdc.y + (target.pointerY - wakeNdc.y) * fraction)
-        raycaster.setFromCamera(raycastNdc, camera)
-        raycaster.ray.at((2 - raycaster.ray.origin.z) / raycaster.ray.direction.z, surfacePoint)
-        surfacePoint.toArray(wakePositions, wakeCursor * 3)
-        wakeBirths[wakeCursor] = seconds - (1 - fraction) * 0.04
-        wakeCursor = (wakeCursor + 1) % wakeCapacity
-      }
-      wakeNdc.set(target.pointerX, target.pointerY)
-      wakePositionAttribute.needsUpdate = true
-      wakeBirthAttribute.needsUpdate = true
+  function renderPass(target: WebGLRenderTarget | null, passScene: Scene, passCamera: OrthographicCamera | PerspectiveCamera, clear = true) {
+    if (!sharedRenderer.setRenderTarget) return
+    const previousTarget = sharedRenderer.getRenderTarget?.() ?? null
+    const previousAutoClear = sharedRenderer.autoClear
+    sharedRenderer.setRenderTarget(target)
+    if (clear) sharedRenderer.clear?.(true, true, true)
+    if (!clear) sharedRenderer.autoClear = false
+    sharedRenderer.render(passScene, passCamera)
+    if (!clear) sharedRenderer.autoClear = previousAutoClear
+    sharedRenderer.setRenderTarget(previousTarget)
+  }
+
+  function updateVelocityField(delta: number) {
+    if (!sharedRenderer.setRenderTarget || viewportWidth <= 0 || viewportHeight <= 0) return
+    const frameScale = delta * 60
+    velocityAdvectMaterial.uniforms.uVelocityDissipation.value = Math.pow(VELOCITY_DISSIPATION_PER_FRAME, frameScale)
+    velocityAdvectMaterial.uniforms.uWeight1Dissipation.value = Math.pow(WEIGHT_1_DISSIPATION_PER_FRAME, frameScale)
+    velocityAdvectMaterial.uniforms.uWeight2Dissipation.value = Math.pow(WEIGHT_2_DISSIPATION_PER_FRAME, frameScale)
+    const pointerX = clamp(target.pointerPixelX ?? 0, 0, viewportWidth) / viewportWidth
+    const pointerY = 1 - clamp(target.pointerPixelY ?? 0, 0, viewportHeight) / viewportHeight
+    if (!hasFieldOrigin) {
+      fieldPointer.set(pointerX, pointerY)
+      previousFieldPointer.copy(fieldPointer)
+      hasFieldOrigin = true
     }
-    let count = 0
-    for (let index = 0; index < wakeCapacity; index += 1) {
-      if (seconds - wakeBirths[index] < WAKE_LIFETIME_SECONDS) count += 1
+    previousFieldPointer.copy(fieldPointer)
+    fieldPointer.set(pointerX, pointerY)
+    const moveDistance = Math.hypot(
+      (pointerX - previousFieldPointer.x) * viewportWidth,
+      (pointerY - previousFieldPointer.y) * viewportHeight,
+    )
+    pointerDelta.set(
+      (pointerX - previousFieldPointer.x) * velocityPrev.width,
+      (pointerY - previousFieldPointer.y) * velocityPrev.height,
+    )
+    fieldVelocity.multiplyScalar(0.8).addScaledVector(pointerDelta, delta * 0.8)
+    const velocityTexelSize = new Vector2(
+      1 / Math.max(1, velocityPrev.width),
+      1 / Math.max(1, velocityPrev.height),
+    )
+    velocityAdvectMaterial.uniforms.uPrevPaint.value = velocityPrev.texture
+    velocityAdvectMaterial.uniforms.uLowPaint.value = lowPrev.texture
+    velocityAdvectMaterial.uniforms.uTexelSize.value.copy(velocityTexelSize)
+    postMesh.material = velocityAdvectMaterial
+    renderPass(velocityCurr, postScene, postCamera)
+
+    if (moveDistance > 0.5) {
+      const maxRadius = Math.max(40, viewportWidth / 20)
+      const brushRadiusPixels = Math.min(1, moveDistance / 100) * maxRadius * velocityCurr.height / viewportHeight
+      velocitySplatMaterial.uniforms.uPrevPaint.value = velocityCurr.texture
+      velocitySplatMaterial.uniforms.uPointer.value.set(pointerX, pointerY)
+      velocitySplatMaterial.uniforms.uPrevPointer.value.copy(previousFieldPointer)
+      velocitySplatMaterial.uniforms.uVelocity.value.copy(fieldVelocity)
+      velocitySplatMaterial.uniforms.uResolution.value.set(velocityCurr.width, velocityCurr.height)
+      velocitySplatMaterial.uniforms.uPrevBrushRadius.value = fieldBrushRadius
+      velocitySplatMaterial.uniforms.uBrushRadius.value = brushRadiusPixels
+      postMesh.material = velocitySplatMaterial
+      renderPass(velocityPrev, postScene, postCamera)
+      fieldBrushRadius = brushRadiusPixels
+    } else {
+      const swap = velocityPrev
+      velocityPrev = velocityCurr
+      velocityCurr = swap
+      fieldBrushRadius = 0
     }
-    canvas.dataset.sphereWakeCount = String(count)
+
+    copyMaterial.uniforms.uTexture.value = velocityPrev.texture
+    postMesh.material = copyMaterial
+    renderPass(lowCurr, postScene, postCamera)
+
+    lowFieldBlurMaterial.uniforms.uTexture.value = lowCurr.texture
+    lowFieldBlurMaterial.uniforms.uDelta.value.set(2 / Math.max(1, lowCurr.width), 0)
+    postMesh.material = lowFieldBlurMaterial
+    renderPass(lowBlurTarget, postScene, postCamera)
+
+    lowFieldBlurMaterial.uniforms.uTexture.value = lowBlurTarget.texture
+    lowFieldBlurMaterial.uniforms.uDelta.value.set(0, 2 / Math.max(1, lowBlurTarget.height))
+    renderPass(lowPrev, postScene, postCamera)
+
+    canvas.dataset.sphereVelocityWeight = Math.min(1, moveDistance / 100).toFixed(5)
+    canvas.dataset.sphereVelocityDelta = delta.toFixed(5)
+    canvas.dataset.sphereVelocityStroke = moveDistance > 0.5 ? '1' : '0'
+  }
+
+  function updateGlassLayers(hoverHit: Vector3 | null, hoverAmount: number, scale: number, pointerSpeed: number) {
+    const hoverOpacity = clamp(hoverAmount * (0.6 + pointerSpeed * 0.12), 0, 1)
+    glassBlob.visible = false
+    glassFacets.visible = hoverOpacity > 0.01 && facetCapacity > 0
+    if (hoverHit) {
+      glassFacets.position.copy(mesh.position)
+      glassFacets.rotation.copy(mesh.rotation)
+      glassFacets.scale.setScalar(scale * 0.78)
+      facetGeometry.setDrawRange(0, facetCapacity * 3)
+    }
+    facetMaterial.uniforms.uOpacity.value = hoverOpacity * 0.72
+    canvas.dataset.sphereGlassBlob = 'hidden'
+    canvas.dataset.sphereFacetCount = String(facetCapacity)
+  }
+
+  function renderGlassPipeline() {
+    if (!sharedRenderer.setRenderTarget || viewportWidth <= 0 || viewportHeight <= 0) return false
+    const previousTarget = sharedRenderer.getRenderTarget?.() ?? null
+    const previousAutoClear = sharedRenderer.autoClear
+    sharedRenderer.setRenderTarget(sceneTarget)
+    sharedRenderer.autoClear = true
+    sharedRenderer.clear?.(true, true, true)
+    sharedRenderer.render(scene, camera)
+
+    blurMaterial.uniforms.uTexture.value = sceneTarget.texture
+    blurMaterial.uniforms.uTexelSize.value.set(1 / Math.max(1, sceneTarget.width), 1 / Math.max(1, sceneTarget.height))
+    postMesh.material = blurMaterial
+    renderPass(blurTarget, postScene, postCamera)
+
+    copyMaterial.uniforms.uTexture.value = sceneTarget.texture
+    postMesh.material = copyMaterial
+    renderPass(glassTarget, postScene, postCamera)
+
+    blobMaterial.uniforms.uSceneTexture.value = sceneTarget.texture
+    blobMaterial.uniforms.uBlurTexture.value = blurTarget.texture
+    camera.updateMatrixWorld(true)
+    blobMaterial.uniforms.uViewProjectionMatrix.value.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+    facetMaterial.uniforms.uSceneTexture.value = sceneTarget.texture
+    sharedRenderer.setRenderTarget(glassTarget)
+    sharedRenderer.autoClear = false
+    sharedRenderer.render(glassScene, camera)
+    sharedRenderer.autoClear = previousAutoClear
+    sharedRenderer.setRenderTarget(previousTarget)
+
+    glassCompositeMaterial.uniforms.uTexture.value = glassTarget.texture
+    glassCompositeMaterial.uniforms.uVelocityTexture.value = velocityPrev.texture
+    glassCompositeMaterial.uniforms.uFieldTexelSize.value.set(1 / Math.max(1, velocityPrev.width), 1 / Math.max(1, velocityPrev.height))
+    glassCompositeMaterial.uniforms.uScrollOffset.value.set(0, 0)
+    glassCompositeMaterial.uniforms.uOpacity.value = 1
+    postMesh.material = glassCompositeMaterial
+    renderPass(null, postScene, postCamera)
+    canvas.dataset.glassPass = 'composite'
+    return true
   }
 
   function updateRippleUniforms(seconds: number) {
@@ -339,13 +646,11 @@ export function createLiquidScene(
         ? Math.max(1, configuredRippleCapacity - 1)
         : 1
     uniforms.uRippleCapacity.value = activeRippleCapacity
-    wakeCapacity = tier === 'high' ? WAKE_CAPACITY : tier === 'balanced' ? 24 : 12
-    wakeGeometry.setDrawRange(0, wakeCapacity)
-    wakeCursor %= wakeCapacity
-    for (let index = wakeCapacity; index < WAKE_CAPACITY; index += 1) wakeBirths[index] = -100
-    wakeBirthAttribute.needsUpdate = true
+    facetCapacity = tier === 'high' ? 16 : tier === 'balanced' ? 10 : 5
+    facetGeometry.setDrawRange(0, facetCapacity * 3)
     particleGeometry.setDrawRange(0, particleCount)
     particleMaterial.uniforms.uPixelRatio.value = pixelRatio
+    canvas.dataset.sphereCompositeSamples = '9'
     if (viewportWidth <= 0 || viewportHeight <= 0 || disposed) return
     renderer.setPixelRatio(pixelRatio)
     renderer.setSize(viewportWidth, viewportHeight, false)
@@ -359,17 +664,33 @@ export function createLiquidScene(
       viewportWidth = width
       viewportHeight = height
       rawDpr = Number.isFinite(dpr) && dpr > 0 ? dpr : 1
+      hasFieldOrigin = false
+      fieldBrushRadius = 0
+      fieldVelocity.set(0, 0)
       applyQualityTier(currentQualityTier)
       camera.aspect = width / height
       camera.updateProjectionMatrix()
+      const renderWidth = Math.max(1, Math.round(width * rawDpr))
+      const renderHeight = Math.max(1, Math.round(height * rawDpr))
+      sceneTarget.setSize(renderWidth, renderHeight)
+      blurTarget.setSize(renderWidth, renderHeight)
+      glassTarget.setSize(renderWidth, renderHeight)
+      velocityPrev.setSize(Math.max(1, Math.round(renderWidth / 4)), Math.max(1, Math.round(renderHeight / 4)))
+      velocityCurr.setSize(velocityPrev.width, velocityPrev.height)
+      lowPrev.setSize(Math.max(1, Math.round(renderWidth / 8)), Math.max(1, Math.round(renderHeight / 8)))
+      lowCurr.setSize(lowPrev.width, lowPrev.height)
+      lowBlurTarget.setSize(lowPrev.width, lowPrev.height)
+      velocityAdvectMaterial.uniforms.uTexelSize.value.set(1 / Math.max(1, velocityPrev.width), 1 / Math.max(1, velocityPrev.height))
+      velocitySplatMaterial.uniforms.uResolution.value.set(velocityPrev.width, velocityPrev.height)
+      blobMaterial.uniforms.uResolution.value.set(renderWidth, renderHeight)
+      facetMaterial.uniforms.uResolution.value.set(renderWidth, renderHeight)
+      postMesh.material = paintClearMaterial
+      renderPass(velocityPrev, postScene, postCamera)
+      renderPass(lowPrev, postScene, postCamera)
     },
     setInput(input) {
       const nextPointerX = clamp(input.pointerX, -1, 1)
       const nextPointerY = clamp(input.pointerY, -1, 1)
-      if (!hasWakeOrigin && (nextPointerX !== target.pointerX || nextPointerY !== target.pointerY)) {
-        wakeNdc.set(nextPointerX, nextPointerY)
-        hasWakeOrigin = true
-      }
       const nextScroll = clamp(input.scroll, 0, 1)
       const now = performance.now()
       const elapsedSeconds = (now - lastInputTime) / 1000
@@ -382,6 +703,12 @@ export function createLiquidScene(
       lastInputTime = now
       target.pointerX = nextPointerX
       target.pointerY = nextPointerY
+      target.pointerPixelX = Number.isFinite(input.pointerPixelX)
+        ? Math.max(0, Number(input.pointerPixelX))
+        : ((nextPointerX + 1) * 0.5) * viewportWidth
+      target.pointerPixelY = Number.isFinite(input.pointerPixelY)
+        ? Math.max(0, Number(input.pointerPixelY))
+        : ((1 - nextPointerY) * 0.5) * viewportHeight
       target.pointerVelocity.x = clamp(input.pointerVelocity.x, -4, 4)
       target.pointerVelocity.y = clamp(input.pointerVelocity.y, -4, 4)
       target.scroll = nextScroll
@@ -420,16 +747,12 @@ export function createLiquidScene(
     render(time) {
       if (disposed) return
       const seconds = time / 1000
-      if (lastTime > 0 && seconds - lastTime > 0.25) {
-        wakeNdc.set(target.pointerX, target.pointerY)
-        hasWakeOrigin = false
-        wakeBirths.fill(-100)
-        wakeBirthAttribute.needsUpdate = true
-      }
       const delta = lastTime > 0 ? clamp(seconds - lastTime, 0, 0.05) : 1 / 60
       lastTime = seconds
       current.pointerX = damp(current.pointerX, target.pointerX, 5.5, delta)
       current.pointerY = damp(current.pointerY, target.pointerY, 5.5, delta)
+      current.pointerPixelX = damp(current.pointerPixelX ?? 0, target.pointerPixelX ?? 0, 5.5, delta)
+      current.pointerPixelY = damp(current.pointerPixelY ?? 0, target.pointerPixelY ?? 0, 5.5, delta)
       current.pointerVelocity.x = damp(current.pointerVelocity.x, target.pointerVelocity.x, 8, delta)
       current.pointerVelocity.y = damp(current.pointerVelocity.y, target.pointerVelocity.y, 8, delta)
       // Exact critically damped integration preserves velocity across abrupt scroll reversals.
@@ -455,6 +778,12 @@ export function createLiquidScene(
       floatPhase = (floatPhase + delta * 0.45 * (0.4 + mood.rotationSpeed)) % (Math.PI * 2)
       const offsetY = Math.sin(floatPhase) * 0.04
 
+      const cameraTargetX = current.pointerX * 0.11
+      const cameraTargetY = current.pointerY * 0.07
+      camera.position.x = damp(camera.position.x, cameraTargetX, 4.5, delta)
+      camera.position.y = damp(camera.position.y, cameraTargetY, 4.5, delta)
+      camera.lookAt(0, 0, 0)
+
       mesh.rotation.set(rotationX, rotationY, rotationZ)
       wireMesh.rotation.set(rotationX, rotationY, rotationZ)
       mesh.position.y = offsetY
@@ -468,7 +797,6 @@ export function createLiquidScene(
       hoverStrength = damp(hoverStrength, hoverTarget, 9, delta)
       updateRippleUniforms(seconds)
       updatePress(delta, seconds)
-      updateWake(seconds)
       const pointerSpeed = clamp(Math.hypot(current.pointerVelocity.x, current.pointerVelocity.y), 0, 4)
       if (pointerSpeed > 0.0001) trailDirection.set(current.pointerVelocity.x, current.pointerVelocity.y).normalize()
       trailVelocity.set(current.pointerVelocity.x, current.pointerVelocity.y)
@@ -493,13 +821,15 @@ export function createLiquidScene(
       particleMaterial.uniforms.uTrailDirection.value.copy(trailDirection)
       particleMaterial.uniforms.uTrailStrength.value = clamp(trailStrength, 0, 1)
       particleMaterial.uniforms.uImpactEnergy.value = clamp(impactEnergy, 0, 1)
+      updateVelocityField(delta)
+      updateGlassLayers(hoverHit, hoverStrength, scale, pointerSpeed)
       canvas.dataset.sphereHover = hoverHit ? '1' : '0'
       canvas.dataset.sphereRippleCount = String(rippleCount)
       canvas.dataset.spherePressDepth = pressDepth.toFixed(4)
       canvas.dataset.sphereTrailStrength = clamp(trailStrength, 0, 1).toFixed(4)
       canvas.dataset.sphereScale = scale.toFixed(4)
       canvas.dataset.sphereRippleSequence = String(rippleSequence)
-      renderer.render(scene, camera)
+      if (!renderGlassPipeline()) renderer.render(scene, camera)
     },
     dispose() {
       if (disposed) return
@@ -508,11 +838,29 @@ export function createLiquidScene(
       geometry.dispose()
       wireGeometry.dispose()
       particleGeometry.dispose()
-      wakeGeometry.dispose()
+      blobGeometry.dispose()
+      facetGeometry.dispose()
+      postGeometry.dispose()
+      sceneTarget.dispose()
+      blurTarget.dispose()
+      glassTarget.dispose()
+      velocityPrev.dispose()
+      velocityCurr.dispose()
+      lowPrev.dispose()
+      lowCurr.dispose()
+      lowBlurTarget.dispose()
       material.dispose()
       wireMaterial.dispose()
       particleMaterial.dispose()
-      wakeMaterial.dispose()
+      blobMaterial.dispose()
+      facetMaterial.dispose()
+      velocityAdvectMaterial.dispose()
+      velocitySplatMaterial.dispose()
+      lowFieldBlurMaterial.dispose()
+      paintClearMaterial.dispose()
+      blurMaterial.dispose()
+      copyMaterial.dispose()
+      glassCompositeMaterial.dispose()
     },
   }
 }

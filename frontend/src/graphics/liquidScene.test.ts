@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest'
+import { LinearFilter, Scene } from 'three'
 import { createLiquidScene, type SceneQuality } from './liquidScene'
 import type { RendererAdapter } from './runtime/types'
 
@@ -8,6 +9,20 @@ function makeRenderer(): RendererAdapter {
     domElement: document.createElement('canvas'),
     setPixelRatio: vi.fn(),
     setSize: vi.fn(),
+    render: vi.fn(),
+    dispose: vi.fn(),
+  }
+}
+
+function makeRenderTargetRenderer(): RendererAdapter {
+  let currentTarget: unknown | null = null
+  return {
+    domElement: document.createElement('canvas'),
+    setPixelRatio: vi.fn(),
+    setSize: vi.fn(),
+    setRenderTarget: vi.fn((target: unknown | null) => { currentTarget = target }),
+    getRenderTarget: vi.fn(() => currentTarget),
+    clear: vi.fn(),
     render: vi.fn(),
     dispose: vi.fn(),
   }
@@ -72,6 +87,16 @@ describe('shared liquid scene controller', () => {
     expect(Math.abs(afterBoundaryScale - beforeBoundaryScale)).toBeLessThan(0.03)
     expect(maxScaleStep).toBeLessThan(0.02)
     expect(orbScale).toBeLessThanOrEqual(1.2)
+    scene.dispose()
+  })
+
+  it('keeps the legacy full-sphere wireframe visible while glass facets remain separate', () => {
+    const renderer = makeRenderer()
+    const scene = createLiquidScene(renderer, { pointerX: 0, pointerY: 0, pointerVelocity: { x: 0, y: 0 }, scroll: 0 }, sceneQuality())
+    scene.resize(800, 600, 1)
+    scene.render(1000)
+    const rendered = lastRenderedScene(renderer)
+    expect((rendered.children[1] as unknown as { visible: boolean }).visible).toBe(true)
     scene.dispose()
   })
 
@@ -289,37 +314,71 @@ describe('shared liquid scene controller', () => {
     scene.dispose()
   })
 
-  it('starts a new wake at the first pointer sample and after a suspended frame loop', () => {
-    const renderer = makeRenderer()
-    const scene = createLiquidScene(renderer, { pointerX: 0, pointerY: 0, pointerVelocity: { x: 0, y: 0 }, scroll: 0 }, sceneQuality())
-    scene.resize(1000, 800, 1)
+  it('updates the full velocity, glass, facet, and composite pipeline on a target-capable renderer', () => {
+    const renderer = makeRenderTargetRenderer()
+    const scene = createLiquidScene(renderer, { pointerX: 0, pointerY: 0, pointerPixelX: 40, pointerPixelY: 40, pointerVelocity: { x: 0, y: 0 }, scroll: 0 }, sceneQuality())
+    scene.resize(800, 600, 1)
+    const renderTargetMock = renderer.setRenderTarget as ReturnType<typeof vi.fn>
+    renderTargetMock.mockClear()
     scene.render(1000)
-    scene.setInput({ pointerX: 0.8, pointerY: 0.8, pointerVelocity: { x: 1, y: 0 }, scroll: 0 })
-    scene.render(1040)
-    expect(Number(renderer.domElement.dataset.sphereWakeCount)).toBe(0)
-    scene.setInput({ pointerX: 0.6, pointerY: 0.8, pointerVelocity: { x: -1, y: 0 }, scroll: 0 })
-    scene.render(1080)
-    expect(Number(renderer.domElement.dataset.sphereWakeCount)).toBeGreaterThan(0)
-    scene.setInput({ pointerX: -0.8, pointerY: -0.8, pointerVelocity: { x: -1, y: -1 }, scroll: 0 })
-    scene.render(3000)
-    expect(Number(renderer.domElement.dataset.sphereWakeCount)).toBe(0)
+
+    const countVelocityTargetBinds = () => (renderer.setRenderTarget as ReturnType<typeof vi.fn>).mock.calls.filter(([target]) => {
+      const renderTarget = target as { width?: number; height?: number } | null
+      return renderTarget?.width === 200 && renderTarget.height === 150
+    }).length
+    expect(countVelocityTargetBinds()).toBe(1)
+
+    scene.setInput({ pointerX: 0.35, pointerY: -0.2, pointerPixelX: 540, pointerPixelY: 360, pointerVelocity: { x: 1, y: -0.2 }, scroll: 0 })
+    scene.render(1016)
+
+    expect(renderer.setRenderTarget).toHaveBeenCalled()
+    expect((renderer.render as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(5)
+    expect(countVelocityTargetBinds()).toBe(3)
+    const targets = (renderer.setRenderTarget as ReturnType<typeof vi.fn>).mock.calls
+      .map(([target]) => target as { texture?: { minFilter?: number; magFilter?: number } } | null)
+      .filter((target): target is { texture: { minFilter?: number; magFilter?: number } } => Boolean(target?.texture))
+    expect(targets.length).toBeGreaterThan(0)
+    expect(targets.every(({ texture }) => texture.minFilter === LinearFilter && texture.magFilter === LinearFilter)).toBe(true)
+    expect(renderer.domElement.dataset.glassPass).toBe('composite')
+    expect(renderer.domElement.dataset.sphereCompositeSamples).toBe('9')
+    expect(Number(renderer.domElement.dataset.sphereFacetCount)).toBeGreaterThan(0)
+
+    scene.setQualityTier('low')
+    scene.render(1016)
+    expect(renderer.domElement.dataset.sphereCompositeSamples).toBe('9')
     scene.dispose()
   })
 
-  it('leaves a bounded wake at the actual pointer path and lets old samples expire', () => {
-    const renderer = makeRenderer()
-    const scene = createLiquidScene(renderer, { pointerX: 0, pointerY: 0, pointerVelocity: { x: 0, y: 0 }, scroll: 0 }, sceneQuality())
-    scene.resize(1000, 800, 1)
+  it('resets the pointer field origin after a resize to avoid a false cross-screen stroke', () => {
+    const renderer = makeRenderTargetRenderer()
+    const scene = createLiquidScene(renderer, { pointerX: 0, pointerY: 0, pointerPixelX: 40, pointerPixelY: 40, pointerVelocity: { x: 0, y: 0 }, scroll: 0 }, sceneQuality())
+    scene.resize(800, 600, 1)
     scene.render(1000)
-    scene.setInput({ pointerX: -0.35, pointerY: 0.2, pointerVelocity: { x: 1, y: 0 }, scroll: 0 })
-    scene.render(1040)
-    scene.setInput({ pointerX: 0.35, pointerY: -0.2, pointerVelocity: { x: 1, y: -0.2 }, scroll: 0 })
-    scene.render(1080)
-    expect(Number(renderer.domElement.dataset.sphereWakeCount)).toBeGreaterThan(0)
-    expect(Number(renderer.domElement.dataset.sphereWakeCount)).toBeLessThanOrEqual(32)
-    scene.setInput({ pointerX: 0.35, pointerY: -0.2, pointerVelocity: { x: 0, y: 0 }, scroll: 0 })
-    for (let frame = 1; frame <= 120; frame += 1) scene.render(1080 + frame * 16)
-    expect(Number(renderer.domElement.dataset.sphereWakeCount)).toBe(0)
+
+    scene.setInput({ pointerX: 0.25, pointerY: 0, pointerPixelX: 500, pointerPixelY: 300, pointerVelocity: { x: 1, y: 0 }, scroll: 0 })
+    scene.render(1016)
+    expect(renderer.domElement.dataset.sphereVelocityStroke).toBe('1')
+
+    scene.resize(1200, 800, 1)
+    scene.render(1032)
+    expect(renderer.domElement.dataset.sphereVelocityStroke).toBe('0')
+    scene.dispose()
+  })
+
+  it('keeps the pointer-following glass blob hidden while hover facets remain available', () => {
+    const renderer = makeRenderTargetRenderer()
+    const scene = createLiquidScene(renderer, { pointerX: 0, pointerY: 0, pointerPixelX: 400, pointerPixelY: 300, pointerVelocity: { x: 0, y: 0 }, scroll: 0 }, sceneQuality())
+    scene.resize(800, 600, 1)
+    scene.render(1000)
+
+    const renderCalls = (renderer.render as ReturnType<typeof vi.fn>).mock.calls
+    const glassScene = renderCalls
+      .map(([renderedScene]) => renderedScene)
+      .find((renderedScene): renderedScene is Scene => renderedScene instanceof Scene && renderedScene.children.some(child => child.renderOrder === 10))
+
+    expect(renderer.domElement.dataset.sphereGlassBlob).toBe('hidden')
+    expect(glassScene?.children.find(child => child.renderOrder === 10)?.visible).toBe(false)
+    expect(glassScene?.children.find(child => child.renderOrder === 11)?.visible).toBe(true)
     scene.dispose()
   })
 
