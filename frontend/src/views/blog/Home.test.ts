@@ -5,10 +5,11 @@ import { nextTick, shallowRef } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Home from './Home.vue'
 import { visualRuntimeKey } from '@/graphics/runtime/visualRuntimeHandle'
+import { createPageScroll, pageScrollKey, type PageScroll } from '@/graphics/runtime/pageScroll'
 import { createHomeSphereInteractionBridge, homeSphereInteractionOptionsKey } from './homeInteraction'
 
 const api = vi.hoisted(() => ({ getPosts: vi.fn(), getTags: vi.fn(), getWorks: vi.fn() }))
-vi.mock('@/api/posts', () => ({ getPosts: api.getPosts }))
+vi.mock('@/api/posts', () => ({ getPosts: api.getPosts, getArticleTags: api.getTags }))
 vi.mock('@/api/tags', () => ({ getTags: api.getTags }))
 vi.mock('@/api/works', () => ({ getWorks: api.getWorks }))
 vi.mock('@/components/immersive/ImmersiveScene.vue', () => ({ default: { template: '<div class="immersive-scene" />' } }))
@@ -24,6 +25,8 @@ describe('Home sphere interaction bridge', () => {
   let runtime: { setPageState: ReturnType<typeof vi.fn>; setCanvasVisible: ReturnType<typeof vi.fn> }
 
   beforeEach(() => {
+    vi.clearAllMocks()
+    window.localStorage.clear()
     api.getPosts.mockResolvedValue({ data: { items: [] } })
     api.getTags.mockResolvedValue({ data: [] })
     api.getWorks.mockResolvedValue({ data: { items: [] } })
@@ -44,7 +47,7 @@ describe('Home sphere interaction bridge', () => {
     document.body.innerHTML = ''
   })
 
-  async function mountHome() {
+  async function mountHome(pageScroll?: PageScroll) {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [
@@ -59,6 +62,7 @@ describe('Home sphere interaction bridge', () => {
       global: {
         plugins: [router],
         provide: {
+          ...(pageScroll ? { [pageScrollKey as symbol]: pageScroll } : {}),
           [visualRuntimeKey as symbol]: shallowRef(runtime),
           [homeSphereInteractionOptionsKey as symbol]: { longPressDurationMs: 60, allowableMovementCssPx: 8 },
         },
@@ -68,20 +72,105 @@ describe('Home sphere interaction bridge', () => {
     return wrapper
   }
 
-  it('keeps the project backdrop independent from the content layer', async () => {
+  it('opens with the performance and keeps writing behind the archive entrance', async () => {
     const mounted = await mountHome()
-    expect(mounted.get('.projects-section__backdrop').attributes('aria-hidden')).toBe('true')
+    expect(mounted.get('#setlist h2').text()).toContain('声音')
+    expect(mounted.get('.archive-door').attributes('href')).toBe('/writing')
+    expect(mounted.find('.projects-section').exists()).toBe(false)
+    expect(mounted.find('.artist-portrait').exists()).toBe(false)
+    expect(api.getPosts).not.toHaveBeenCalled()
+    expect(api.getTags).not.toHaveBeenCalled()
+    expect(mounted.get('.program-empty').text()).toContain('下一段声音')
   })
 
-  it('hides the sphere canvas while motion is paused and shows it again when resumed', async () => {
+  it('presents published music and films without promoting code projects', async () => {
+    api.getWorks.mockResolvedValue({ data: { items: [
+      { slug: 'code-only', title: 'A code project', category: 'code' },
+      { slug: 'song-one', title: '现有音乐', category: 'music', audio: '/song.mp3', duration: 120 },
+      { slug: 'film-one', title: '现有影像', category: 'film', duration: 90 },
+    ] } })
     const mounted = await mountHome()
-    runtime.setCanvasVisible.mockClear()
+    expect(mounted.get('.track-list').text()).toContain('现有音乐')
+    expect(mounted.get('.film-caption').text()).toContain('现有影像')
+    expect(mounted.text()).not.toContain('A code project')
+    expect(mounted.get('.hero-play').text()).toContain('现有音乐')
+  })
 
-    await mounted.get('.motion-toggle').trigger('click')
-    expect(runtime.setCanvasVisible).toHaveBeenLastCalledWith(false)
+  it('lets a visitor retry a failed program request', async () => {
+    api.getWorks.mockRejectedValueOnce(new Error('offline'))
+    const mounted = await mountHome()
+    expect(mounted.get('.program-empty').text()).toContain('没有加载成功')
+    await mounted.get('.program-empty button').trigger('click')
+    await flushPromises()
+    expect(api.getWorks).toHaveBeenCalledTimes(2)
+    expect(mounted.get('.program-empty').text()).toContain('下一段声音')
+  })
 
-    await mounted.get('.motion-toggle').trigger('click')
+  it('invalidates shared geometry after layout changes without starting a second animation frame', async () => {
+    let resized: (() => void) | undefined
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: () => void) { resized = callback }
+      observe() {}
+      disconnect() {}
+    })
+    const bus = createPageScroll()
+    const mounted = await mountHome(bus)
+    const track = mounted.get('.hero-track').element as HTMLElement
+    vi.spyOn(track, 'getBoundingClientRect').mockReturnValue({ top: -400 } as DOMRect)
+    bus.publish({ scrollY: 400, viewportHeight: 800, timeMs: 16 })
+    expect(bus.dirty).toBe(false)
+    const frame = vi.spyOn(window, 'requestAnimationFrame')
+    resized?.()
+    expect(bus.dirty).toBe(true)
+    expect(frame).not.toHaveBeenCalled()
+    bus.publish({ scrollY: 400, viewportHeight: 800, timeMs: 32 })
+    expect(runtime.setPageState.mock.lastCall?.[1].portraitExitProgress).toBe(.5)
+    const before = runtime.setPageState.mock.calls.length
+    mounted.unmount()
+    bus.publish({ scrollY: 800, viewportHeight: 800, timeMs: 48 })
+    expect(runtime.setPageState.mock.calls.length).toBe(before)
+    wrapper = undefined
+  })
+
+  it('runs the full scene without portrait or motion controls, ignoring old pause preferences', async () => {
+    window.localStorage.setItem('field-notes:motion-paused', '1')
+    vi.mocked(window.matchMedia).mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() } as unknown as MediaQueryList)
+    const mounted = await mountHome()
+    expect(mounted.find('.portrait-controls').exists()).toBe(false)
+    expect(mounted.find('.motion-toggle').exists()).toBe(false)
+    expect(runtime.setPageState.mock.lastCall?.[1]).toMatchObject({ paused: false, portraitMode: 'front' })
     expect(runtime.setCanvasVisible).toHaveBeenLastCalledWith(true)
+    await mounted.get('.hero-visual').trigger('pointermove', { pointerType: 'mouse', clientX: 600, clientY: 300 })
+    expect(runtime.setPageState.mock.lastCall?.[1].portraitPointerActive).toBe(true)
+  })
+
+  it('keeps the calling-card next steps and excludes touch from automatic portrait reveal', async () => {
+    const mounted = await mountHome()
+    expect(mounted.find('.hero-track').exists()).toBe(true)
+    expect(mounted.get('.hero').element.parentElement?.classList.contains('hero-track')).toBe(true)
+    expect(mounted.get('.hero-copy h1').text()).toContain('GUOER')
+    expect(mounted.get('.hero-copy').attributes('data-overlay')).toBe('identity')
+    expect(mounted.find('.hero-actions a[href="/about#connect"]').exists()).toBe(true)
+    await mounted.get('.hero-visual').trigger('pointermove', { pointerType: 'touch', clientX: 600, clientY: 300 })
+    expect(runtime.setPageState.mock.lastCall?.[1].portraitPointerActive).toBe(false)
+    await mounted.get('.hero-visual').trigger('pointermove', { pointerType: 'mouse', clientX: 600, clientY: 300 })
+    expect(runtime.setPageState.mock.lastCall?.[1].portraitPointerActive).toBe(true)
+    await mounted.get('.hero-visual').trigger('pointerleave')
+    expect(runtime.setPageState.mock.lastCall?.[1].portraitPointerActive).toBe(false)
+  })
+
+  it('publishes the full-screen hero exit progress from the sticky portrait track', async () => {
+    const mounted = await mountHome()
+    const track = mounted.get('.hero-track').element as HTMLElement
+    Object.defineProperty(track, 'offsetHeight', { configurable: true, value: 1600 })
+    vi.spyOn(track, 'getBoundingClientRect').mockReturnValue({ top: -400 } as DOMRect)
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 400 })
+    window.dispatchEvent(new Event('scroll'))
+    vi.advanceTimersByTime(20)
+    await nextTick()
+    expect(runtime.setPageState.mock.lastCall?.[1].portraitExitProgress).toBe(0.5)
+    expect(mounted.get('.hero-track').attributes('style')).toContain('--hero-progress: 0.5')
+    expect(runtime.setPageState.mock.lastCall?.[1].portraitExitProgress).toBe(0.5)
   })
 
   it('emits one tap with full viewport NDC when released before the injected long press duration', async () => {
@@ -132,11 +221,9 @@ describe('Home sphere interaction bridge', () => {
     text.element.dispatchEvent(repeated)
     expect(first.defaultPrevented).toBe(false)
     expect(repeated.defaultPrevented).toBe(true)
-    for (const selector of ['.hero-intro', '.principle-intro p']) {
-      const repeatedBodyClick = new MouseEvent('mousedown', { bubbles: true, cancelable: true, detail: 2 })
-      mounted.get(selector).element.dispatchEvent(repeatedBodyClick)
-      expect(repeatedBodyClick.defaultPrevented).toBe(false)
-    }
+    const repeatedBodyClick = new MouseEvent('mousedown', { bubbles: true, cancelable: true, detail: 2 })
+    mounted.get('.principle-intro p').element.dispatchEvent(repeatedBodyClick)
+    expect(repeatedBodyClick.defaultPrevented).toBe(false)
     expect(document.body.classList.contains('sphere-gesture-active')).toBe(false)
   })
 

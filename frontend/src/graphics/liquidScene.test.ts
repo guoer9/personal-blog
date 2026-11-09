@@ -40,6 +40,40 @@ function sceneQuality(rippleCapacity = 3, particleCount = 100): SceneQuality {
 }
 
 describe('shared liquid scene controller', () => {
+  it('preserves the original sphere pose and pointer camera despite stale hero transition input', () => {
+    const input = { pointerX: 0.7, pointerY: 0.4, pointerVelocity: { x: 0, y: 0 }, scroll: 0 }
+    const baselineRenderer = makeRenderer()
+    const renderer = makeRenderer()
+    const baseline = createLiquidScene(baselineRenderer, input, sceneQuality())
+    const controller = createLiquidScene(renderer, input, sceneQuality())
+    baseline.resize(1200, 800, 1)
+    controller.resize(1200, 800, 1)
+    try {
+      for (const progress of [0, 0.5, 1, 0.5, 0]) {
+        // A stale caller must not resize, relocate or turn off pointer parallax.
+        const staleInput = { ...input, heroProgress: progress, sphereTransition: { progress, x: 0.8, y: 0.2, diameter: 0.2 } }
+        controller.setInput(staleInput)
+        baseline.setInput(input)
+        for (let frame = 1; frame <= 20; frame += 1) {
+          const time = 1000 + (renderer.render as ReturnType<typeof vi.fn>).mock.calls.length * 16
+          baseline.render(time)
+          controller.render(time)
+        }
+        const actual = (renderer.render as ReturnType<typeof vi.fn>).mock.lastCall!
+        const expected = (baselineRenderer.render as ReturnType<typeof vi.fn>).mock.lastCall!
+        const sphere = (actual[0] as Scene).children[0]!
+        const original = (expected[0] as Scene).children[0]!
+        expect(sphere.scale.toArray()).toEqual(original.scale.toArray())
+        expect(sphere.position.toArray()).toEqual(original.position.toArray())
+        expect(sphere.rotation.toArray()).toEqual(original.rotation.toArray())
+        expect(actual[1].position.toArray()).toEqual(expected[1].position.toArray())
+        expect(sphere.position.x).toBe(0)
+        expect(Math.abs(sphere.position.y)).toBeLessThanOrEqual(0.04)
+        expect(sphere.scale.x).toBeGreaterThan(0.5)
+        expect(actual[1].position.x).toBeGreaterThan(0)
+      }
+    } finally { controller.dispose(); baseline.dispose() }
+  })
   it('cleans only scene-owned resources and leaves the shared renderer alive', () => {
     const renderer = makeRenderer()
     const controller = createLiquidScene(renderer, { pointerX: 0, pointerY: 0, pointerVelocity: { x: 0, y: 0 }, scroll: 0 })

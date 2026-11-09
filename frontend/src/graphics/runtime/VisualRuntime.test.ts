@@ -24,7 +24,7 @@ function makeModule(id: PageSceneModule['id'], calls: string[]): PageSceneModule
   }
 }
 
-function createHarness() {
+function createHarness(beforeFrame?: (timeMs: number) => void) {
   const calls: string[] = []
   const renderers: RendererAdapter[] = []
   const queued = new Map<number, FrameRequestCallback>()
@@ -50,6 +50,7 @@ function createHarness() {
     return { ...module, render: () => { calls.push('works:render'); if (renderFailure) throw new Error('shader failed') } }
   })
   const runtime = new VisualRuntime({
+    beforeFrame,
     sceneRegistry: registry,
     createRenderer: () => { const renderer = makeRenderer(); renderers.push(renderer); return renderer },
     requestFrame: (callback) => { const id = nextFrame++; queued.set(id, callback); return id },
@@ -71,6 +72,83 @@ async function activateRoute(runtime: VisualRuntime, identity: { routeName: stri
 }
 
 describe('VisualRuntime', () => {
+  it('resumes the public frame loop on visibility change after WebGL initialization fails', () => {
+    let hidden = false
+    const visibility = vi.spyOn(document, 'hidden', 'get').mockImplementation(() => hidden)
+    const queued = new Map<number, FrameRequestCallback>()
+    let nextId = 0
+    const tick = vi.fn()
+    const runtime = new VisualRuntime({
+      sceneRegistry: new SceneRegistry(),
+      createRenderer: () => { throw new Error('WebGL disabled') },
+      beforeFrame: tick,
+      requestFrame: callback => { queued.set(++nextId, callback); return nextId },
+      cancelFrame: id => { queued.delete(id) },
+    })
+    const runFrame = () => {
+      const entry = queued.entries().next().value
+      if (entry) { queued.delete(entry[0]); entry[1](16) }
+    }
+    try {
+      runtime.mount(document.createElement('canvas'))
+      runtime.start()
+      runFrame()
+      expect(tick).toHaveBeenCalledOnce()
+      hidden = true
+      document.dispatchEvent(new Event('visibilitychange'))
+      runFrame()
+      expect(queued.size).toBe(0)
+      hidden = false
+      document.dispatchEvent(new Event('visibilitychange'))
+      expect(queued.size).toBe(1)
+      runFrame()
+      expect(tick).toHaveBeenCalledTimes(2)
+      runtime.dispose()
+      hidden = true
+      document.dispatchEvent(new Event('visibilitychange'))
+      hidden = false
+      document.dispatchEvent(new Event('visibilitychange'))
+      expect(queued.size).toBe(0)
+    } finally { runtime.dispose(); visibility.mockRestore() }
+  })
+
+  it('advances the shared scroll driver before scene updates using one frame', async () => {
+    const order: string[] = []
+    const harness = createHarness(() => {
+      order.push('scroll')
+      harness.runtime.setScroll(360, 0.25)
+    })
+    harness.runtime.mount(harness.canvas)
+    await activateRoute(harness.runtime, { routeName: 'Home', pageId: 'home', params: {} })
+    harness.runtime.start()
+    harness.advance(16)
+    harness.runFrame()
+    expect(order).toEqual(['scroll'])
+    expect(harness.runtime.getVisualState().scrollY).toBe(360)
+    expect(harness.queued.size).toBe(1)
+    harness.runtime.dispose()
+  })
+
+  it('keeps the public scroll driver alive without a scene and after context loss', async () => {
+    const tick = vi.fn()
+    const harness = createHarness(tick)
+    harness.runtime.mount(harness.canvas)
+    harness.runtime.start()
+    harness.runFrame()
+    expect(tick).toHaveBeenCalledOnce()
+    await activateRoute(harness.runtime, { routeName: 'Home', pageId: 'home', params: {} })
+    harness.canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }))
+    harness.advance(16)
+    harness.runFrame()
+    expect(tick).toHaveBeenCalledTimes(2)
+    expect(harness.queued.size).toBe(1)
+    harness.runtime.setDocumentHidden(true)
+    expect(harness.queued.size).toBe(0)
+    harness.runtime.setDocumentHidden(false)
+    expect(harness.queued.size).toBe(1)
+    harness.runtime.dispose()
+    expect(harness.queued.size).toBe(0)
+  })
   it('creates one renderer and one RAF when start is called repeatedly', async () => {
     const harness = createHarness()
     harness.runtime.mount(harness.canvas)

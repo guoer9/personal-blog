@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from 'vue'
-import { prefersReducedMotion, springStep, type SpringState } from '@/graphics/motion'
+import { springStep, type SpringState } from '@/graphics/motion'
 
 const props = withDefaults(defineProps<{ href: string; external?: boolean }>(), { external: false })
 const root = ref<HTMLAnchorElement | null>(null)
@@ -40,7 +40,7 @@ function startAnimation() {
 }
 
 function onPointerMove(event: PointerEvent) {
-  if (!root.value || prefersReducedMotion() || event.pointerType === 'touch') return
+  if (!root.value || event.pointerType === 'touch') return
   const rect = root.value.getBoundingClientRect()
   targetX = (event.clientX - rect.left - rect.width / 2) * 0.13
   targetY = (event.clientY - rect.top - rect.height / 2) * 0.18
@@ -122,7 +122,4 @@ onBeforeUnmount(() => {
 .magnetic-link:focus-visible { outline: 3px solid var(--electric-blue); outline-offset: 4px; }
 .magnetic-arrow { font-family: var(--body-font); font-size: 1.25rem; line-height: 1; transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1); }
 .magnetic-link:hover .magnetic-arrow { transform: translate(3px, -3px); }
-@media (prefers-reduced-motion: reduce) {
-  .magnetic-link, .magnetic-arrow { transition: none; }
-}
 </style>

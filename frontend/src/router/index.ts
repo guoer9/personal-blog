@@ -170,10 +170,10 @@ const router = createRouter({
   ],
 })
 
-const siteTitle = 'GUOER · Field Notes'
+const siteTitle = 'GUOER / 陈果 · Music in Motion'
 const pageTitles: Record<string, string> = {
   Home: siteTitle,
-  Archive: `文章归档 · ${siteTitle}`,
+  Archive: `档案 · ${siteTitle}`,
   Works: `作品集 · ${siteTitle}`,
   Documents: `公开资料库 · ${siteTitle}`,
   DocumentDetail: `资料 · ${siteTitle}`,

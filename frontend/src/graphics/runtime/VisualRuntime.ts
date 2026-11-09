@@ -14,6 +14,8 @@ export interface VisualRuntimeOptions {
   readonly cancelFrame?: (id: number) => void
   readonly now?: () => number
   readonly onFallbackChange?: (fallback: boolean) => void
+  /** Public scrolling/DOM work runs before scene updates, even without WebGL. */
+  readonly beforeFrame?: (timeMs: number) => void
 }
 
 export interface VisualRuntimeDiagnostics {
@@ -65,6 +67,7 @@ export class VisualRuntime {
     this.stopFrameOnly()
     this.coordinator?.suspend()
     this.setFallback(true)
+    this.scheduleIfNeeded()
   }
   private readonly onContextRestored = (): void => { void this.restoreContext() }
 
@@ -79,6 +82,8 @@ export class VisualRuntime {
     if (this.disposed) return
     if (this.renderer || this.canvas) return
     this.canvas = canvas
+    document.addEventListener('visibilitychange', this.onVisibilityChange)
+    this.setDocumentHidden(document.hidden)
     try {
       this.renderer = this.options.createRenderer(canvas)
     } catch {
@@ -98,8 +103,6 @@ export class VisualRuntime {
     })
     canvas.addEventListener('webglcontextlost', this.onContextLost)
     canvas.addEventListener('webglcontextrestored', this.onContextRestored)
-    document.addEventListener('visibilitychange', this.onVisibilityChange)
-    this.setDocumentHidden(document.hidden)
   }
 
   start(): void {
@@ -259,8 +262,9 @@ export class VisualRuntime {
   }
 
   private scheduleIfNeeded(): void {
+    if (!this.runningRequested || this.frameId || this.disposed || this.documentHidden || document.hidden) return
     const activeModule = this.coordinator?.getActiveModule()
-    if (!this.runningRequested || this.frameId || !activeModule || activeModule.shouldAnimate?.() === false || !this.canRender() || this.state.reducedMotion) return
+    if (!this.options.beforeFrame && (!activeModule || activeModule.shouldAnimate?.() === false || !this.canRender() || this.state.reducedMotion)) return
     this.frameId = this.requestFrame((time) => this.renderFrame(time))
   }
 
@@ -269,11 +273,19 @@ export class VisualRuntime {
     if (this.frameId) this.cancelFrame(this.frameId)
     this.frameId = 0
     this.lastTime = 0
+    // Graphics may stop independently of public scrolling (fallback, route
+    // handoff, hidden canvas). Hidden documents and disposal still stop both.
+    if (this.options.beforeFrame) this.scheduleIfNeeded()
   }
   private renderFrame(time: number): void {
     this.frameId = 0
-    if (!this.canRender() || !this.coordinator?.getActiveModule() || !this.renderer) return
+    if (this.disposed || !this.runningRequested || this.documentHidden || document.hidden) return
     const frameTime = Number.isFinite(time) ? time : this.now()
+    this.options.beforeFrame?.(frameTime)
+    if (!this.canRender() || !this.coordinator?.getActiveModule() || !this.renderer) {
+      this.scheduleIfNeeded()
+      return
+    }
     const deltaSeconds = this.lastTime ? Math.min(0.1, Math.max(0, (frameTime - this.lastTime) / 1000)) : 1 / 60
     this.lastTime = frameTime
     try {
@@ -302,6 +314,7 @@ export class VisualRuntime {
       this.scheduleIfNeeded()
     } catch {
       this.activateFallback()
+      this.scheduleIfNeeded()
     }
   }
 

@@ -1,5 +1,6 @@
 import type { WorkCategory } from '@/data/works'
 import type { PageSceneId } from '@/graphics/runtime/types'
+import type { PortraitMode } from './home/portraitAssets'
 export type HomeSphereInteractionType = 'tap' | 'drag' | 'press-start' | 'press-end'
 export interface HomeSphereInteraction {
   sequence: number
@@ -7,7 +8,14 @@ export interface HomeSphereInteraction {
   ndcX: number
   ndcY: number
 }
-export interface HomePageState { paused: boolean; interaction: HomeSphereInteraction | null }
+export interface HomePageState {
+  paused: boolean
+  interaction: HomeSphereInteraction | null
+  portraitMode?: PortraitMode
+  portraitPointerActive?: boolean
+  portraitExitProgress?: number
+  sceneProgress?: number
+}
 export interface WorksPageState { category: 'all' | WorkCategory; itemCount: number; focusedIndex: number | null }
 export interface WorkDetailPageState { category: WorkCategory | null; hasMedia: boolean; playing: boolean; playbackProgress: number }
 export interface AboutPageState { activeSection: 'approach' | 'practice' | 'now' }

@@ -1,35 +1,52 @@
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue'
 import { categoryLabel, formatDuration, type Work } from '@/data/works'
-withDefaults(defineProps<{ work: Work; index: number; headingTag?: 'h2' | 'h3'; previewMode?: boolean }>(), { headingTag: 'h2', previewMode: false })
+import { getStageArtwork } from '@/data/stage'
+const props = withDefaults(defineProps<{ work: Work; index: number; headingTag?: 'h2' | 'h3'; previewMode?: boolean }>(), { headingTag: 'h2', previewMode: false })
+const preferredArtwork = computed(() => props.work.category === 'code' && !props.work.cover ? null : getStageArtwork(props.work))
+const failedSources = ref<string[]>([])
+const artwork = computed(() => preferredArtwork.value
+  ? [preferredArtwork.value, getStageArtwork()].find(src => !failedSources.value.includes(src))
+  : null)
+const entryLabel = computed(() => props.work.category === 'music' ? '进入单曲' : props.work.category === 'film' ? '观看影像' : '查看项目')
+function onArtworkError() { if (artwork.value) failedSources.value.push(artwork.value) }
+watch(preferredArtwork, () => { failedSources.value = [] })
 </script>
 
 <template>
-  <component :is="previewMode ? 'div' : 'router-link'" v-bind="previewMode ? {} : { to: `/works/${work.slug}` }" class="work-card" :class="`work-card--${work.accent}`">
+  <component :is="previewMode ? 'div' : 'router-link'" v-bind="previewMode ? {} : { to: `/works/${work.slug}`, 'aria-label': `${work.title} · ${entryLabel}` }" class="work-card" :class="[`work-card--${work.accent}`, `work-card--${work.category}`]">
     <div class="work-card__visual">
-      <img v-if="work.cover" :src="work.cover" alt="" width="960" height="540" loading="lazy" decoding="async" />
-      <div v-else class="code-art" aria-hidden="true"><span>{{ String(index + 1).padStart(2, '0') }}</span><b>{{ work.slug === 'money-agent' ? 'ƒ(x)' : work.slug === 'financial-reports' ? '{ ? }' : work.slug === 'personal-blog' ? 'G/' : 'ε →' }}</b><i>BUILT BY GUOER</i></div>
+      <img v-if="artwork" :key="artwork" :src="artwork" alt="" width="960" height="960" loading="lazy" decoding="async" @error="onArtworkError" />
+      <div v-else-if="work.category === 'code'" class="code-art" aria-hidden="true"><span>{{ String(index + 1).padStart(2, '0') }}</span><b>{{ work.slug === 'money-agent' ? 'ƒ(x)' : work.slug === 'financial-reports' ? '{ ? }' : work.slug === 'personal-blog' ? 'G/' : 'ε →' }}</b><i>BUILT BY GUOER</i></div>
       <span class="work-card__badge">{{ categoryLabel(work.category) }}<template v-if="work.duration"> / {{ formatDuration(work.duration) }}</template></span>
-      <span class="work-card__open" aria-hidden="true">{{ work.category === 'code' ? '↗' : work.category === 'music' ? '♫' : '▶' }}</span>
+      <span class="work-card__open" aria-hidden="true">↗</span>
     </div>
-    <div class="work-card__copy"><p class="eyebrow">{{ work.caption }}</p><component :is="headingTag" class="work-card__title">{{ work.title }} <span aria-hidden="true">↗</span></component><p>{{ work.description }}</p><div class="work-card__tags"><span v-for="tag in work.tags" :key="tag">{{ tag }}</span></div></div>
+    <div class="work-card__copy">
+      <p v-if="work.category !== 'music'" class="eyebrow">{{ work.caption }}</p>
+      <component :is="headingTag" class="work-card__title">{{ work.title }}</component>
+      <p v-if="work.category !== 'music'" class="work-card__description">{{ work.description }}</p>
+      <span v-if="!previewMode" class="work-card__entry">{{ entryLabel }} <span aria-hidden="true">↗</span></span>
+    </div>
   </component>
 </template>
 
 <style scoped>
-.work-card { display: block; color: var(--ink); text-decoration: none; min-width: 0; }
-.work-card__visual { position: relative; overflow: hidden; aspect-ratio: 16 / 10; border: 1px solid var(--ink); background: var(--paper-soft); }
-.work-card__visual > img { width: 100%; height: 100%; object-fit: cover; transition: transform 400ms ease; }
-.work-card:hover img { transform: scale(1.035); }
-.work-card__badge { position: absolute; left: 16px; bottom: 16px; padding: 6px 10px; background: var(--paper); color: var(--ink); font: .65rem var(--mono-font); }
-.work-card__open { position: absolute; right: 16px; top: 16px; display: grid; place-items: center; width: 40px; height: 40px; background: var(--acid); color: var(--acid-ink); border: 1px solid var(--acid-ink); border-radius: 50%; font-size: 1.1rem; transition: transform 200ms; }
+.work-card { display: block; min-width: 0; color: var(--ink); text-decoration: none; }
+.work-card__visual { position: relative; overflow: hidden; aspect-ratio: 16 / 10; background: radial-gradient(ellipse at 35% 30%, #516346, #192122 40%, #0b0d11 80%); }
+.work-card--music .work-card__visual { aspect-ratio: 1; }
+.work-card--film .work-card__visual { aspect-ratio: 16 / 9; }
+.work-card__visual > img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform 650ms cubic-bezier(.2,.7,.2,1); }
+.work-card:hover img, .work-card:focus-visible img { transform: scale(1.035); }
+.work-card__badge { position: absolute; left: 18px; bottom: 18px; padding: 6px 10px; background: #080808b8; color: #f2f0e9; font: .62rem var(--mono-font); }
+.work-card__open { position: absolute; right: 16px; top: 16px; display: grid; place-items: center; width: 38px; height: 38px; background: var(--acid); color: var(--acid-ink); border-radius: 50%; font-size: 1.2rem; transition: transform 200ms; }
 .work-card:hover .work-card__open { transform: rotate(-10deg); }
-.work-card__copy { padding: 22px 0 12px; }
+.work-card__copy { position: relative; padding: 20px 0 12px; }
 .work-card__copy > .eyebrow { color: var(--muted); font-size: .58rem; }
-.work-card__title { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 12px; font: 400 clamp(1.5rem, 3vw, 2.1rem)/1.3 var(--display-font); }
-.work-card__title > span { font-size: 1.3rem; }
-.work-card__copy > p:not(.eyebrow) { max-width: 500px; color: var(--muted); font-size: .86rem; }
-.work-card__tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
-.work-card__tags span { padding: 3px 8px; border: 1px solid var(--line); font: .6rem var(--mono-font); }
+.work-card__title { margin: 0 0 10px; font: 400 clamp(1.5rem, 3vw, 2.4rem)/1.25 var(--display-font); overflow-wrap: anywhere; }
+.work-card__description { max-width: 500px; color: var(--muted); font-size: .86rem; }
+.work-card__entry { display: inline-flex; align-items: center; gap: 18px; min-height: 32px; color: var(--muted); font: .65rem var(--body-font); }
+.work-card:hover .work-card__entry, .work-card:focus-visible .work-card__entry { color: var(--acid); }
+.work-card:focus-visible { outline: 2px solid var(--acid); outline-offset: 8px; }
 .code-art { position: absolute; inset: 0; display: grid; place-items: center; background: var(--paper-soft); }
 .work-card--lime .code-art { background: var(--acid); color: var(--acid-ink); }
 .work-card--blue .code-art { background: var(--electric-blue); color: white; }

@@ -6,6 +6,7 @@ export const flowVertexShader = /* glsl */ `
   uniform float uPointerY;
   uniform float uScroll;
   uniform float uEnergy;
+  uniform vec3 uAudio;
   uniform vec3 uRippleDirections[MAX_RIPPLES];
   uniform float uRippleAges[MAX_RIPPLES];
   uniform float uRippleStrengths[MAX_RIPPLES];
@@ -58,6 +59,8 @@ export const flowVertexShader = /* glsl */ `
     float pressDimple = pressEnvelope * min(uPressDepth, PRESS_DEPTH_MAX);
 
     float deformation = formation + expansion + grid + pointerPull + rippleDisplacement + hoverRipple - pressDimple;
+    deformation += sin(p.y * 8.0 + uTime * 2.0) * uAudio.x * 0.065;
+    deformation += cos(p.x * 13.0 - uTime * 1.3) * uAudio.y * 0.025;
     deformation *= 1.0 + uEnergy * 0.45;
     p += normal * deformation;
 
@@ -76,6 +79,7 @@ export const flowFragmentShader = /* glsl */ `
   uniform float uTime;
   uniform float uScroll;
   uniform float uEnergy;
+  uniform vec3 uAudio;
   uniform float uHoverStrength;
   varying vec3 vNormal;
   varying vec3 vWorldPosition;
@@ -108,6 +112,8 @@ export const flowFragmentShader = /* glsl */ `
     color += vec3(0.67, 1.0, 0.12) * uEnergy * 0.12;
     color += vec3(0.55, 0.8, 1.0) * uHoverStrength * 0.12;
     color += vec3(0.86, 1.0, 0.3) * vRippleLight * 0.42;
+    color += vec3(0.30, 0.48, 1.0) * uAudio.y * fresnel * 0.35;
+    color += vec3(0.78, 1.0, 0.36) * uAudio.z * pow(fresnel, 2.0) * 0.6;
     color *= mix(0.88, 1.0, facets * smoothstep(0.35, 0.8, uScroll));
     color *= 1.0 - clamp(vPressAmount * 1.3, -0.08, 0.32);
     gl_FragColor = vec4(color, 0.96);

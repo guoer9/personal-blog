@@ -70,10 +70,10 @@ onBeforeUnmount(() => unregisterArchiveAnchor?.())
       <ScrollReveal>
         <header class="archive-header">
           <div>
-            <p class="section-kicker">All notes / {{ new Date().getFullYear() }}</p>
-            <h1>Writing, in<br /><em>chronological order.</em></h1>
+            <p class="section-kicker">The archive / {{ new Date().getFullYear() }}</p>
+            <h1>演出之后，<br /><em>留下的文字。</em></h1>
           </div>
-          <p class="archive-intro">技术记录、项目复盘，以及那些在实现之后才逐渐清楚的想法。文章会继续累积，这里是一条可以回看的时间线。</p>
+          <p class="archive-intro">创作记录、生活片段与技术笔记。沿着时间，继续认识我。</p>
         </header>
       </ScrollReveal>
 

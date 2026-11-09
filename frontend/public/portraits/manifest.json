@@ -1,0 +1,224 @@
+{
+  "version": 1,
+  "isDemo": true,
+  "provenance": {
+    "kind": "cc0-scan-and-original-instrument",
+    "generator": "frontend/scripts/portraits/generate_demo.py",
+    "generatorVersion": 2,
+    "sourceFiles": {
+      "source/NOTICE.md": "e3890cb5c4c47dd93021c1b9f47450c61aefbe5cf1b64b5fda6e9e08eca5ab94",
+      "source/marble-bust/marble_bust_01.bin": "0bb757c1bd00bfe42005c84e7f76df98ce04a532e595a2ddda8a0335cd959e33",
+      "source/marble-bust/marble_bust_01.gltf": "40ca513e2ef617b0aaecc08653abc0a0fe18db30e04608d061ce96be7d78e7c6",
+      "source/marble-bust/textures/marble_bust_01_diff_2k.jpg": "06b3a65f41942399f78a38a69dc4448c1c84b59f97390ace1fa4711baaef62df",
+      "source/marble-bust/textures/marble_bust_01_nor_gl_2k.jpg": "ab9b989193741d8c2c4de66db3a148c8e88325dedc0158c9ecf3e39a9d636aa9",
+      "source/marble-bust/textures/marble_bust_01_rough_2k.jpg": "c9280a999c340b82baf06ab3064e3b71786bb328515106595433c63f02703780"
+    },
+    "rasterizerSHA256": "e4979eb90c61f36582f4ffa96e074e8f5cc3b53539f89b8f6aaba128b7abd59a",
+    "generatorSHA256": "23ccc1005fade4b72d728cbc88f8ec07267f71af1026471fbd5368f402fd8180",
+    "externalAssets": [
+      {
+        "name": "Marble Bust 01",
+        "author": "Rico Cilliers",
+        "source": "https://polyhaven.com/a/marble_bust_01",
+        "license": "CC0-1.0",
+        "licenseSource": "https://polyhaven.com/license",
+        "localSource": "frontend/scripts/portraits/source/marble-bust"
+      }
+    ],
+    "subjectDisclosure": "A scanned marble sculpture and original bass composition, not GUOER's likeness or a photograph of the owner.",
+    "rights": "Marble bust mesh and source textures are CC0 by Rico Cilliers / Poly Haven. Instrument geometry and composition are original. No reference-site imagery.",
+    "method": "Orthographic triangle rasterization of the scan with interpolated UV material textures and tangent-space normal detail, plus analytic instrument geometry, resolved through a nearest-surface z-buffer. All outputs share the same orthographic projection and alpha coverage.",
+    "dependencies": [
+      "Python 3",
+      "NumPy",
+      "Pillow"
+    ],
+    "generatedWith": {
+      "python": "3.9.6",
+      "numpy": "2.0.2",
+      "pillow": "11.3.0"
+    },
+    "reproduce": "python3 frontend/scripts/portraits/generate_demo.py",
+    "validate": "python3 frontend/scripts/portraits/generate_demo.py --validate",
+    "deterministic": true
+  },
+  "coordinateSystem": {
+    "projection": "orthographic",
+    "worldWidth": 3.8,
+    "worldHeight": 4.75,
+    "camera": "+Z looking toward -Z",
+    "depthRange": [
+      -1.65,
+      1.65
+    ],
+    "renderScale": 1.5,
+    "outputWidth": 768,
+    "outputHeight": 960,
+    "framing": "Identical scan, eye line, scale and crop in both modes. Bass is additional geometry; no invented human hands or body."
+  },
+  "portraits": {
+    "front": {
+      "id": "front",
+      "isDemo": true,
+      "width": 768,
+      "height": 960,
+      "subject": "CC0 scanned marble bust by Rico Cilliers / Poly Haven",
+      "sameSubjectAs": "bass",
+      "preview": {
+        "path": "/portraits/front/preview.png",
+        "channels": "RGBA",
+        "colorSpace": "sRGB",
+        "purpose": "Separately studio-lit static fallback, with transparent background; same geometry and framing as maps."
+      },
+      "maps": {
+        "diffuse": {
+          "path": "/portraits/front/diffuse.png",
+          "width": 768,
+          "height": 960,
+          "channels": "RGBA",
+          "colorSpace": "sRGB",
+          "provenance": "Unlit linear material albedo encoded as sRGB; A is geometric silhouette coverage.",
+          "bytes": 540650,
+          "sha256": "c40a449af31f44dfd204f3d5c14f2e41a74c4617e6927478904a7cb3e3461842"
+        },
+        "alpha": {
+          "path": "/portraits/front/alpha.png",
+          "width": 768,
+          "height": 960,
+          "channels": "R (8-bit grayscale)",
+          "colorSpace": "linear / NoColorSpace",
+          "provenance": "Antialiased geometric z-buffer coverage; 0 background, 1 surface.",
+          "bytes": 13838,
+          "sha256": "df2af47f4db3c1f216973c77cd42973a7c535f84a23c6eff59bdd71040e10cc4"
+        },
+        "depth": {
+          "path": "/portraits/front/depth.png",
+          "width": 768,
+          "height": 960,
+          "channels": "R (8-bit grayscale)",
+          "colorSpace": "linear / NoColorSpace",
+          "provenance": "Camera-space visible-surface z; 0 farther, 1 nearer. Global range [-1.65, 1.65] scene units.",
+          "bytes": 56752,
+          "sha256": "e52b0d0fbc0ee950bb4f682c6b55ace37416497df4ff353f7a00595e6179337e"
+        },
+        "normal": {
+          "path": "/portraits/front/normal.png",
+          "width": 768,
+          "height": 960,
+          "channels": "RGB",
+          "colorSpace": "linear / NoColorSpace",
+          "provenance": "Camera/tangent-aligned surface normal encoded n*0.5+0.5. +X right, +Y up, +Z toward camera; green is OpenGL orientation.",
+          "bytes": 464203,
+          "sha256": "eb8193a184e7c9fe54ab67c24a4fc00abdaf8d1265a83d4971f2a444cd3d50f8"
+        },
+        "roughness": {
+          "path": "/portraits/front/roughness.png",
+          "width": 768,
+          "height": 960,
+          "channels": "R (8-bit grayscale)",
+          "colorSpace": "linear / NoColorSpace",
+          "provenance": "Scan roughness texture plus original instrument material roughness; white rough, black smooth.",
+          "bytes": 70614,
+          "sha256": "88273d64211187e2f32ae1140a9dc0f03e09c6d51249ea6cfa249091e00bb958"
+        },
+        "shadow": {
+          "path": "/portraits/front/shadow.png",
+          "width": 768,
+          "height": 960,
+          "channels": "R (8-bit grayscale)",
+          "colorSpace": "linear / NoColorSpace",
+          "provenance": "Visible-depth horizon AO multiplied by geometric diffuse light visibility; white unoccluded, dark shaded.",
+          "bytes": 146164,
+          "sha256": "57a981403abf5a83867ec0161fb101e1bf9a057a2407fa361af3625c63a256b3"
+        }
+      }
+    },
+    "bass": {
+      "id": "bass",
+      "isDemo": true,
+      "width": 768,
+      "height": 960,
+      "subject": "CC0 scanned marble bust by Rico Cilliers / Poly Haven, composed with an original four-string electric bass; no fabricated hands",
+      "sameSubjectAs": "front",
+      "preview": {
+        "path": "/portraits/bass/preview.png",
+        "channels": "RGBA",
+        "colorSpace": "sRGB",
+        "purpose": "Separately studio-lit static fallback, with transparent background; same geometry and framing as maps."
+      },
+      "maps": {
+        "diffuse": {
+          "path": "/portraits/bass/diffuse.png",
+          "width": 768,
+          "height": 960,
+          "channels": "RGBA",
+          "colorSpace": "sRGB",
+          "provenance": "Unlit linear material albedo encoded as sRGB; A is geometric silhouette coverage.",
+          "bytes": 554488,
+          "sha256": "39fc7d0e2651d77c9a27fee75eee3bfcd98ca73f1a325ed46cf6b918a3ac00ae"
+        },
+        "alpha": {
+          "path": "/portraits/bass/alpha.png",
+          "width": 768,
+          "height": 960,
+          "channels": "R (8-bit grayscale)",
+          "colorSpace": "linear / NoColorSpace",
+          "provenance": "Antialiased geometric z-buffer coverage; 0 background, 1 surface.",
+          "bytes": 14113,
+          "sha256": "e623c542f37b4ab5d289ad87c9871dc6a17909900bfd143f43825fdfea547f18"
+        },
+        "depth": {
+          "path": "/portraits/bass/depth.png",
+          "width": 768,
+          "height": 960,
+          "channels": "R (8-bit grayscale)",
+          "colorSpace": "linear / NoColorSpace",
+          "provenance": "Camera-space visible-surface z; 0 farther, 1 nearer. Global range [-1.65, 1.65] scene units.",
+          "bytes": 65026,
+          "sha256": "2720b81fab9544ff54f56e90e2c361b695ae00c08164a2e9bad0faa3cbfca532"
+        },
+        "normal": {
+          "path": "/portraits/bass/normal.png",
+          "width": 768,
+          "height": 960,
+          "channels": "RGB",
+          "colorSpace": "linear / NoColorSpace",
+          "provenance": "Camera/tangent-aligned surface normal encoded n*0.5+0.5. +X right, +Y up, +Z toward camera; green is OpenGL orientation.",
+          "bytes": 471435,
+          "sha256": "ff6d023fd521c254f59313d944cb292e78d525dab42989da0fe7a0fd0065261a"
+        },
+        "roughness": {
+          "path": "/portraits/bass/roughness.png",
+          "width": 768,
+          "height": 960,
+          "channels": "R (8-bit grayscale)",
+          "colorSpace": "linear / NoColorSpace",
+          "provenance": "Scan roughness texture plus original instrument material roughness; white rough, black smooth.",
+          "bytes": 81494,
+          "sha256": "fb35d560d575b39f12199f3dcfe3ca51962c872c67fc04f191a81ce854d1b860"
+        },
+        "shadow": {
+          "path": "/portraits/bass/shadow.png",
+          "width": 768,
+          "height": 960,
+          "channels": "R (8-bit grayscale)",
+          "colorSpace": "linear / NoColorSpace",
+          "provenance": "Visible-depth horizon AO multiplied by geometric diffuse light visibility; white unoccluded, dark shaded.",
+          "bytes": 168557,
+          "sha256": "1496c56d7fad738dc46c2aa100fc10abc566fb7a3100cf03e2650208db573ffd"
+        }
+      }
+    }
+  },
+  "replacement": {
+    "metadataFile": "frontend/src/graphics/scenes/home/portraitAssets.ts",
+    "instructions": [
+      "Supply an authorized front portrait and a bass-holding portrait of the same subject; keep head size, eye line, crop and image dimensions aligned.",
+      "Replace all six PNG maps plus preview.png in both front/ and bass/. Use the channel and color-space conventions recorded above; do not substitute a photo for the linear data maps.",
+      "Use cutout coverage in alpha and diffuse A. Encode depth with a shared near/far convention and OpenGL (+Y) normals. Set neutral outside pixels to depth 0, normal (128,128,255), roughness 255, shadow 255.",
+      "Record the source authorization, processing tool/version and actual generation provenance for each map. Depth estimated from photographs must be disclosed as estimated, rather than geometric ground truth.",
+      "Update width, height, alt, preview and map URLs in portraitAssets.ts; set isDemo false only for verified owner-supplied portraits and replace the demonstration disclosure in the DOM.",
+      "Run the asset Vitest file, generator --validate (for the PNG contract), frontend build and desktop/mobile fallback checks before publishing."
+    ]
+  }
+}

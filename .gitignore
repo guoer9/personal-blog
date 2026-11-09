@@ -36,6 +36,8 @@ backend/public-media/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/.vitest/
+frontend/output/
 frontend/tsconfig.tsbuildinfo
 
 # Tooling and local workspace files

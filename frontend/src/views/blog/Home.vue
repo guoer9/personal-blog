@@ -1,625 +1,286 @@
 <script setup lang="ts">
-import { computed, inject, onBeforeUnmount, onMounted, provide, ref, watch, type Ref } from 'vue'
-import { getPosts, getArticleTags, type PublicArticle, type ArticleTag } from '@/api/posts'
-import { profile, resources } from '@/data/portfolio'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, provide, ref, watch, type Ref } from 'vue'
 import { getWorks } from '@/api/works'
-import type { Work } from '@/data/works'
-import WorkCard from '@/components/works/WorkCard.vue'
-import ImmersiveScene from '@/components/immersive/ImmersiveScene.vue'
-import { usePageSceneState } from '@/graphics/runtime/usePageSceneState'
-import { visualPageSceneBridgeKey, visualRuntimeKey, type VisualRuntimeHandle } from '@/graphics/runtime/visualRuntimeHandle'
-import type { HomePageState } from '@/graphics/scenes/pageStates'
-import {
-  createHomeSphereInteractionBridge,
-  defaultHomeSphereInteractionOptions,
-  homeSphereInteractionOptionsKey,
-} from './homeInteraction'
-import MagneticLink from '@/components/immersive/MagneticLink.vue'
-import ProjectCardMotion from '@/components/immersive/ProjectCardMotion.vue'
+import { type Work, formatDuration } from '@/data/works'
+import { stageAssets, stageIdentity, getStageArtwork, selectStageTrack } from '@/data/stage'
+import { usePerformanceAudio } from '@/audio/performanceAudio'
+import PerformancePlayer from '@/components/performance/PerformancePlayer.vue'
+import ChenGuoSignature from '@/components/immersive/ChenGuoSignature.vue'
+import { signatureEndpoint } from '@/components/immersive/chenGuoSignatureData'
 import ScrollReveal from '@/components/immersive/ScrollReveal.vue'
-import ArticleRow from '@/components/blog/ArticleRow.vue'
-import StatePanel from '@/components/blog/StatePanel.vue'
-import { narrativeProgress, resolveMotionStage, stageFocus } from '@/graphics/motion'
+import { usePageSceneState } from '@/graphics/runtime/usePageSceneState'
+import { visualPageSceneBridgeKey, visualRuntimeKey, type VisualRuntimeBridge } from '@/graphics/runtime/visualRuntimeHandle'
+import { pageScrollKey, type PageScrollFrame } from '@/graphics/runtime/pageScroll'
+import type { HomePageState } from '@/graphics/scenes/pageStates'
+import { homeScrollSequence, portraitScrollEase } from '@/graphics/scenes/home/portraitMath'
+import { createHomeSphereInteractionBridge, defaultHomeSphereInteractionOptions, homeSphereInteractionOptionsKey } from './homeInteraction'
 
-const posts = ref<PublicArticle[]>([])
-const featuredWorks = ref<Work[]>([])
-const worksError = ref(false)
-const worksLoading = ref(true)
-let worksController: AbortController | null = null
-const projects = computed(() => featuredWorks.value.filter((item) => item.category === 'code').slice(0, 3).map((item, index) => ({ ...item, number: String(index + 1).padStart(2, '0'), type: item.caption, href: `/works/${item.slug}`, external: false, stack: item.tags })))
-const mediaWorks = computed(() => featuredWorks.value.filter((item) => item.category !== 'code').slice(0, 2))
-async function loadWorks() {
-  worksController?.abort()
-  const current = new AbortController()
-  worksController = current
-  worksLoading.value = true
-  worksError.value = false
-  try { const response = await getWorks({ featured: true }, current.signal); if (!current.signal.aborted) featuredWorks.value = response.data.items }
-  catch { if (!current.signal.aborted) worksError.value = true }
-  finally { if (!current.signal.aborted) worksLoading.value = false }
-}
-const tags = ref<ArticleTag[]>([])
-const loading = ref(true)
-const error = ref(false)
 const home = ref<HTMLElement | null>(null)
+const heroTrack = ref<HTMLElement | null>(null)
+const signatureLayer = ref<HTMLElement | null>(null)
+const signatureTrail = ref<SVGPathElement | null>(null)
+const program = ref<HTMLElement | null>(null)
+const programKicker = ref<HTMLElement | null>(null)
+const works = ref<Work[]>([])
+const selectedSlug = ref('')
+const loading = ref(true)
+const failed = ref(false)
+const music = computed(() => works.value.filter(work => work.category === 'music'))
+const films = computed(() => works.value.filter(work => work.category === 'film').slice(0, 2))
+const selected = computed(() => music.value.find(work => work.slug === selectedSlug.value) || selectStageTrack(works.value) || music.value[0])
+const audio = usePerformanceAudio()
+const heroProgress = ref(0)
+const signatureProgress = ref(0)
+const connectorProgress = ref(0)
 const storyProgress = ref(0)
-const manualMotionPaused = ref(false)
-const systemReducedMotion = ref(false)
-const motionPaused = computed(() => manualMotionPaused.value || systemReducedMotion.value)
-const motionStage = computed(() => resolveMotionStage(storyProgress.value))
-const storyStages = [
-  { id: 'idea', index: '01', label: 'IDEA' },
-  { id: 'writing', index: '02', label: 'NOTES' },
-  { id: 'projects', index: '03', label: 'WORK' },
-  { id: 'signal', index: '04', label: 'SIGNAL' },
-]
-const runtime = inject<Ref<VisualRuntimeHandle | null>>(visualRuntimeKey, ref(null))
+const portraitPointerActive = ref(false)
+const latestInteraction = ref<HomePageState['interaction']>(null)
+const runtime = inject<Ref<VisualRuntimeBridge | null>>(visualRuntimeKey, ref(null))
+const pageScroll = inject(pageScrollKey, null)
 const sceneBridge = usePageSceneState<HomePageState>({ paused: false, interaction: null })
 provide(visualPageSceneBridgeKey, sceneBridge)
-const latestInteraction = ref<HomePageState['interaction']>(null)
-const sphereInteractionOptions = inject(homeSphereInteractionOptionsKey, defaultHomeSphereInteractionOptions)
+const options = inject(homeSphereInteractionOptionsKey, defaultHomeSphereInteractionOptions)
+let controller: AbortController | null = null
+let observer: ResizeObserver | null = null
+let unsubscribe: (() => void) | undefined
+let scrollFrame = 0
 
 function publishSceneState() {
-  const state: HomePageState = { paused: motionPaused.value, interaction: latestInteraction.value }
+  const state: HomePageState = { paused: false, interaction: latestInteraction.value, sceneProgress: storyProgress.value, portraitMode: 'front', portraitExitProgress: heroProgress.value, portraitPointerActive: portraitPointerActive.value }
   sceneBridge.setState(state)
   runtime.value?.setPageState('home', state)
-  runtime.value?.setCanvasVisible?.(!motionPaused.value)
+  runtime.value?.setCanvasVisible?.(true)
 }
-const sphereInteraction = createHomeSphereInteractionBridge({
-  options: sphereInteractionOptions,
-  emit: (interaction) => {
-    latestInteraction.value = interaction
-    publishSceneState()
-  },
-})
-const MOTION_PAUSE_KEY = 'field-notes:motion-paused'
-let scrollFrame = 0
-let resizeObserver: ResizeObserver | null = null
-let reducedMotionQuery: MediaQueryList | null = null
-
-async function loadHomeContent() {
+const sphereInteraction = createHomeSphereInteractionBridge({ options, emit(interaction) { latestInteraction.value = interaction; publishSceneState() } })
+function onPortraitPointer(event: PointerEvent) { portraitPointerActive.value = event.pointerType !== 'touch'; publishSceneState() }
+function leavePortrait() { portraitPointerActive.value = false; publishSceneState() }
+async function loadWorks() {
+  controller?.abort()
+  const current = new AbortController()
+  controller = current
   loading.value = true
-  error.value = false
+  failed.value = false
   try {
-    const [postResponse, tagResponse] = await Promise.all([getPosts({ page_size: 4 }), getArticleTags()])
-    posts.value = postResponse.data.items
-    tags.value = tagResponse.data
-  } catch {
-    error.value = true
-  } finally {
-    loading.value = false
-  }
+    const response = await getWorks({}, current.signal)
+    if (current.signal.aborted) return
+    works.value = response.data.items
+    const active = audio.state.value.work
+    selectedSlug.value = active && music.value.some(work => work.slug === active.slug) ? active.slug : selectStageTrack(works.value)?.slug || music.value[0]?.slug || ''
+  } catch { if (!current.signal.aborted) failed.value = true }
+  finally { if (!current.signal.aborted) { loading.value = false; void nextTick(scheduleUpdate) } }
 }
-
-function updateNarrative() {
+function selectTrack(work: Work) { selectedSlug.value = work.slug; audio.select(work) }
+function imageFallback(event: Event) {
+  const image = event.target as HTMLImageElement
+  if (!image.src.endsWith('/stage/cover-rain.svg')) image.src = '/stage/cover-rain.svg'
+}
+const heroStyle = computed(() => ({
+  '--hero-progress': heroProgress.value,
+  '--hero-eased': portraitScrollEase(heroProgress.value),
+  '--intro-opacity': 1 - portraitScrollEase(heroProgress.value / .48),
+  '--intro-rise': `${-45 * portraitScrollEase(heroProgress.value / .48)}px`,
+  '--signature-opacity': portraitScrollEase((heroProgress.value - .28) / .35),
+}))
+function updateTrail() {
+  const svg = signatureLayer.value?.querySelector('svg')
+  const path = signatureTrail.value
+  const matrix = svg?.getScreenCTM?.()
+  if (!matrix || !path || !programKicker.value || !home.value) return
+  const origin = home.value.getBoundingClientRect()
+  const point = (x: number, y: number) => ({ x: matrix.a * x + matrix.c * y + matrix.e - origin.left, y: matrix.b * x + matrix.d * y + matrix.f - origin.top })
+  const start = point(signatureEndpoint.x, signatureEndpoint.y)
+  const prior = point(signatureEndpoint.controlX, signatureEndpoint.controlY)
+  const target = programKicker.value.getBoundingClientRect()
+  const end = { x: target.left - origin.left, y: target.top + target.height / 2 - origin.top }
+  const room = Math.max(0, origin.width - 8 - start.x)
+  const multiplier = Math.min(5, room * .6 / Math.max(1, start.x - prior.x))
+  const drop = Math.max(80, end.y - start.y)
+  const turn = { x: Math.min(origin.width - 8, start.x + room * .65), y: start.y + drop * .48 }
+  const left = Math.max(4, end.x - 36)
+  path.setAttribute('d', `M ${start.x} ${start.y} C ${start.x + (start.x - prior.x) * multiplier} ${start.y + (start.y - prior.y) * multiplier}, ${turn.x} ${turn.y - drop * .3}, ${turn.x} ${turn.y} C ${turn.x} ${turn.y + drop * .3}, ${left} ${end.y - 120}, ${left} ${end.y - 32} C ${left} ${end.y - 10}, ${end.x - 10} ${end.y}, ${end.x} ${end.y} l 28 0`)
+  path.style.strokeDashoffset = String(1 - connectorProgress.value)
+  path.style.opacity = connectorProgress.value > 0 ? '1' : '0'
+  path.style.strokeWidth = String(signatureEndpoint.width * Math.hypot(matrix.a, matrix.b))
+  path.dataset.progress = String(connectorProgress.value)
+}
+function updateNarrative(frame?: PageScrollFrame) {
   scrollFrame = 0
-  storyProgress.value = narrativeProgress(
-    window.scrollY,
-    document.documentElement.scrollHeight,
-    window.innerHeight,
-  )
-}
-
-function scheduleNarrativeUpdate() {
-  if (scrollFrame) return
-  scrollFrame = requestAnimationFrame(updateNarrative)
-}
-
-function stageStyle(index: number) {
-  return { '--stage-focus': stageFocus(storyProgress.value, index) }
-}
-
-function setSystemReducedMotion(event: MediaQueryListEvent | MediaQueryList) {
-  systemReducedMotion.value = event.matches
-}
-
-function toggleMotion() {
-  if (systemReducedMotion.value) return
-  manualMotionPaused.value = !manualMotionPaused.value
-  try {
-    window.localStorage.setItem(MOTION_PAUSE_KEY, manualMotionPaused.value ? '1' : '0')
-  } catch {
-    // Storage can be unavailable in privacy-restricted contexts.
-  }
-}
-
-onMounted(() => {
-  void loadHomeContent()
-  void loadWorks()
-  try {
-    manualMotionPaused.value = window.localStorage.getItem(MOTION_PAUSE_KEY) === '1'
-  } catch {
-    manualMotionPaused.value = false
-  }
-  reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
-  setSystemReducedMotion(reducedMotionQuery)
-  reducedMotionQuery.addEventListener('change', setSystemReducedMotion)
-  document.addEventListener('pointerdown', sphereInteraction.onPointerDown, true)
-  document.addEventListener('pointermove', sphereInteraction.onPointerMove, true)
-  document.addEventListener('pointerup', sphereInteraction.onPointerUp, true)
-  document.addEventListener('pointercancel', sphereInteraction.onPointerCancel, true)
-  document.addEventListener('click', sphereInteraction.onClickCapture, true)
-  document.addEventListener('mousedown', sphereInteraction.onMouseDown, true)
-  document.addEventListener('contextmenu', sphereInteraction.onContextMenu, true)
-  window.addEventListener('blur', sphereInteraction.cancel)
-  updateNarrative()
-  window.addEventListener('scroll', scheduleNarrativeUpdate, { passive: true })
-  window.addEventListener('resize', scheduleNarrativeUpdate, { passive: true })
-  if (home.value) {
-    resizeObserver = new ResizeObserver(scheduleNarrativeUpdate)
-    resizeObserver.observe(home.value)
-  }
+  const height = frame?.viewportHeight || window.innerHeight
+  const scrollY = frame?.scrollY ?? window.scrollY
+  const travel = -(heroTrack.value?.getBoundingClientRect().top ?? 0) / Math.max(1, height)
+  const sequence = homeScrollSequence(travel)
+  heroProgress.value = sequence.portrait
+  signatureProgress.value = sequence.signature
+  connectorProgress.value = sequence.connector
+  // Use stable chapter travel: adding new songs does not retime the opening.
+  storyProgress.value = Math.min(1, Math.max(0, scrollY / Math.max(1, height * 6)))
+  if (heroTrack.value) for (const [key, value] of Object.entries(heroStyle.value)) heroTrack.value.style.setProperty(key, String(value))
+  const programY = program.value?.getBoundingClientRect().top ?? height
+  home.value?.style.setProperty('--program-progress', String(Math.max(-1, Math.min(1, programY / height))))
+  updateTrail()
   publishSceneState()
+}
+function scheduleUpdate() {
+  if (pageScroll) { pageScroll.invalidate(); return }
+  if (!scrollFrame) scrollFrame = requestAnimationFrame(() => updateNarrative())
+}
+const pointerEvents = { pointerdown: sphereInteraction.onPointerDown, pointermove: sphereInteraction.onPointerMove, pointerup: sphereInteraction.onPointerUp, pointercancel: sphereInteraction.onPointerCancel, click: sphereInteraction.onClickCapture, mousedown: sphereInteraction.onMouseDown, contextmenu: sphereInteraction.onContextMenu }
+onMounted(() => {
+  void loadWorks()
+  for (const [event, handler] of Object.entries(pointerEvents)) document.addEventListener(event, handler as EventListener, true)
+  window.addEventListener('blur', sphereInteraction.cancel)
+  window.addEventListener('resize', scheduleUpdate, { passive: true })
+  if (pageScroll) unsubscribe = pageScroll.subscribe(updateNarrative)
+  else window.addEventListener('scroll', scheduleUpdate, { passive: true })
+  if (home.value) { observer = new ResizeObserver(scheduleUpdate); observer.observe(home.value) }
+  updateNarrative()
 })
-
-watch(motionPaused, publishSceneState)
 watch(runtime, publishSceneState)
-
 onBeforeUnmount(() => {
-  sphereInteraction.dispose()
-  document.removeEventListener('pointerdown', sphereInteraction.onPointerDown, true)
-  document.removeEventListener('pointermove', sphereInteraction.onPointerMove, true)
-  document.removeEventListener('pointerup', sphereInteraction.onPointerUp, true)
-  document.removeEventListener('pointercancel', sphereInteraction.onPointerCancel, true)
-  document.removeEventListener('click', sphereInteraction.onClickCapture, true)
-  document.removeEventListener('mousedown', sphereInteraction.onMouseDown, true)
-  document.removeEventListener('contextmenu', sphereInteraction.onContextMenu, true)
+  controller?.abort(); observer?.disconnect(); unsubscribe?.(); sphereInteraction.dispose()
+  for (const [event, handler] of Object.entries(pointerEvents)) document.removeEventListener(event, handler as EventListener, true)
   window.removeEventListener('blur', sphereInteraction.cancel)
-  worksController?.abort()
+  window.removeEventListener('resize', scheduleUpdate)
+  window.removeEventListener('scroll', scheduleUpdate)
   if (scrollFrame) cancelAnimationFrame(scrollFrame)
-  window.removeEventListener('scroll', scheduleNarrativeUpdate)
-  window.removeEventListener('resize', scheduleNarrativeUpdate)
-  reducedMotionQuery?.removeEventListener('change', setSystemReducedMotion)
-  resizeObserver?.disconnect()
 })
 </script>
 
 <template>
-  <div
-    ref="home"
-    class="home"
-    :data-stage="motionStage"
-    :data-motion-paused="motionPaused"
-    :style="{ '--story-progress': storyProgress }"
-  >
-    <div class="story-rail" aria-hidden="true">
-      <span class="story-rail__line"><i /></span>
-      <ol class="story-rail__stages">
-        <li v-for="(stage, index) in storyStages" :key="stage.id" :data-stage-label="stage.id" :style="stageStyle(index)">
-          <span>{{ stage.index }}</span> {{ stage.label }}
-        </li>
-      </ol>
-    </div>
-    <section class="hero page-shell" aria-labelledby="hero-title">
-      <div class="hero-copy">
-        <p class="hero-kicker"><span class="status-dot" /> {{ profile.availability }} <span>／</span> {{ profile.location }}</p>
-        <h1 id="hero-title">
-          <span>Make ideas</span>
-          <em>move.</em>
-        </h1>
-        <p class="hero-intro">{{ profile.intro }}</p>
-        <div class="hero-actions">
-          <router-link to="/works" class="editorial-button editorial-button--acid">浏览作品 <span aria-hidden="true">↗</span></router-link>
-          <MagneticLink href="#writing">最新文章</MagneticLink>
+  <div ref="home" class="home performance-home" :data-motion-paused="false" :data-playing="audio.state.value.playing">
+    <div class="stage-atmosphere" aria-hidden="true"><i /><i /><i /></div>
+    <svg class="signature-continuation" aria-hidden="true" width="100%" height="100%" fill="none"><path ref="signatureTrail" pathLength="1" stroke-dasharray="1 1" stroke-dashoffset="1" stroke-linecap="round" /></svg>
+    <div ref="heroTrack" class="hero-track" :style="heroStyle">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-visual" @pointerenter="onPortraitPointer" @pointermove="onPortraitPointer" @pointerleave="leavePortrait"><img v-if="stageAssets.artistPortrait" :src="stageAssets.artistPortrait" alt="陈果" class="artist-portrait" @error="imageFallback" /></div>
+        <div class="hero-copy" data-overlay="identity" :inert="heroProgress > .48">
+          <div class="hero-topline"><p>陈果 / GUOER<br /><span>MUSICIAN & CREATIVE EXPLORER</span></p><p class="hero-invitation">声音有形状。<br />在这里，触碰它。</p></div>
+          <h1 id="hero-title">GUOER<span class="hero-name">陈果</span></h1>
+          <div class="hero-actions"><button v-if="selected?.audio" type="button" class="hero-play" @click="audio.toggle(selected)"><span aria-hidden="true">{{ audio.state.value.playing ? 'Ⅱ' : '▶' }}</span> {{ audio.state.value.playing ? '暂停演出' : '让声音发生' }} <small>{{ selected.title }}</small></button><a v-else href="#setlist" class="hero-play">进入演出 <span aria-hidden="true">↓</span></a><router-link to="/about#connect" class="hero-contact">联系 ↗</router-link></div>
+          <p v-if="audio.state.value.error" class="hero-audio-error" role="status">{{ audio.state.value.error }}</p>
         </div>
-      </div>
-      <div class="hero-visual">
-        <ImmersiveScene :progress="storyProgress" :paused="motionPaused" />
-        <span class="hero-signature">{{ profile.name }}</span>
-      </div>
-      <div class="hero-footnote">
-        <span>01 — FIELD NOTES</span>
-        <span>SOFTWARE / THINKING / MOTION</span>
-        <button
-          v-if="!systemReducedMotion"
-          type="button"
-          class="motion-toggle"
-          :aria-label="manualMotionPaused ? '恢复自动动效' : '暂停自动动效'"
-          :aria-pressed="manualMotionPaused"
-          @click="toggleMotion"
-        >
-          <span class="motion-toggle__icon" aria-hidden="true">{{ manualMotionPaused ? '▶' : 'Ⅱ' }}</span>
-          <span>{{ manualMotionPaused ? 'MOTION OFF' : 'MOTION ON' }}</span>
-        </button>
-      </div>
-    </section>
-
-    <div class="marquee" aria-hidden="true">
-      <div class="marquee-track">
-        <span>CODE WITH INTENTION <i>✳</i> WRITE TO REMEMBER <i>✳</i> DESIGN FOR CLARITY <i>✳</i></span>
-        <span>CODE WITH INTENTION <i>✳</i> WRITE TO REMEMBER <i>✳</i> DESIGN FOR CLARITY <i>✳</i></span>
-      </div>
+        <div ref="signatureLayer" class="hero-signature"><p>MADE OF SOUND. SIGNED BY</p><ChenGuoSignature :progress="signatureProgress" /><span>音乐，和我留下的痕迹。</span></div>
+        <div class="hero-footnote"><span>AN INTERACTIVE PERFORMANCE</span><a href="#setlist" class="hero-scroll">往下看看 <span aria-hidden="true">↓</span></a></div>
+      </section>
     </div>
 
-    <section id="writing" class="writing-section page-shell" aria-labelledby="writing-title">
-      <ScrollReveal>
-        <div class="section-title-row">
-          <div>
-            <p class="section-kicker">01 / Recent writing</p>
-            <h2 id="writing-title" class="section-heading">Latest<br /><em>field notes.</em></h2>
-          </div>
-          <router-link to="/writing" class="section-link">ALL NOTES <span>↗</span></router-link>
-        </div>
-      </ScrollReveal>
-      <div class="writing-grid">
-        <div class="article-list">
-          <ArticleRow v-for="(post, index) in posts" :key="post.key" :post="post" :index="index" />
-          <div v-if="loading" class="loading-lines" aria-label="正在载入文章">
-            <span v-for="index in 3" :key="index" />
-          </div>
-          <div v-if="error" class="inline-error">
-            <span>暂时无法读取文章列表。</span>
-            <button class="text-action" type="button" @click="loadHomeContent">重新尝试 ↗</button>
-          </div>
-          <StatePanel
-            v-if="!loading && !error && posts.length === 0"
-            title="第一篇，正在路上。"
-            description="文章会在发布后出现在这里。先去项目与关于页面逛逛吧。"
-            action-label="了解这个博客"
-            @action="$router.push('/about')"
-          />
-        </div>
-        <aside class="topic-index" aria-label="标签索引">
-          <div class="topic-index-heading">
-            <span>INDEX / TOPICS</span>
-            <span>↘</span>
-          </div>
-          <router-link v-for="(tag, index) in tags" :key="tag.slug" :to="`/tag/${encodeURIComponent(tag.slug)}`" class="topic-row">
-            <span>{{ String(index + 1).padStart(2, '0') }}</span>
-            <strong>{{ tag.name }}</strong>
-            <span aria-hidden="true">↗</span>
-          </router-link>
-          <p v-if="!loading && tags.length === 0" class="empty-topics">更多主题将在写作中逐渐成形。</p>
-          <router-link to="/search" class="topic-search">寻找一个关键词 <span>⌕</span></router-link>
-        </aside>
+    <section id="setlist" ref="program" class="program-section" aria-labelledby="program-title">
+      <div class="program-top"><p ref="programKicker" class="section-kicker">01 / THE SETLIST</p><router-link to="/works?type=music" class="stage-link">全部音乐 ↗</router-link></div>
+      <h2 id="program-title">把声音，<br /><em>留在此刻。</em></h2>
+      <div v-if="selected" class="program-stage">
+        <div class="program-art"><div class="album-sleeve"><img :key="selected.slug" :src="getStageArtwork(selected)" :alt="selected.title + '封面'" width="1200" height="1200" loading="lazy" @error="imageFallback" /><span aria-hidden="true">GUOER / ORIGINAL MUSIC</span></div><router-link :to="'/works/' + selected.slug" class="program-detail">进入《{{ selected.title }}》 <span>↗</span></router-link></div>
+        <div class="program-space" aria-hidden="true"><span>TOUCH · MOVE · LISTEN</span></div>
+        <div class="program-console"><span class="section-kicker">SELECT A TRACK</span><ol class="track-list"><li v-for="(work,index) in music" :key="work.slug"><button type="button" :aria-pressed="selected.slug === work.slug" @click="selectTrack(work)"><span class="track-number">{{ String(index + 1).padStart(2,'0') }}</span><strong>{{ work.title }}</strong><span>{{ work.duration ? formatDuration(work.duration) : '—' }}</span></button></li></ol><PerformancePlayer v-if="selected.audio" :work="selected" compact /><router-link v-else :to="'/works/' + selected.slug" class="stage-link">观看作品 ↗</router-link><p class="program-note">用耳朵听，也用指尖感受。</p></div>
       </div>
+      <div v-else class="program-empty" role="status"><p>{{ loading ? '正在准备节目…' : failed ? '节目暂时没有加载成功。' : '下一段声音，正在酝酿。' }}</p><button v-if="failed" type="button" class="text-action" @click="loadWorks">重新读取 ↗</button><router-link v-else-if="!loading" to="/about" class="stage-link">认识陈果 ↗</router-link></div>
+      <div class="program-bottom"><span>SOUND BECOMES MOTION</span><span>YOUR PRESENCE CHANGES THE SCENE</span></div>
     </section>
 
-    <section id="projects" class="projects-section" aria-labelledby="projects-title">
-      <div class="projects-section__backdrop" aria-hidden="true" />
-      <div class="page-shell">
-        <ScrollReveal>
-          <div class="section-title-row section-title-row--light">
-            <div>
-              <p class="section-kicker">02 / Selected work</p>
-              <h2 id="projects-title" class="section-heading">Made to<br /><em>be used.</em></h2>
-            </div>
-            <router-link to="/works?type=code" class="projects-note">全部代码作品 ↗</router-link>
-          </div>
-        </ScrollReveal>
-        <div class="project-grid">
-          <ScrollReveal v-for="(project, index) in projects" :key="project.number" :delay="index * 80">
-            <ProjectCardMotion :accent="project.accent">
-              <component
-                :is="project.external ? 'a' : 'router-link'"
-                v-bind="project.external ? { href: project.href, target: '_blank', rel: 'noreferrer' } : { to: project.href }"
-                class="project-card"
-                :class="`project-card--${project.accent}`"
-              >
-                <div class="project-topline"><span>{{ project.number }}</span><span>{{ project.type }}</span></div>
-                <div class="project-glyph" aria-hidden="true">
-                  <span v-if="index === 0">▦</span>
-                  <span v-else-if="index === 1">∿</span>
-                  <span v-else>✳</span>
-                </div>
-                <div class="project-bottom">
-                  <h3>{{ project.title }}</h3>
-                  <p>{{ project.description }}</p>
-                  <div class="project-stack"><span v-for="item in project.stack" :key="item">{{ item }}</span></div>
-                </div>
-                <span class="project-arrow" aria-hidden="true">↗</span>
-              </component>
-            </ProjectCardMotion>
-          </ScrollReveal>
-        </div>
-        <div v-if="worksError" class="featured-state" role="status"><p>暂时无法读取精选作品。</p><button type="button" class="text-action" @click="loadWorks">重新读取 ↗</button></div>
-        <p v-else-if="worksLoading" class="featured-state" role="status">正在读取精选作品…</p>
-        <p v-else-if="!projects.length" class="featured-state">新作品将在发布后出现在这里。</p>
-      </div>
+    <section v-if="films.length" id="films" class="films-section" aria-labelledby="films-title">
+      <ScrollReveal :scroll="true"><div class="film-heading"><p class="section-kicker">02 / BETWEEN THE NOTES</p><h2 id="films-title">生活，<em>也在演奏。</em></h2><router-link to="/works?type=film" class="stage-link">更多影像 ↗</router-link></div></ScrollReveal>
+      <div class="film-frames"><ScrollReveal v-for="(film,index) in films" :key="film.slug" :scroll="true" :class="'film-frame film-frame--' + index"><router-link :to="'/works/' + film.slug"><div class="film-image"><img :src="getStageArtwork(film)" :alt="film.title" width="960" height="540" loading="lazy" @error="imageFallback" /><span aria-hidden="true">PLAY ↗</span></div><div class="film-caption"><span>0{{ index + 1 }} / {{ film.duration ? formatDuration(film.duration) : 'FILM' }}</span><h3>{{ film.title }}</h3></div></router-link></ScrollReveal></div>
     </section>
 
-    <section v-if="mediaWorks.length" class="media-section page-shell" aria-labelledby="media-title">
-      <div class="section-title-row"><div><p class="section-kicker">Film & Music / 小果Fruit</p><h2 id="media-title" class="section-heading">Life, in<br /><em>other forms.</em></h2></div><router-link to="/works" class="section-link">全部作品 ↗</router-link></div>
-      <div class="media-grid"><WorkCard v-for="(work, index) in mediaWorks" :key="work.slug" :work="work" :index="index" heading-tag="h3" /></div>
-    </section>
-
-    <section id="motion" class="principle-section page-shell" aria-labelledby="principles-title">
-      <ScrollReveal>
-        <div class="principle-intro">
-          <p class="section-kicker">03 / Working principles</p>
-          <h2 id="principles-title" class="section-heading">Signal over<br /><em>noise.</em></h2>
-          <p>技术、视觉与表达最终都服务于理解。把复杂留给自己，把清晰交给读者。</p>
-        </div>
-      </ScrollReveal>
-      <div class="principle-list">
-        <ScrollReveal v-for="(principle, index) in profile.principles" :key="principle.title" :delay="index * 80">
-          <article class="principle-row">
-            <span>{{ String(index + 1).padStart(2, '0') }}</span>
-            <h3>{{ principle.title }}</h3>
-            <p>{{ principle.body }}</p>
-          </article>
-        </ScrollReveal>
-      </div>
-    </section>
-
-    <section id="resources" class="resource-section page-shell" aria-labelledby="resource-title">
-      <ScrollReveal>
-        <p class="section-kicker">04 / Elsewhere</p>
-        <h2 id="resource-title" class="section-heading">Keep<br /><em>exploring.</em></h2>
-      </ScrollReveal>
-      <div class="resource-grid">
-        <router-link v-for="resource in resources" :key="resource.index" :to="resource.href" class="resource-card">
-          <div class="resource-top"><span>{{ resource.index }}</span><span>{{ resource.kind }}</span></div>
-          <h3>{{ resource.title }}</h3>
-          <p>{{ resource.description }}</p>
-          <span class="resource-arrow" aria-hidden="true">↗</span>
-        </router-link>
-      </div>
+    <section id="encore" class="encore-section page-shell" aria-labelledby="encore-title">
+      <ScrollReveal :scroll="true"><p class="section-kicker">03 / AFTER THE LAST NOTE</p><h2 id="encore-title">音乐之外，<br /><em>还是我。</em></h2></ScrollReveal>
+      <div class="encore-copy principle-intro"><p>我是{{ stageIdentity.name }}，也叫 {{ stageIdentity.alias }}。做音乐，拍下生活，也把想象写成可以触碰的界面。</p><div><router-link to="/about" class="stage-link">认识我 ↗</router-link><router-link to="/about#connect" class="stage-link">聊聊创作 ↗</router-link></div></div>
+      <router-link to="/writing" class="archive-door"><span>留在演出之后的文字</span><strong>THE ARCHIVE</strong><span aria-hidden="true">↗</span></router-link>
     </section>
   </div>
 </template>
 
 <style scoped>
 .home { position: relative; overflow-x: clip; }
-.home > section:not(.projects-section), .home > .marquee { position: relative; z-index: 2; }
-.projects-section > .page-shell { position: relative; z-index: 2; }
-.projects-section__backdrop { position: absolute; inset: 0; z-index: 0; background: var(--void); pointer-events: none; }
-.featured-state { padding: 30px 0; color: var(--ink); font-size: .85rem; }
-.media-section { padding-top: var(--section-space); }
-.media-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; }
-@media (max-width: 700px) { .media-grid { grid-template-columns: 1fr; gap: 36px; } }
-.story-rail {
-  position: fixed;
-  z-index: 20;
-  top: 50%;
-  right: clamp(8px, calc((100vw - var(--page-width)) / 2 - 12px), 34px);
-  display: grid;
-  grid-template-columns: 18px auto;
-  align-items: center;
-  gap: 12px;
-  color: var(--ink);
-  font: 0.56rem var(--mono-font);
-  letter-spacing: 0.08em;
-  pointer-events: none;
-  transform: translateY(-50%);
-  transition: color 520ms ease;
+.stage-atmosphere { position: fixed; inset: 0; z-index: 0; pointer-events:none; background:radial-gradient(ellipse at 50% 45%,rgba(25,46,86,.12),transparent 60%); }
+.stage-atmosphere i { position:absolute; width:78vmin; height:78vmin; border:1px solid rgba(199,255,46,.07); border-radius:50%; top:50%; left:50%; transform:translate(-50%,-50%) rotateX(65deg) rotate(-30deg); }
+.stage-atmosphere i:nth-child(2) { width:110vmin;height:110vmin;transform:translate(-50%,-50%) rotateY(65deg) rotate(30deg); }
+.stage-atmosphere i:nth-child(3) { width:135vmin;height:135vmin;border-color:rgba(143,174,255,.05); }
+.signature-continuation { position:absolute;z-index:4;inset:0;pointer-events:none;overflow:visible; }
+.signature-continuation path {stroke:var(--acid);opacity:0;}
+.hero-track { position:relative; z-index:2; height:220svh; }
+.hero { position:sticky;top:0;height:100svh;min-height:580px;isolation:isolate; }
+.hero-visual {position:absolute;inset:0;z-index:0;}
+.artist-portrait {width:100%;height:100%;object-fit:contain;opacity:.25;}
+.hero-copy {position:absolute;inset:0;padding:0 5.5vw;opacity:var(--intro-opacity);transform:translateY(var(--intro-rise));pointer-events:none;}
+.hero-copy a,.hero-copy button {pointer-events:auto;}
+.hero-topline {display:flex;justify-content:space-between;position:absolute;top:16%;left:5.5vw;right:5.5vw;}
+.hero-topline p {font:500 .86rem/1.8 var(--body-font);}
+.hero-topline p span {font: .55rem/2 var(--mono-font);color:var(--muted);letter-spacing:.12em;}
+.hero-invitation {text-align:right;}
+.hero h1 {position:absolute;bottom:15%;left:4.7vw;right:5vw;margin:0;font:500 clamp(100px,16.5vw,260px)/.78 var(--body-font);letter-spacing:-.085em;}
+.hero-name {display:inline-block;margin-left:2.6vw;font:400 clamp(18px,2.5vw,38px)/1 var(--display-font);letter-spacing:.1em;color:var(--acid);vertical-align:top;}
+.hero-actions {position:absolute;bottom:6.9%;left:5.5vw;right:5.5vw;display:flex;align-items:center;justify-content:space-between;}
+.hero-play {display:inline-flex;align-items:center;gap:16px;padding:0;border:0;background:transparent;color:var(--ink);cursor:pointer;font-size:.9rem;text-decoration:none;min-height:48px;}
+.hero-play > span {display:grid;place-items:center;width:44px;height:44px;border:1px solid rgba(199,255,46,.6);border-radius:50%;color:var(--acid);font-size:.75rem;transition:background .3s,color .3s;}
+.hero-play:hover > span {background:var(--acid);color:#080808;}
+.hero-play small {font-size:.68rem;color:var(--muted);padding-left:16px;border-left:1px solid var(--line);}
+.hero-contact,.hero-scroll {text-decoration:none;font-size:.7rem;}
+.hero-audio-error {position:absolute;bottom:3.9%;left:5.5vw;font-size:.7rem;color:var(--acid);}
+.hero-footnote {position:absolute;bottom:20px;left:5.5vw;right:5.5vw;display:flex;justify-content:space-between;align-items:center;font:.52rem var(--mono-font);letter-spacing:.1em;}
+.hero-scroll {display:flex;gap:28px;align-items:center;}
+.hero-scroll span {color:var(--acid);}
+.hero-signature {position:absolute;width:min(800px,86vw);left:50%;top:50%;transform:translate(-50%,-45%);opacity:var(--signature-opacity);pointer-events:none;text-align:center;}
+.hero-signature p {font:.55rem var(--mono-font);letter-spacing:.24em;color:var(--muted);margin:0 0 4vh;}
+.hero-signature > span {display:block;margin-top:5vh;font:.75rem var(--body-font);color:var(--muted);letter-spacing:.2em;}
+.program-section {position:relative;z-index:2;padding:60px 5.5vw 0;min-height:125svh;}
+.program-top {display:flex;justify-content:space-between;align-items:center;}
+.stage-link {font-size:.8rem;text-decoration:none;display:inline-flex;gap:20px;align-items:center;padding:12px 0;}
+.stage-link:hover {color:var(--acid);}
+.program-section h2 {font:400 clamp(3rem,5.7vw,6rem)/1.2 var(--display-font);letter-spacing:-.06em; margin:55px 0 65px;}
+.program-section h2 em {color:var(--acid);font-style:normal;}
+.program-stage {display:grid;grid-template-columns:minmax(0,1fr) minmax(200px,1.8fr) minmax(0,1.1fr);align-items:center;gap:30px;min-height:400px;}
+.program-art {align-self:start;transform:translateY(calc(var(--program-progress,0) * 25px));}
+.album-sleeve {position:relative;transform:rotate(-6deg);box-shadow:0 28px 60px #0008;border:1px solid #ffffff16;transition:transform .5s;}
+.album-sleeve:hover {transform:rotate(-2deg) translateY(-6px);}
+.album-sleeve img {display:block;width:100%;height:auto;aspect-ratio:1;object-fit:cover;animation:art-enter .6s both;}
+.album-sleeve > span {position:absolute;left:12px;bottom:12px;font:.45rem var(--mono-font);letter-spacing:.12em;color:var(--muted);}
+.program-detail {display:flex;justify-content:space-between;gap:15px;margin-top:36px;text-decoration:none;font-size:.8rem;}
+.program-detail span {color:var(--acid);}
+.program-space {align-self:end;text-align:center;font:.5rem var(--mono-font);letter-spacing:.18em;color:#a4a49f80;padding-bottom:40px;}
+.program-console {align-self:center;}
+.track-list {margin:20px 0 28px;padding:0;list-style:none;}
+.track-list button {display:grid;grid-template-columns:20px 1fr auto;align-items:center;gap:12px;width:100%;text-align:left;min-height:80px;padding:16px 0;background:transparent;color:var(--muted);border:0;border-bottom:1px solid var(--line);cursor:pointer;}
+.track-list button[aria-pressed='true'] {color:var(--acid);}
+.track-list button strong {font-weight:400;font-size:clamp(.85rem,1.2vw,1.1rem);}
+.track-list button > span {font:.58rem var(--mono-font);}
+.program-note {margin-top:28px;font-size:.68rem;color:var(--muted);}
+.program-bottom {margin-top:100px;padding:26px 0;display:flex;justify-content:space-between;border-top:1px solid var(--line);font:.5rem var(--mono-font);letter-spacing:.16em;color:var(--muted);}
+.program-empty {min-height:350px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;font-size:.9rem;}
+.films-section {position:relative;z-index:2;padding:160px 5.5vw 100px;}
+.film-heading {max-width:650px;}
+.film-heading h2 {font:400 clamp(2.8rem,5.2vw,5.5rem)/1.2 var(--display-font);letter-spacing:-.06em;}
+.film-heading em {display:block;font-style:normal;color:var(--acid);}
+.film-frames {display:flex;align-items:flex-start;gap:12%;margin-top:55px;}
+.film-frame {width:44%;min-width:0;}
+.film-frame--1 {margin-top:240px;}
+.film-frame a {text-decoration:none;}
+.film-image {position:relative;overflow:hidden;}
+.film-image img {display:block;width:100%;height:auto;aspect-ratio:4/3;object-fit:cover;transition:transform .7s,filter .7s;filter:saturate(.65);}
+.film-frame:hover img {transform:scale(1.045);filter:saturate(1);}
+.film-image span {position:absolute;right:15px;bottom:15px;background:var(--acid);color:#101208;padding:9px 14px;font:.6rem var(--mono-font);}
+.film-caption {padding-top:24px;}
+.film-caption > span {font:.55rem var(--mono-font);color:var(--muted);letter-spacing:.1em;}
+.film-caption h3 {margin-top:12px;font:400 clamp(1.2rem,2.2vw,2rem) var(--display-font);}
+.encore-section {position:relative;z-index:2;padding-top:140px;padding-bottom:70px;}
+.encore-section h2 {font:400 clamp(3.3rem,7.2vw,8rem)/1.14 var(--display-font);letter-spacing:-.06em;}
+.encore-section h2 em {font-style:normal;color:var(--acid);}
+.encore-copy {width:32%;margin-left:auto;margin-top:60px;}
+.encore-copy > p {font-size:.9rem;line-height:2;color:var(--muted);}
+.encore-copy > div {display:flex;justify-content:space-between;gap:15px;}
+.archive-door {display:grid;grid-template-columns:1fr auto 40px;align-items:center;gap:25px;margin-top:140px;padding:40px 0;border-top:1px solid var(--line);text-decoration:none;}
+.archive-door > span:first-child {font-size:.8rem;color:var(--muted);}
+.archive-door strong {font:400 clamp(1.5rem,3vw,3rem)/1 var(--body-font);letter-spacing:-.04em;}
+.archive-door > span:last-child {color:var(--acid);font-size:2rem;}
+@keyframes art-enter {from {opacity:0;filter:blur(6px);}to {opacity:1;filter:blur(0);}}
+@media(min-width:1600px) {.program-stage {grid-template-columns:340px 1fr 370px;}.program-section {min-height:115svh;}}
+@media(max-width:900px) {.program-stage {grid-template-columns:minmax(0,1fr) minmax(120px,1fr) minmax(0,1.1fr);gap:20px;}.hero-topline {top:18%;}.program-section {min-height:110svh;}}
+@media(max-width:700px) {
+ .hero {min-height:540px;}.hero-copy {padding:0 22px;}.hero-topline {top:16%;left:22px;right:22px;}.hero-topline p {font-size:.74rem;}.hero-topline p span {font-size:.42rem;}.hero-invitation {max-width:120px;}
+ .hero h1 {font-size:24vw;left:18px;right:auto;bottom:18%;}.hero-name {font-size:15px;display:block;margin:22px 0 0 5px;}.hero-actions {bottom:7.5%;left:22px;right:22px;}.hero-play {font-size:.8rem;gap:12px;}.hero-play small {display:none;}.hero-footnote {left:22px;right:22px;font-size:.4rem;bottom:17px;}.hero-contact {font-size:.65rem;}
+ .hero-signature {width:92vw;}.hero-signature p {font-size:.45rem;}.hero-signature > span {font-size:.65rem;}
+ .program-section {padding:70px 22px 0;min-height:auto;}.program-top .section-kicker {font-size:.55rem;}.program-section h2 {font-size:2.9rem;margin:35px 0 48px;}.program-stage {grid-template-columns:1fr;gap:45px;}.program-art {width:55%;transform:none;}.album-sleeve {transform:rotate(-5deg);}.program-detail {font-size:.72rem;}.program-space {display:none;}.program-console {width:100%;padding:24px;background:linear-gradient(135deg,#0c0d11eb,#0c0d11c9);border:1px solid #ffffff12;backdrop-filter:blur(16px);}.track-list button {min-height:66px;}.track-list button strong {font-size:1rem;}.program-note {font-size:.65rem;}.program-bottom {margin-top:70px;gap:24px;font-size:.4rem;line-height:1.7;}.program-bottom span:last-child {text-align:right;}
+ .films-section {padding:100px 22px 50px;}.film-heading h2 {font-size:2.9rem;}.film-frames {flex-direction:column;gap:70px;margin-top:35px;}.film-frame {width:92%;}.film-frame--1 {align-self:flex-end;margin-top:0;}.film-image img {aspect-ratio:4/3;}.film-caption h3 {font-size:1.5rem;}
+ .encore-section {padding-top:100px;}.encore-section h2 {font-size:3.2rem;}.encore-copy {width:100%;margin-top:50px;padding:20px;background:#080808ad;}.archive-door {grid-template-columns:1fr 30px;gap:18px;margin-top:65px;padding:30px 0;}.archive-door > span:first-child {grid-column:1/-1;}.archive-door strong {font-size:1.8rem;}
 }
-.motion-toggle {
-  display: inline-flex;
-  justify-self: end;
-  align-items: center;
-  gap: 9px;
-  min-height: 44px;
-  padding: 0 12px;
-  border: 1px solid var(--ink);
-  background: rgba(8, 8, 8, 0.92);
-  color: var(--ink);
-  box-shadow: 3px 3px 0 rgba(242, 240, 233, 0.12);
-  font: 700 0.58rem var(--mono-font);
-  letter-spacing: 0.08em;
-  cursor: pointer;
-  backdrop-filter: blur(12px);
-  transition: background-color 180ms ease, transform 180ms ease;
-}
-.motion-toggle:hover { background: var(--acid); color: var(--acid-ink); border-color: var(--acid-ink); transform: translateY(-2px); }
-.motion-toggle:active { transform: translateY(0); }
-.motion-toggle__icon { display: grid; place-items: center; width: 16px; height: 16px; font: 0.55rem var(--mono-font); }
-.story-rail__line {
-  position: relative;
-  display: block;
-  width: 1px;
-  height: 164px;
-  background: rgba(242, 240, 233, 0.24);
-  overflow: hidden;
-  transition: background-color 520ms ease;
-}
-.story-rail__line i {
-  position: absolute;
-  inset: 0;
-  background: var(--electric-blue);
-  transform: scaleY(var(--story-progress));
-  transform-origin: top;
-  transition: background-color 520ms ease;
-}
-.story-rail__stages {
-  display: grid;
-  gap: 25px;
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-.story-rail__stages li {
-  position: relative;
-  display: flex;
-  gap: 7px;
-  opacity: calc(0.46 + var(--stage-focus, 0) * 0.54);
-  transform: translateX(calc(var(--stage-focus, 0) * -4px));
-}
-.story-rail__stages li::before {
-  position: absolute;
-  top: 50%;
-  left: -16px;
-  width: calc(4px + var(--stage-focus, 0) * 1px);
-  height: calc(4px + var(--stage-focus, 0) * 1px);
-  border: 1px solid currentColor;
-  border-radius: 50%;
-  background: var(--paper);
-  content: '';
-  transform: translate(-50%, -50%) scale(calc(0.88 + var(--stage-focus, 0) * 0.12));
-  box-shadow: 0 0 0 calc(var(--stage-focus, 0) * 3px) rgba(55, 103, 255, calc(var(--stage-focus, 0) * 0.16));
-}
-.story-rail__stages li span { color: inherit; opacity: 0.62; }
-.home[data-stage='projects'] .story-rail,
-.home[data-stage='signal'] .story-rail { color: rgba(242, 240, 233, 0.74); }
-.home[data-stage='projects'] .story-rail__line,
-.home[data-stage='signal'] .story-rail__line { background: rgba(242, 240, 233, 0.25); }
-.home[data-stage='projects'] .story-rail__line i,
-.home[data-stage='signal'] .story-rail__line i { background: var(--acid); }
-.home[data-stage='projects'] .story-rail__stages li::before,
-.home[data-stage='signal'] .story-rail__stages li::before { background: var(--ink); }
-.home[data-motion-paused='true'] .marquee-track,
-.home[data-motion-paused='true'] .loading-lines span,
-.home[data-motion-paused='true'] :deep(.scene-orbit),
-.home[data-motion-paused='true'] :deep(.poster-core) { animation-play-state: paused; }
-.home[data-motion-paused='true'] :deep(.scroll-reveal) { transition: none; }
-.projects-section { isolation: auto; }
-.projects-section__backdrop::before {
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  background:
-    radial-gradient(circle at 82% 18%, rgba(55, 103, 255, 0.15), transparent 28%),
-    linear-gradient(115deg, transparent 55%, rgba(199, 255, 46, 0.035));
-  content: '';
-  opacity: 0.45;
-  pointer-events: none;
-  transform: scale(1.08);
-  transition: opacity 900ms ease, transform 1200ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.home[data-stage='projects'] .projects-section__backdrop::before,
-.home[data-stage='signal'] .projects-section__backdrop::before { opacity: 1; transform: scale(1); }
-.hero {
-  touch-action: pan-y pinch-zoom;
-  display: grid;
-  grid-template-columns: minmax(0, 0.92fr) minmax(360px, 1.08fr);
-  align-items: center;
-  min-height: min(790px, calc(100vh - 76px));
-  padding-top: 36px;
-  padding-bottom: 64px;
-}
-.hero-copy { position: relative; z-index: 2; }
-.hero-kicker {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 36px;
-  color: var(--muted);
-  font: 0.65rem var(--mono-font);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.status-dot { width: 7px; height: 7px; margin-right: 2px; border-radius: 50%; background: #5c9917; box-shadow: 0 0 0 4px rgba(92, 153, 23, 0.14); }
-h1 {
-  margin-bottom: 28px;
-  font-family: var(--display-font);
-  font-size: clamp(5.2rem, 10vw, 10.5rem);
-  font-weight: 400;
-  letter-spacing: -0.075em;
-  line-height: 0.77;
-}
-h1 span, h1 em { display: block; }
-h1 em, .section-heading em { color: var(--electric-blue); font-weight: 400; }
-.hero-intro { max-width: 480px; color: var(--muted); font-size: clamp(1rem, 1.5vw, 1.22rem); line-height: 1.8; }
-.hero-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 26px; margin-top: 38px; }
-.hero-visual { position: relative; min-width: 0; min-height: 480px; touch-action: pan-y pinch-zoom; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-.hero h1 { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-.hero-visual :deep(.immersive-scene) { height: min(680px, 72vh); }
-.hero-signature { position: absolute; right: 10%; bottom: 18%; z-index: 1; color: rgba(242, 240, 233, 0.1); font: 800 clamp(3rem, 7vw, 7rem) var(--display-font); letter-spacing: -0.05em; pointer-events: none; }
-.hero-footnote { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font: 0.58rem var(--mono-font); letter-spacing: 0.07em; }
-.marquee { overflow: hidden; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); background: var(--acid); color: var(--acid-ink); }
-.marquee-track { display: flex; width: max-content; animation: marquee 24s linear infinite; }
-.marquee-track span { display: block; padding: 13px 0; font: 0.72rem var(--mono-font); letter-spacing: 0.12em; white-space: nowrap; }
-.marquee i { padding: 0 30px; font-style: normal; }
-@keyframes marquee { to { transform: translateX(-50%); } }
-.writing-section { padding-top: var(--section-space); }
-.section-title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; }
-.section-link { display: inline-flex; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--ink); color: var(--ink); font: 0.68rem var(--mono-font); text-decoration: none; white-space: nowrap; }
-.writing-grid { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: clamp(40px, 7vw, 100px); }
-.topic-index { align-self: start; padding-top: 10px; }
-.topic-index-heading { display: flex; justify-content: space-between; padding-bottom: 13px; border-bottom: 1px solid var(--ink); color: var(--muted); font: 0.62rem var(--mono-font); letter-spacing: 0.06em; }
-.topic-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 14px 0; border-bottom: 1px solid var(--line); color: var(--ink); text-decoration: none; }
-.topic-row span { color: var(--muted); font: 0.6rem var(--mono-font); }
-.topic-row strong { overflow-wrap: anywhere; font-size: 0.82rem; font-weight: 500; }
-.topic-row:hover strong { color: var(--electric-blue); }
-.empty-topics { padding: 22px 0; color: var(--muted); font-size: 0.8rem; }
-.topic-search { display: flex; justify-content: space-between; margin-top: 24px; padding: 12px; border: 1px solid var(--ink); color: var(--ink); font: 0.65rem var(--mono-font); text-decoration: none; }
-.topic-search:hover { background: var(--acid); color: var(--acid-ink); border-color: var(--acid-ink); }
-.loading-lines { display: grid; gap: 1px; }
-.loading-lines span { display: block; height: 122px; background: linear-gradient(90deg, var(--paper-soft), rgba(255,255,255,0.42), var(--paper-soft)); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-top: 1px solid var(--line); }
-@keyframes shimmer { to { background-position: -200% 0; } }
-.projects-section { position: relative; margin-top: var(--section-space); padding: var(--section-space) 0; color: var(--ink); }
-.section-title-row--light .section-kicker, .projects-note { color: #9ca09e; }
-.section-title-row--light .section-heading em { color: var(--acid); }
-.projects-note { max-width: 260px; text-align: right; font-size: 0.82rem; }
-.project-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-.project-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  min-height: 500px;
-  padding: 22px;
-  overflow: hidden;
-  border: 1px solid rgba(244, 241, 234, 0.35);
-  color: var(--ink);
-  text-decoration: none;
-  transition: transform 250ms ease, border-color 250ms ease;
-}
-.project-card:hover, .project-card:focus-visible { border-color: var(--acid); }
-.project-card--lime { background: #1c280b; }
-.project-card--blue { background: #101d50; }
-.project-card--paper { background: #242424; }
-.project-topline { display: flex; justify-content: space-between; gap: 15px; color: #b1b6b2; font: 0.61rem var(--mono-font); letter-spacing: 0.04em; }
-.project-glyph { display: grid; place-items: center; flex: 1; min-height: 200px; color: var(--acid); font: 17rem/1 var(--display-font); opacity: 0.78; transform: rotate(-12deg); }
-.project-card--blue .project-glyph { color: #8eb1ff; }
-.project-card--paper .project-glyph { color: #f3b1e3; }
-.project-bottom { position: relative; z-index: 1; }
-.project-bottom h3 { margin-bottom: 12px; font: 400 2.3rem/0.95 var(--display-font); letter-spacing: -0.04em; }
-.project-bottom p { color: #bdc2c0; font-size: 0.81rem; line-height: 1.65; }
-.project-stack { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 19px; }
-.project-stack span { padding: 3px 7px; border: 1px solid rgba(244, 241, 234, 0.27); color: #d4d8d4; font: 0.57rem var(--mono-font); }
-.project-arrow { position: absolute; top: 55px; right: 22px; font-size: 1.4rem; transition: transform 220ms ease; }
-.project-card:hover .project-arrow, .project-card:focus-visible .project-arrow { transform: rotate(45deg); }
-.principle-section { display: grid; grid-template-columns: minmax(260px, 0.7fr) minmax(0, 1fr); gap: clamp(40px, 8vw, 130px); padding-top: var(--section-space); }
-.principle-intro > p:last-child { max-width: 330px; color: var(--muted); font-size: 0.9rem; }
-.principle-row { display: grid; grid-template-columns: 42px minmax(0, 0.8fr) minmax(0, 1fr); gap: 22px; padding: 23px 0; border-top: 1px solid var(--line); }
-.principle-row:last-child { border-bottom: 1px solid var(--line); }
-.principle-row > span { color: var(--muted); font: 0.61rem var(--mono-font); }
-.principle-row h3 { font-size: 0.94rem; font-weight: 700; line-height: 1.45; }
-.principle-row p { color: var(--muted); font-size: 0.8rem; line-height: 1.7; }
-.resource-section { padding-top: var(--section-space); }
-.resource-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-.resource-card { position: relative; min-height: 270px; padding: 22px; border: 1px solid var(--line); color: var(--ink); text-decoration: none; transition: background 180ms ease; }
-.resource-card:hover { background: var(--paper-soft); }
-.resource-top { display: flex; justify-content: space-between; color: var(--muted); font: 0.6rem var(--mono-font); }
-.resource-card h3 { margin-top: 52px; font: 400 2rem/1 var(--display-font); letter-spacing: -0.04em; }
-.resource-card p { max-width: 260px; margin-top: 14px; color: var(--muted); font-size: 0.8rem; }
-.resource-arrow { position: absolute; right: 20px; bottom: 20px; font-size: 1.2rem; }
-@media (max-width: 1679px) {
-  .story-rail { right: 8px; grid-template-columns: 1fr; gap: 0; }
-  .story-rail__stages { display: none; }
-}
-@media (max-width: 1200px) {
-  .hero { grid-template-columns: 1fr 0.95fr; }
-  .hero-visual :deep(.immersive-scene) { min-height: 420px; }
-  .project-grid { grid-template-columns: 1fr 1fr; }
-  .project-card:last-child { grid-column: span 2; min-height: 390px; }
-  .writing-grid { grid-template-columns: minmax(0, 1fr) 230px; gap: 40px; }
-}
-@media (max-width: 760px) {
-  .hero { grid-template-columns: 1fr; min-height: auto; padding-top: 42px; gap: 20px; }
-  .hero-kicker { margin-bottom: 26px; }
-  h1 { font-size: clamp(4.8rem, 20vw, 7.5rem); }
-  .hero-visual { min-height: auto; }
-  .hero-visual :deep(.immersive-scene) { height: 430px; min-height: 430px; }
-  .hero-footnote { flex-wrap: wrap; margin-top: 6px; font-size: 0.53rem; }
-  .writing-grid, .principle-section { grid-template-columns: 1fr; gap: 42px; }
-  .section-title-row { display: block; }
-  .section-link { margin-top: 25px; }
-  .projects-note { margin-top: 24px; text-align: left; }
-  .project-grid, .resource-grid { grid-template-columns: 1fr; }
-  .project-card, .project-card:last-child { min-height: 430px; grid-column: auto; }
-  .project-glyph { font-size: 12rem; }
-  .principle-row { grid-template-columns: 30px 1fr; gap: 14px; }
-  .principle-row p { grid-column: 2; }
-  .resource-card { min-height: 230px; }
-  .story-rail { right: 8px; }
-  .story-rail__line { height: 108px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .marquee-track { animation: none; }
-  .loading-lines span { animation: none; }
-  .motion-toggle { display: none; }
-  .story-rail, .story-rail__line, .story-rail__line i, .projects-section__backdrop::before { transition: none; }
-}
+@media(max-width:360px) {.hero-invitation {display:none;}.hero-topline {top:14%;}.hero-play {font-size:.74rem;}.program-console {padding:18px;}.program-section h2,.film-heading h2 {font-size:2.5rem;}.encore-section h2 {font-size:2.8rem;}}
 </style>

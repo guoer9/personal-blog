@@ -106,8 +106,8 @@ onBeforeUnmount(() => {
 <template>
   <article v-if="entry" class="document-detail page-stage page-shell" @load.capture="runtime?.measureAnchors?.()">
     <header class="simple-page-header">
-      <router-link to="/documents" class="back-link">← 返回资料库 / LIBRARY</router-link>
-      <p class="section-kicker">Document / 公开资料</p>
+      <router-link to="/writing" class="back-link">← 返回档案 / ARCHIVE</router-link>
+      <p class="section-kicker">Archive / 创作与记录</p>
       <img v-if="cover" :src="cover" class="document-cover" alt="" />
       <span v-if="entry.icon" class="document-icon" aria-hidden="true">{{ entry.icon }}</span>
       <h1>{{ entry.title }}</h1>
@@ -126,7 +126,7 @@ onBeforeUnmount(() => {
     <div v-if="entry.blocks" ref="documentContent" class="document-content"><NotionBlocks :blocks="entry.blocks" /></div>
     <div v-else ref="documentContent" class="document-content document-markdown" v-html="rendered" />
     <ArticleDiscussion v-if="entry.id" :key="`${entry.kind}:${entry.id}`" :kind="entry.kind" :article-id="entry.id" :initial-count="commentCount" @count-change="commentCount = $event" />
-    <footer><router-link to="/documents" class="editorial-button">继续浏览资料 ↗</router-link></footer>
+    <footer><router-link to="/writing" class="editorial-button">继续浏览档案 ↗</router-link></footer>
   </article>
   <div v-else class="document-state page-stage page-shell" :role="failed ? 'alert' : 'status'"><p class="section-kicker">{{ loading ? 'Loading document' : failed ? 'Unable to load' : 'Document not found' }}</p><h1>{{ loading ? '正在读取资料…' : failed ? '暂时无法读取这份资料。' : '资料未找到' }}</h1><p v-if="!loading && !failed">链接可能已失效，或这份资料已不再公开。</p><button v-if="failed" type="button" class="editorial-button" data-action="retry" @click="load">重新读取</button> <router-link v-if="!loading" to="/documents" class="editorial-button editorial-button--acid">返回资料库 ↗</router-link></div>
 </template>

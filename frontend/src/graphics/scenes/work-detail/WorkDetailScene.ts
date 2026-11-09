@@ -2,6 +2,8 @@ import { BoxGeometry, Group, Mesh, MeshBasicMaterial, OrthographicCamera, PlaneG
 import type { WorkDetailPageState } from '../pageStates'
 import type { PageSceneModule, SceneContext, SceneRenderContext, VisualState } from '../../runtime/types'
 import { disposeSceneResources } from '../sceneResources'
+import type { AudioFeatures } from '@/audio/performanceAudio'
+import { createLiquidScene, type LiquidSceneController } from '@/graphics/liquidScene'
 
 type DetailComposition = 'code' | 'film' | 'music' | 'neutral'
 
@@ -13,8 +15,12 @@ export class WorkDetailScene implements PageSceneModule<WorkDetailPageState> {
   private progress: Mesh<PlaneGeometry, MeshBasicMaterial> | null = null
   private composition: DetailComposition = 'neutral'
   private disposed = false
+  private liquid: LiquidSceneController | null = null
+  private context: SceneContext | null = null
+  constructor(private readonly audio?: AudioFeatures) {}
 
   mount(_context: SceneContext): void {
+    this.context = _context
     this.disposed = false
     this.camera.position.z = 18
     const code = new Group()
@@ -85,6 +91,14 @@ export class WorkDetailScene implements PageSceneModule<WorkDetailPageState> {
     if (this.disposed) return
     const category = pageState?.category
     this.composition = category === 'code' || category === 'film' || category === 'music' ? category : 'neutral'
+    if (this.audio && this.composition === 'music' && this.context) {
+      if (!this.liquid) {
+        this.liquid = createLiquidScene(this.context.renderer, { pointerX: 0, pointerY: 0, pointerVelocity: { x: 0, y: 0 }, scroll: .25 })
+        this.liquid.resize(visualState.viewportWidth, visualState.viewportHeight, visualState.dpr)
+      }
+      this.liquid.setQualityTier(visualState.qualityTier)
+      this.liquid.setInput({ pointerX: visualState.pointerX, pointerY: visualState.pointerY, pointerPixelX: visualState.pointerPixelX, pointerPixelY: visualState.pointerPixelY, pointerVelocity: visualState.pointerVelocity, scroll: .25, audio: this.audio })
+    }
     this.compositions.forEach((group, kind) => { group.visible = kind === this.composition })
     const music = this.compositions.get('music')!
     music.rotation.z = pageState?.playing ? Math.sin(visualState.timeMs * 0.0003) * 0.04 : 0
@@ -99,10 +113,17 @@ export class WorkDetailScene implements PageSceneModule<WorkDetailPageState> {
     film.rotation.x = visualState.pointerY * 0.04
   }
 
-  resize(): void {}
-  render(context: SceneRenderContext): void { if (!this.disposed) context.renderer.render(this.scene, this.camera) }
+  resize(width: number, height: number, dpr: number): void { this.liquid?.resize(width, height, dpr) }
+  render(context: SceneRenderContext): void {
+    if (this.disposed) return
+    if (this.composition === 'music' && this.liquid) this.liquid.render(context.visualState.timeMs)
+    else context.renderer.render(this.scene, this.camera)
+  }
   dispose(): void {
     if (this.disposed) return
+    this.liquid?.dispose()
+    this.liquid = null
+    this.context = null
     disposeSceneResources(this.scene)
     this.compositions.clear()
     this.progress = null

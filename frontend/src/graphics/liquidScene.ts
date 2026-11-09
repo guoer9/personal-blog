@@ -48,6 +48,7 @@ export interface SceneInput {
   pointerPixelY?: number
   pointerVelocity: { x: number; y: number }
   scroll: number
+  audio?: { bass: number; mid: number; treble: number; energy: number; active: boolean }
 }
 
 export interface SceneQuality {
@@ -156,6 +157,7 @@ export function createLiquidScene(
   const trailVelocity = new Vector2()
 
   const uniforms = {
+    uAudio: { value: new Vector3() },
     uTime: { value: 0 },
     uPointerX: { value: 0 },
     uPointerY: { value: 0 },
@@ -712,6 +714,7 @@ export function createLiquidScene(
       target.pointerVelocity.x = clamp(input.pointerVelocity.x, -4, 4)
       target.pointerVelocity.y = clamp(input.pointerVelocity.y, -4, 4)
       target.scroll = nextScroll
+      target.audio = input.audio
     },
     setQualityTier(tier) {
       if (disposed || tier === currentQualityTier) return
@@ -814,7 +817,14 @@ export function createLiquidScene(
       uniforms.uPointerX.value = current.pointerX
       uniforms.uPointerY.value = current.pointerY
       uniforms.uScroll.value = current.scroll
-      uniforms.uEnergy.value = easedMotionEnergy
+      const audio = target.audio
+      const band = (value: number | undefined) => audio?.active && Number.isFinite(value) ? clamp(value!, 0, 1) : 0
+      uniforms.uAudio.value.set(
+        damp(uniforms.uAudio.value.x, band(audio?.bass), 10, delta),
+        damp(uniforms.uAudio.value.y, band(audio?.mid), 10, delta),
+        damp(uniforms.uAudio.value.z, band(audio?.treble), 10, delta),
+      )
+      uniforms.uEnergy.value = easedMotionEnergy + band(audio?.energy) * .35
       uniforms.uHoverActive.value = hoverHit ? 1 : 0
       uniforms.uHoverStrength.value = hoverStrength
       particleMaterial.uniforms.uPointerVelocity.value.copy(trailVelocity)
@@ -828,6 +838,7 @@ export function createLiquidScene(
       canvas.dataset.spherePressDepth = pressDepth.toFixed(4)
       canvas.dataset.sphereTrailStrength = clamp(trailStrength, 0, 1).toFixed(4)
       canvas.dataset.sphereScale = scale.toFixed(4)
+      canvas.dataset.audioEnergy = band(audio?.energy).toFixed(4)
       canvas.dataset.sphereRippleSequence = String(rippleSequence)
       if (!renderGlassPipeline()) renderer.render(scene, camera)
     },

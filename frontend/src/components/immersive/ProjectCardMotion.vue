@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from 'vue'
-import { prefersReducedMotion, projectCardTransform, springStep, type SpringState } from '@/graphics/motion'
+import { projectCardTransform, springStep, type SpringState } from '@/graphics/motion'
 
 withDefaults(defineProps<{ accent: 'lime' | 'blue' | 'paper' }>(), { accent: 'lime' })
 const root = ref<HTMLElement | null>(null)
@@ -45,7 +45,7 @@ function startAnimation() {
 }
 
 function onPointerMove(event: PointerEvent) {
-  if (!root.value || prefersReducedMotion() || event.pointerType === 'touch') return
+  if (!root.value || event.pointerType === 'touch') return
   const motion = projectCardTransform(event.clientX, event.clientY, root.value.getBoundingClientRect())
   targetX = motion.rotateX
   targetY = motion.rotateY
@@ -116,7 +116,7 @@ onBeforeUnmount(() => {
 .project-card-motion:hover::before { opacity: 1; }
 .project-card-motion :deep(.project-card) { height: 100%; transform: translateZ(0); }
 .project-card-motion :deep(.project-card:hover) { transform: none; }
-@media (pointer: coarse), (prefers-reduced-motion: reduce) {
+@media (pointer: coarse) {
   .project-card-motion { transform: none; }
   .project-card-motion::before { display: none; }
 }
