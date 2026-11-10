@@ -38,7 +38,7 @@ onMounted(async () => {
         <el-card class="stat-card" shadow="hover">
           <template #header>
             <div class="card-header">
-              <el-icon size="24" color="#409eff"><Document /></el-icon>
+              <el-icon size="24" color="var(--admin-accent)"><Document /></el-icon>
               <span>文章数量</span>
             </div>
           </template>
@@ -50,7 +50,7 @@ onMounted(async () => {
         <el-card class="stat-card" shadow="hover">
           <template #header>
             <div class="card-header">
-              <el-icon size="24" color="#67c23a"><PriceTag /></el-icon>
+              <el-icon size="24" color="var(--admin-success)"><PriceTag /></el-icon>
               <span>标签数量</span>
             </div>
           </template>
@@ -62,7 +62,7 @@ onMounted(async () => {
         <el-card class="stat-card" shadow="hover">
           <template #header>
             <div class="card-header">
-              <el-icon size="24" color="#e6a23c"><FolderOpened /></el-icon>
+              <el-icon size="24" color="var(--el-color-warning)"><FolderOpened /></el-icon>
               <span>文件数量</span>
             </div>
           </template>
@@ -106,7 +106,7 @@ onMounted(async () => {
   font-size: 24px;
   font-weight: 600;
   margin-bottom: 24px;
-  color: #303133;
+  color: var(--admin-text);
 }
 
 .stat-card {
@@ -122,7 +122,7 @@ onMounted(async () => {
 .stat-value {
   font-size: 36px;
   font-weight: 600;
-  color: #303133;
+  color: var(--admin-text);
 }
 
 .quick-actions {

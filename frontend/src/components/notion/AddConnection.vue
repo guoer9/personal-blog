@@ -74,17 +74,17 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.add-connection { padding: 26px; border: 1px solid #d4dae5; border-radius: 12px; background: #fff; margin: 20px 0; color: #25304a; }
+.add-connection { padding: 26px; border: 1px solid var(--admin-border-soft); border-radius: 12px; background: var(--admin-surface); margin: 20px 0; color: var(--admin-text); }
 h2 { font-size: 19px; margin: 0 0 15px; }
-.help { color: #56637a; font-size: 13px; line-height: 1.7; }
+.help { color: var(--admin-muted); font-size: 13px; line-height: 1.7; }
 label { display: block; font-size: 14px; margin: 16px 0 8px; }
-input { display: block; box-sizing: border-box; width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #a7b0c0; border-radius: 6px; font: inherit; background: #fff; color: #25304a; }
-button { min-height: 44px; margin-top: 18px; padding: 10px 15px; border: 1px solid #64748b; border-radius: 6px; background: #fff; color: #25304a; font: inherit; font-size: 14px; cursor: pointer; }
-button:not(:disabled):hover { background: #eef2ff; }
+input { display: block; box-sizing: border-box; width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--admin-border); border-radius: 6px; font: inherit; background: var(--admin-surface); color: var(--admin-text); }
+button { min-height: 44px; margin-top: 18px; padding: 10px 15px; border: 1px solid var(--admin-border); border-radius: 6px; background: var(--admin-surface); color: var(--admin-text); font: inherit; font-size: 14px; cursor: pointer; }
+button:not(:disabled):hover { background: var(--admin-accent-soft); }
 button:disabled { opacity: .55; cursor: default; }
-:is(button, input):focus-visible { outline: 3px solid #2358d4; outline-offset: 3px; }
+:is(button, input):focus-visible { outline: 3px solid var(--admin-accent); outline-offset: 3px; }
 .notice { margin: 16px 0 0; padding: 14px 18px; border-radius: 6px; line-height: 1.7; }
-.error { background: #fff1ef; color: #943324; }
-.success { background: #e9f7ee; color: #24613c; }
+.error { background: var(--admin-danger-bg); color: var(--admin-danger); }
+.success { background: var(--admin-success-bg); color: var(--admin-success); }
 @media (max-width: 700px) { .add-connection { padding: 18px; } }
 </style>

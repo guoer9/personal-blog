@@ -108,7 +108,7 @@ onMounted(() => {
 .page-title {
   font-size: 24px;
   font-weight: 600;
-  color: #303133;
+  color: var(--admin-text);
 }
 
 .create-form {

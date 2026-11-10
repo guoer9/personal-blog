@@ -137,7 +137,7 @@ onMounted(() => {
 .page-title {
   font-size: 24px;
   font-weight: 600;
-  color: #303133;
+  color: var(--admin-text);
 }
 
 .post-card {
@@ -152,11 +152,11 @@ onMounted(() => {
 
 .comment-count {
   font-size: 12px;
-  color: #909399;
+  color: var(--admin-muted);
 }
 
 .reply-tag {
-  color: #909399;
+  color: var(--admin-muted);
   font-size: 12px;
   margin-right: 4px;
 }

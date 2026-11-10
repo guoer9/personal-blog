@@ -46,15 +46,15 @@ onMounted(load)
 .admin-works { max-width: 1200px; }
 header { display: flex; align-items: center; justify-content: space-between; gap: 25px; margin-bottom: 30px; }
 h1 { font-size: 1.6rem; margin-bottom: 10px; }
-header p, .empty-works { color: #52616b; font-size: .9rem; }
-.works-table { overflow-x: auto; background: white; }
+header p, .empty-works { color: var(--admin-muted); font-size: .9rem; }
+.works-table { overflow-x: auto; background: var(--admin-surface); }
 table { width: 100%; border-collapse: collapse; font-size: .9rem; }
-th, td { text-align: left; padding: 20px; border-bottom: 1px solid #ddd; vertical-align: top; }
-td small { display: block; margin-top: 6px; color: #52616b; }
+th, td { text-align: left; padding: 20px; border-bottom: 1px solid var(--admin-border-soft); vertical-align: top; }
+td small { display: block; margin-top: 6px; color: var(--admin-muted); }
 td:last-child > * { display: inline-block; margin: 0 16px 8px 0; }
-td button { background: white; border: 1px solid #aaa; padding: 3px 12px; cursor: pointer; }
-.published { color: #23753a; }
-.admin-error { padding: 16px; color: #8b2424; background: #fff1f1; }
-.asset-storage { padding: 16px; margin-bottom: 20px; background: white; font-size: .85rem; }.asset-storage p { margin-bottom: 8px; }.asset-storage button { padding: 7px 12px; border: 1px solid #aaa; cursor: pointer; }
+td button { color: var(--admin-text); background: var(--admin-surface); border: 1px solid var(--admin-border); padding: 3px 12px; cursor: pointer; }
+.published { color: var(--admin-success); }
+.admin-error { padding: 16px; color: var(--admin-danger); background: var(--admin-danger-bg); }
+.asset-storage { padding: 16px; margin-bottom: 20px; background: var(--admin-surface); font-size: .85rem; }.asset-storage p { margin-bottom: 8px; }.asset-storage button { color: var(--admin-text); background: var(--admin-surface-raised); padding: 7px 12px; border: 1px solid var(--admin-border); cursor: pointer; }
 @media (max-width: 650px) { header { align-items: flex-start; flex-direction: column; } }
 </style>

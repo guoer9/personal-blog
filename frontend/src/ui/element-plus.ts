@@ -66,8 +66,12 @@ export async function installElementPlus(app?: ElementPlusApp): Promise<void> {
   }
 }
 
-export function installElementPlusForRoute(path: string): Promise<void> {
-  if (path.startsWith('/admin') || path === '/login' || path === '/register') {
+export async function installElementPlusForRoute(path: string): Promise<void> {
+  if (path.startsWith('/admin')) {
+    await Promise.all([installElementPlus(), import('@/styles/admin-theme.css')])
+    return
+  }
+  if (path === '/login' || path === '/register') {
     return installElementPlus()
   }
   return Promise.resolve()

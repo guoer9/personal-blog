@@ -28,7 +28,7 @@ async function handleLogout() {
     <el-aside width="220px" class="sidebar">
       <nav aria-label="后台导航">
       <div class="sidebar-header">
-        <router-link to="/" class="sidebar-brand">博客管理</router-link>
+        <router-link to="/" class="sidebar-brand">GUOER / 管理后台</router-link>
       </div>
       
       <el-menu
@@ -119,7 +119,8 @@ async function handleLogout() {
 }
 
 .sidebar {
-  background: #304156;
+  background: var(--admin-surface);
+  border-right: 1px solid var(--admin-border-soft);
 }
 
 .sidebar-header {
@@ -127,12 +128,13 @@ async function handleLogout() {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--admin-border-soft);
 }
 
 .sidebar-brand {
-  color: #fff;
-  font-size: 18px;
+  color: var(--admin-text);
+  font: 600 13px var(--mono-font);
+  letter-spacing: .04em;
   font-weight: 600;
   cursor: pointer;
   text-decoration: none;
@@ -144,17 +146,18 @@ async function handleLogout() {
 }
 
 .sidebar-menu :deep(.el-menu-item) {
-  color: #bfcbd9;
+  color: var(--admin-muted);
 }
 
 .sidebar-menu :deep(.el-menu-item:hover),
 .sidebar-menu :deep(.el-menu-item.is-active) {
-  background-color: #263445;
-  color: #409eff;
+  background-color: var(--admin-accent-soft);
+  color: var(--admin-accent);
 }
 
 .admin-header {
-  background: #fff;
+  background: var(--admin-surface);
+  border-bottom: 1px solid var(--admin-border-soft);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   display: flex;
   align-items: center;
@@ -174,10 +177,10 @@ async function handleLogout() {
 }
 
 .admin-main {
-  background: #f0f2f5;
+  background: var(--admin-bg);
   padding: 24px;
 }
-:global(.el-message--success) { --el-message-text-color: #245a35; }
+.sidebar-menu :deep(.el-menu-item.is-active) { box-shadow: inset 3px 0 var(--admin-accent); }
 @media (max-width: 760px) {
   .admin-layout { flex-direction: column; }
   .sidebar { width: 100% !important; }

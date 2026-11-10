@@ -140,15 +140,15 @@ onMounted(fetchArticles)
 <style scoped>
 .posts-page { max-width: 1400px; }
 .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 24px; }
-.page-title { font-size: 24px; font-weight: 600; color: #303133; margin: 0; }
-.page-lede { color: #606266; margin: 8px 0 0; }
-.article-link { color: #2455b8; font-weight: 600; text-decoration: none; }
+.page-title { font-size: 24px; font-weight: 600; color: var(--admin-text); margin: 0; }
+.page-lede { color: var(--admin-muted); margin: 8px 0 0; }
+.article-link { color: var(--admin-link); font-weight: 600; text-decoration: none; }
 .article-link:hover { text-decoration: underline; }
-.article-title { font-weight: 600; color: #303133; }
-.article-source { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; color: #909399; font-size: 12px; }
-.article-source a { color: #2455b8; text-decoration: none; }
+.article-title { font-weight: 600; color: var(--admin-text); }
+.article-source { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; color: var(--admin-muted); font-size: 12px; }
+.article-source a { color: var(--admin-link); text-decoration: none; }
 .tag-item { margin: 0 4px 4px 0; }
-.no-tags, .operation-state { color: #909399; }
+.no-tags, .operation-state { color: var(--admin-muted); }
 .pagination { margin-top: 20px; display: flex; justify-content: flex-end; }
 @media (max-width: 700px) { .page-header { flex-direction: column; } }
 </style>

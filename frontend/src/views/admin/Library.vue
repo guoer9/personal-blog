@@ -343,45 +343,45 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.library-page { max-width: 1280px; color: #303133; }
+.library-page { max-width: 1280px; color: var(--admin-text); }
 .library-header, .upload-heading, .browser-toolbar, .quota-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .library-header { margin-bottom: 24px; }
 h1 { margin: 0; font-size: 24px; font-weight: 600; }
 h2 { margin: 0 0 8px; font-size: 17px; }
 p { margin: 8px 0; line-height: 1.6; }
-.library-header p, .upload-heading p, .storage-status p, .muted { color: #606266; font-size: 13px; }
-.library-card { padding: 20px; margin-bottom: 20px; background: #fff; border: 1px solid #dcdfe6; border-radius: 8px; }
-button, .file-select { min-height: 36px; padding: 7px 12px; color: #303133; background: #fff; border: 1px solid #c0c4cc; border-radius: 5px; font: inherit; font-size: 14px; cursor: pointer; }
-button:hover:not(:disabled), .file-select:hover:not(.disabled) { color: #1765b0; border-color: #409eff; background: #ecf5ff; }
-button:disabled, .disabled { color: #606266; background: #f5f7fa; cursor: not-allowed; }
-button:focus-visible, input:focus-visible, .file-select:focus-within { outline: 3px solid #409eff; outline-offset: 3px; }
-.primary, .file-select { background: #1765b0; color: white; border-color: #1765b0; }
+.library-header p, .upload-heading p, .storage-status p, .muted { color: var(--admin-muted); font-size: 13px; }
+.library-card { padding: 20px; margin-bottom: 20px; background: var(--admin-surface); border: 1px solid var(--admin-border-soft); border-radius: 8px; }
+button, .file-select { min-height: 36px; padding: 7px 12px; color: var(--admin-text); background: var(--admin-surface); border: 1px solid var(--admin-border); border-radius: 5px; font: inherit; font-size: 14px; cursor: pointer; }
+button:hover:not(:disabled), .file-select:hover:not(.disabled) { color: var(--admin-accent); border-color: var(--admin-accent); background: var(--admin-accent-soft); }
+button:disabled, .disabled { color: var(--admin-muted); background: var(--admin-surface-raised); cursor: not-allowed; }
+button:focus-visible, input:focus-visible, .file-select:focus-within { outline: 3px solid var(--admin-accent); outline-offset: 3px; }
+.primary, .file-select { background: var(--admin-accent); color: var(--admin-accent-ink); border-color: var(--admin-accent); }
 .file-select { position: relative; display: inline-flex; align-items: center; overflow: hidden; }
 .file-select input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
 .file-select input:disabled { cursor: not-allowed; }
-progress { display: block; width: 100%; height: 12px; accent-color: #1765b0; margin: 12px 0; }
-.quota-heading span { color: #606266; font-size: 13px; }
+progress { display: block; width: 100%; height: 12px; accent-color: var(--admin-accent); margin: 12px 0; }
+.quota-heading span { color: var(--admin-muted); font-size: 13px; }
 .upload-actions, .entry-actions, .view-switch, .dialog-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.view-switch [aria-pressed="true"] { background: #ecf5ff; color: #1765b0; border-color: #1765b0; }
+.view-switch [aria-pressed="true"] { background: var(--admin-accent-soft); color: var(--admin-accent); border-color: var(--admin-accent); }
 .breadcrumbs { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 18px 0; overflow-wrap: anywhere; }
-.breadcrumbs button, .folder-link { padding: 4px 6px; background: transparent; border-color: transparent; color: #1765b0; }
+.breadcrumbs button, .folder-link { padding: 4px 6px; background: transparent; border-color: transparent; color: var(--admin-accent); }
 .table-scroll { overflow-x: auto; }
 table { width: 100%; min-width: 650px; border-collapse: collapse; font-size: 14px; }
-th, td { padding: 14px 10px; text-align: left; border-bottom: 1px solid #ebeef5; }
-th { color: #606266; font-weight: 600; background: #f5f7fa; }
+th, td { padding: 14px 10px; text-align: left; border-bottom: 1px solid var(--admin-border-soft); }
+th { color: var(--admin-muted); font-weight: 600; background: var(--admin-surface-raised); }
 .entry-name { min-width: 180px; max-width: 360px; overflow-wrap: anywhere; }
-.kind { display: block; font-size: 12px; color: #606266; margin-bottom: 4px; }
+.kind { display: block; font-size: 12px; color: var(--admin-muted); margin-bottom: 4px; }
 .entry-actions { min-width: 220px; }
 .entry-actions button { min-height: 32px; padding: 4px 8px; font-size: 13px; }
-.danger, .error { color: #b42318; }
-.error { padding: 10px 12px; background: #fff1f0; border-radius: 5px; overflow-wrap: anywhere; }
-.notice { color: #206625; }
-.empty { padding: 36px 0; color: #606266; text-align: center; }
+.danger, .error { color: var(--admin-danger); }
+.error { padding: 10px 12px; background: var(--admin-danger-bg); border-radius: 5px; overflow-wrap: anywhere; }
+.notice { color: var(--admin-success); }
+.empty { padding: 36px 0; color: var(--admin-muted); text-align: center; }
 .modal-backdrop { position: fixed; inset: 0; z-index: 2100; background: #0006; display: flex; justify-content: center; align-items: center; padding: 20px; }
-.library-dialog { width: min(100%, 520px); max-height: 85vh; overflow: auto; padding: 24px; background: white; border-radius: 10px; box-shadow: 0 12px 40px #0003; }
+.library-dialog { width: min(100%, 520px); max-height: 85vh; overflow: auto; padding: 24px; background: var(--admin-surface); border-radius: 10px; box-shadow: 0 12px 40px #0003; }
 .library-dialog h2 { margin-bottom: 20px; }
 .library-dialog label { display: block; margin-bottom: 8px; }
-.library-dialog input { box-sizing: border-box; width: 100%; padding: 10px; border: 1px solid #c0c4cc; border-radius: 5px; font: inherit; }
+.library-dialog input { color: var(--admin-text); background: var(--admin-bg); box-sizing: border-box; width: 100%; padding: 10px; border: 1px solid var(--admin-border); border-radius: 5px; font: inherit; }
 .dialog-actions { justify-content: flex-end; margin-top: 24px; }
 .picker-list { list-style: none; padding: 0; margin: 12px 0; max-height: 250px; overflow: auto; }
 .picker-list button { width: 100%; text-align: left; margin-bottom: 6px; overflow-wrap: anywhere; }

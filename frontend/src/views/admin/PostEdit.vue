@@ -138,6 +138,7 @@ onMounted(() => {
             <el-form-item label="内容" prop="content">
               <MdEditor
                 v-model="form.content"
+                theme="dark"
                 style="height: 500px"
                 :on-upload-img="handleUpload"
               />
@@ -221,7 +222,7 @@ onMounted(() => {
   font-size: 24px;
   font-weight: 600;
   margin-top: 16px;
-  color: #303133;
+  color: var(--admin-text);
 }
 
 .editor-card {
@@ -232,7 +233,7 @@ onMounted(() => {
   position: sticky;
   top: 80px;
 }
-.publish-help { margin: 8px 0 0; color: #697386; font-size: 13px; line-height: 1.6; }
+.publish-help { margin: 8px 0 0; color: var(--admin-muted); font-size: 13px; line-height: 1.6; }
 
 @media (max-width: 992px) {
   .settings-card {

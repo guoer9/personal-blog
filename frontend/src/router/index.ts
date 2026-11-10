@@ -191,6 +191,9 @@ const pageTitles: Record<string, string> = {
 
 router.afterEach((to) => {
   document.title = pageTitles[String(to.name)] || siteTitle
+  const isAdminRoute = to.path.startsWith('/admin')
+  document.documentElement.classList.toggle('admin-theme', isAdminRoute)
+  document.documentElement.classList.toggle('dark', isAdminRoute)
 })
 
 // 路由守卫

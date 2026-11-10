@@ -132,6 +132,39 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.document-meta a { color: var(--electric-blue); text-underline-offset: 3px; }.document-no-tags { color: var(--muted); font-size: .8rem; }
-.document-detail { max-width: 1100px; }.document-cover { display: block; width: 100%; max-height: 300px; object-fit: cover; margin: 24px 0; }.document-icon { display: block; font-size: 3rem; margin: 20px 0; }.simple-page-header h1 { font-size: clamp(2.4rem,6vw,5rem); line-height: 1.2; overflow-wrap: anywhere; }.document-meta { display: flex; flex-wrap: wrap; gap: 24px; color: var(--muted); font: .7rem var(--mono-font); margin: 24px 0; }.document-categories { display: flex; flex-wrap: wrap; gap: 10px; }.document-categories a { color: var(--ink); text-decoration: none; padding: 8px 12px; border: 1px solid var(--line); font-size: .8rem; }.document-content { max-width: 800px; margin: 50px auto 70px; font-size: 1.02rem; line-height: 1.95; overflow-wrap: anywhere; }.document-markdown :deep(h2) { margin: 2em 0 .8em; font: 400 clamp(1.6rem,4vw,2.2rem)/1.4 var(--display-font); }.document-markdown :deep(h3) { margin: 1.7em 0 .7em; font-size: 1.3rem; }.document-markdown :deep(h1) { font: 400 2.5rem/1.4 var(--display-font); }.document-markdown :deep(a) { color: #2359a8; text-underline-offset: 4px; }.document-markdown :deep(img) { max-width: 100%; height: auto; }.document-markdown :deep(pre) { overflow-x: auto; background: var(--paper-soft); border: 1px solid var(--line); padding: 20px; font: .8rem/1.8 var(--mono-font); white-space: pre; }.document-markdown :deep(:not(pre) > code) { font-family: var(--mono-font); font-size: .85em; background: var(--paper-soft); padding: 2px 5px; }.document-markdown :deep(blockquote) { margin: 24px 0; border-left: 3px solid var(--electric-blue); padding: 4px 22px; color: var(--muted); }.document-markdown :deep(table) { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }.document-markdown :deep(th),.document-markdown :deep(td) { border: 1px solid var(--line); padding: 8px 14px; }.document-markdown :deep(ul),.document-markdown :deep(ol) { padding-left: 1.5em; }.document-detail footer { border-top: 1px solid var(--line); padding: 30px 0; }.document-state { padding-top: 100px; }.document-state h1 { font: 400 clamp(2.3rem,5vw,4rem)/1.3 var(--display-font); }.document-state > p { color: var(--muted); }:is(a,button):focus-visible { outline: 3px solid var(--electric-blue); outline-offset: 4px; }
+.document-detail {
+  /* A shared reading palette for both Markdown and recursive Notion blocks. */
+  --notion-text: #dfddd5;
+  --notion-heading: #f2f0e9;
+  --notion-muted: #aaa89f;
+  --notion-link: #a9c4ff;
+  --notion-link-underline: #7185af;
+  --notion-quote-border: #a2b882;
+  --notion-surface: #191c1a;
+  --notion-border: #41463f;
+  --notion-inline-code: #f2b6c9;
+  --notion-inline-code-background: #262126;
+  --notion-gray: #b7b8b2;
+  --notion-brown: #d7b397;
+  --notion-orange: #f1b27d;
+  --notion-yellow: #e4cc80;
+  --notion-green: #a5cfb3;
+  --notion-blue: #a9c4ff;
+  --notion-purple: #cbb4ed;
+  --notion-pink: #e7adc9;
+  --notion-red: #f0aaa2;
+  --notion-gray-background: #272927;
+  --notion-brown-background: #342820;
+  --notion-orange-background: #38281d;
+  --notion-yellow-background: #35301c;
+  --notion-green-background: #213027;
+  --notion-blue-background: #222d40;
+  --notion-purple-background: #2d2639;
+  --notion-pink-background: #352532;
+  --notion-red-background: #382523;
+}
+.document-meta a { color: var(--notion-link); text-underline-offset: 3px; }.document-no-tags { color: var(--muted); font-size: .8rem; }
+.document-detail { max-width: 1100px; }.document-cover { display: block; width: 100%; max-height: 300px; object-fit: cover; margin: 24px 0; }.document-icon { display: block; font-size: 3rem; margin: 20px 0; }.simple-page-header h1 { font-size: clamp(2.4rem,6vw,5rem); line-height: 1.2; overflow-wrap: anywhere; }.document-meta { display: flex; flex-wrap: wrap; gap: 24px; color: var(--muted); font: .7rem var(--mono-font); margin: 24px 0; }.document-categories { display: flex; flex-wrap: wrap; gap: 10px; }.document-categories a { color: var(--ink); text-decoration: none; padding: 8px 12px; border: 1px solid var(--line); font-size: .8rem; }.document-content { color: var(--notion-text); max-width: 800px; margin: 50px auto 70px; font-size: 1.02rem; line-height: 1.95; overflow-wrap: anywhere; }.document-markdown :deep(h2) { margin: 2em 0 .8em; font: 400 clamp(1.6rem,4vw,2.2rem)/1.4 var(--display-font); }.document-markdown :deep(h3) { margin: 1.7em 0 .7em; font-size: 1.3rem; }.document-markdown :deep(h1) { font: 400 2.5rem/1.4 var(--display-font); }.document-markdown :deep(a) { color: var(--notion-link); text-decoration-color: var(--notion-link-underline); text-underline-offset: 4px; }.document-markdown :deep(img) { max-width: 100%; height: auto; }.document-markdown :deep(pre) { overflow-x: auto; background: var(--notion-surface); border: 1px solid var(--line); padding: 20px; font: .8rem/1.8 var(--mono-font); white-space: pre; }.document-markdown :deep(:not(pre) > code) { font-family: var(--mono-font); font-size: .85em; color: var(--notion-inline-code); background: var(--notion-inline-code-background); padding: 2px 5px; }.document-markdown :deep(blockquote) { margin: 24px 0; border-left: 3px solid var(--notion-quote-border); padding: 4px 22px; color: var(--notion-text); }.document-markdown :deep(table) { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }.document-markdown :deep(th),.document-markdown :deep(td) { border: 1px solid var(--line); padding: 8px 14px; }.document-markdown :deep(ul),.document-markdown :deep(ol) { padding-left: 1.5em; }.document-detail footer { border-top: 1px solid var(--line); padding: 30px 0; }.document-state { padding-top: 100px; }.document-state h1 { font: 400 clamp(2.3rem,5vw,4rem)/1.3 var(--display-font); }.document-state > p { color: var(--muted); }:is(a,button):focus-visible { outline: 3px solid var(--notion-link, #a9c4ff); outline-offset: 4px; }
+.document-markdown :deep(:is(h1, h2, h3, h4, h5, h6)) { color: var(--notion-heading); }
+.document-markdown :deep(th) { background: var(--notion-surface); }
 </style>
