@@ -1,0 +1,28 @@
+[Unit]
+Description=HAPI cloud Codex Runner 0.36.4
+After=network-online.target hapi-hub.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/hapi-workspace
+Environment=HOME=/root
+Environment=HAPI_HOME=/root/.hapi-runner
+Environment=HAPI_API_URL=http://127.0.0.1:3006
+Environment=CODEX_HOME=/root/.hapi-runner/codex-home
+Environment=HAPI_DISABLE_PEER_TOOLS=1
+Environment=HAPI_CODEX_APP_SERVER_BIN=/usr/local/bin/codex
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=HTTP_PROXY=http://127.0.0.1:7890
+Environment=HTTPS_PROXY=http://127.0.0.1:7890
+Environment=NO_PROXY=localhost,127.0.0.1,::1
+ExecStart=/opt/hapi/0.36.4/hapi runner start-sync --workspace-root /root/hapi-workspace --workspace-root /srv/personal-blog
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+KillMode=process
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

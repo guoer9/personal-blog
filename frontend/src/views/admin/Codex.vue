@@ -7,7 +7,7 @@ import { CODEX_CONSOLE_URL } from '@/config/codex'
     <header class="page-heading">
       <div>
         <h1 id="codex-title">Codex 控制台</h1>
-        <p>通过独立控制台连接 Mac 上的 Codex 执行节点。</p>
+        <p>通过独立控制台连接 Mac 或云服务器上的 Codex。</p>
       </div>
       <el-button tag="a" :href="CODEX_CONSOLE_URL" target="_blank" rel="noopener noreferrer" type="primary">
         <el-icon><TopRight /></el-icon>
@@ -18,11 +18,11 @@ import { CODEX_CONSOLE_URL } from '@/config/codex'
     <dl class="connection-details">
       <div>
         <dt>执行节点</dt>
-        <dd>Mac 上已加载并连接的 Codex 会话</dd>
+        <dd>新建会话时选择 MacBook Air 或阿里云服务器</dd>
       </div>
       <div>
         <dt>节点离线</dt>
-        <dd>可查看云端已同步历史；继续执行需 Mac 在线</dd>
+        <dd>可查看已同步历史；继续会话需对应节点在线，云端会话可独立运行</dd>
       </div>
       <div>
         <dt>登录</dt>
