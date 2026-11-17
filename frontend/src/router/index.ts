@@ -156,6 +156,11 @@ const router = createRouter({
           component: () => import('@/views/admin/NotionSync.vue'),
         },
         {
+          path: 'codex',
+          name: 'AdminCodex',
+          component: () => import('@/views/admin/Codex.vue'),
+        },
+        {
           path: 'tags',
           name: 'AdminTags',
           component: () => import('@/views/admin/Tags.vue'),
@@ -187,6 +192,7 @@ const pageTitles: Record<string, string> = {
   Login: `登录 · ${siteTitle}`,
   Register: `注册 · ${siteTitle}`,
   AdminNotion: `Notion 连接与资料库 · ${siteTitle}`,
+  AdminCodex: `Codex 控制台 · ${siteTitle}`,
 }
 
 router.afterEach((to) => {

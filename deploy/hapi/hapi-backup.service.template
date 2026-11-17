@@ -1,0 +1,8 @@
+[Unit]
+Description=Consistent HAPI state backup
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/hapi-backup
+UMask=0077
+TimeoutStartSec=180

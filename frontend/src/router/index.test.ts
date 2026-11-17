@@ -92,3 +92,73 @@ describe('Notion publication management route', () => {
     expect(route.matched.some(record => record.meta.requiresAdmin)).toBe(true)
   })
 })
+
+describe('Codex console route', () => {
+  it('keeps the external console entry inside the authenticated admin area', async () => {
+    const { default: router } = await import('./index')
+    const route = router.resolve('/admin/codex')
+    expect(route.name).toBe('AdminCodex')
+    expect(route.matched.some(record => record.meta.requiresAuth)).toBe(true)
+    expect(route.matched.some(record => record.meta.requiresAdmin)).toBe(true)
+  })
+
+  it('sends signed-out visitors to administrator login', async () => {
+    setActivePinia(createPinia())
+    localStorage.removeItem('token')
+    localStorage.removeItem('refreshToken')
+    const { default: router } = await import('./index')
+    await router.push('/admin/codex')
+    expect(router.currentRoute.value.name).toBe('AdminLogin')
+    expect(router.currentRoute.value.query.redirect).toBe('/admin/codex')
+  })
+
+  it('blocks a signed-in non-admin account', async () => {
+    setActivePinia(createPinia())
+    localStorage.removeItem('token')
+    localStorage.removeItem('refreshToken')
+    const { useUserStore } = await import('@/stores/user')
+    const userStore = useUserStore()
+    userStore.$patch({
+      token: 'test-session',
+      userInfo: {
+        id: 7,
+        username: 'reader',
+        email: 'reader@example.test',
+        is_admin: false,
+        is_active: true,
+        created_at: '2026-11-17T00:00:00Z',
+      },
+    })
+    const { default: router } = await import('./index')
+    await router.push('/admin/codex')
+    expect(router.currentRoute.value.name).toBe('Home')
+  })
+
+  it('allows an administrator account', async () => {
+    setActivePinia(createPinia())
+    localStorage.removeItem('token')
+    localStorage.removeItem('refreshToken')
+    const { useUserStore } = await import('@/stores/user')
+    const userStore = useUserStore()
+    userStore.$patch({
+      token: 'test-session',
+      userInfo: {
+        id: 1,
+        username: 'admin',
+        email: 'admin@example.test',
+        is_admin: true,
+        is_active: true,
+        created_at: '2026-11-17T00:00:00Z',
+      },
+    })
+    const { default: router } = await import('./index')
+    await router.push('/admin/codex')
+    expect(router.currentRoute.value.name).toBe('AdminCodex')
+  })
+
+  it('uses a credential-free HTTPS destination', async () => {
+    const { CODEX_CONSOLE_URL } = await import('@/config/codex')
+    expect(CODEX_CONSOLE_URL).toBe('https://codex.guoer9.me')
+    expect(CODEX_CONSOLE_URL).not.toMatch(/[?#]/)
+  })
+})

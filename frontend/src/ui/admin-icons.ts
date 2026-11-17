@@ -6,6 +6,7 @@ import {
   FolderOpened,
   Plus,
   PriceTag,
+  TopRight,
   Upload,
   View,
 } from '@element-plus/icons-vue'
@@ -18,6 +19,7 @@ export default {
   FolderOpened,
   Plus,
   PriceTag,
+  TopRight,
   Upload,
   View,
 }

@@ -19,6 +19,7 @@ vi.mock('@element-plus/icons-vue', () => ({
   FolderOpened: { name: 'FolderOpened' },
   Plus: { name: 'Plus' },
   PriceTag: { name: 'PriceTag' },
+  TopRight: { name: 'TopRight' },
   Upload: { name: 'Upload' },
   View: { name: 'View' },
 }))
@@ -42,7 +43,7 @@ describe('Element Plus route installer', () => {
     await Promise.all([installElementPlus(), installElementPlus()])
 
     expect(use).toHaveBeenCalledTimes(1)
-    expect(component).toHaveBeenCalledTimes(9)
+    expect(component).toHaveBeenCalledTimes(10)
   })
 
   it('loads Element Plus only for protected or registration routes', async () => {

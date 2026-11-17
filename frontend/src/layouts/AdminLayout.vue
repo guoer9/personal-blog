@@ -50,6 +50,10 @@ async function handleLogout() {
           <el-icon><Document /></el-icon>
           <span>Notion 连接与资料库</span>
         </el-menu-item>
+        <el-menu-item index="/admin/codex">
+          <el-icon><ChatDotRound /></el-icon>
+          <span>Codex 控制台</span>
+        </el-menu-item>
         <el-menu-item index="/admin/comments">
           <el-icon><ChatDotRound /></el-icon>
           <span>评论管理</span>
