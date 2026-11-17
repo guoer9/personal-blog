@@ -46,3 +46,7 @@ nginx -t && systemctl reload nginx
 - 停止 worker：`launchctl bootout gui/$(id -u)/com.guoer.hapi-desktop-attach`。这只断开投影，云端历史保留。
 - 桌面 App 与专用线程已加载时，可用 `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.guoer.hapi-desktop-attach.plist` 启动；注册仍在但进程已退出时先检查 socket，再 `launchctl kickstart gui/$(id -u)/com.guoer.hapi-desktop-attach`。
 - 此次隔离 App 的 WebSocket 环境只对其生效；当前日常 App 正在工作，尚未切换，需在空闲窗口按相同已验证方式接入。
+
+## 本轮博客发布与快速回退
+
+入口产品提交为 `4104a05`，已推送 main 并在 `/srv/personal-blog` 构建发布。仅重建 web，未执行数据库迁移。前端上一版保留为 `personal-blog-web:hapi-before-20261117`。紧急回退入口时，可将该标签重新标记为 `personal-blog-web:latest`，在生产目录使用现有 `.env.production` 与 Compose 文件执行 `up -d --no-deps web`，然后验证 health 与页面。Git 源码也需通过正常 revert / review 与部署镜像重新对齐，避免下一次更新又发布被回退的变更。独立 HAPI Hub 与状态数据不随前端入口回退删除。

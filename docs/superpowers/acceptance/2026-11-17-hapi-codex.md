@@ -1,6 +1,6 @@
 # HAPI / Codex 实测记录
 
-日期：2026-11-17（Asia/Shanghai）。当前阶段：云端 HTTPS 与手机跨网测试通过；博客入口已实现，发布验证进行中。
+日期：2026-11-17（Asia/Shanghai）。当前阶段：云端 HTTPS 与手机跨网测试通过；博客入口已发布并通过线上检查。
 
 ## 环境与安装
 
@@ -22,7 +22,7 @@
 | cc-switch 真实请求路由 | 通过 | native response_id 与 cc-switch 只读日志逐条精确匹配；gpt-6-astra 和 gpt-6.1-sol 返回 200，is_streaming=1 |
 | 桌面聊天 ↔ 网页 | 通过（隔离实例） | 同一真实引擎双向召回 A/B；detach 后桌面继续回答；reattach 复用 HAPI ID，回填离线消息并召回 C |
 | 云端 / 域名 / 备份 | 通过 | HTTPS、手机移动网络双向消息、匿名鉴权、备份隔离恢复；详见下方云端记录 |
-| 博客管理员入口 | 实现与本地验收通过，待发布 | 管理员路由测试、构建、390px 组件布局；无认证绕过 |
+| 博客管理员入口 | 已发布 / 本地与线上检查通过 | 管理员路由测试、构建、390px 组件布局；无认证绕过 |
 
 ## 过程记录
 
@@ -66,7 +66,7 @@
 - 服务器博客 `main` 干净，HEAD `41b45c5a6e9663a976880e371676fb76a5018611`，与本地功能基线一致。
 - 主域证书只覆盖 `guoer9.me` / `www.guoer9.me`。预检查时 codex 子域无解析，用户随后确认已添加 A 记录；以云端实际解析和证书结果为准。
 
-## 云端与手机验收（17:45 更新）
+## 云端与手机验收
 
 - SSH 公网直连 `root@39.96.212.169`；下载与 ACME 访问外网使用服务器 Mihomo `127.0.0.1:7890`；未读取或导出代理订阅 / 模型密钥。
 - Linux x86_64 baseline `0.36.4` 包 SHA-256：`b7e8630bbf921ec190bc772b1990b5574d09fcf0f4b05748810b7861c118c9b3`。
@@ -105,3 +105,16 @@
 
 - 最新验证：路由 14 项与 Element Plus 安装 2 项全部通过（16/16）。首次扩展检查发现新增图标未加入既有测试 mock，已补齐；生产构建通过，两个 plist 与 backup.sh 语法通过，diff --check 通过。
 - launchd 重连后网页发出不含 M 值的追问，native 同一 thread 正确回复 `HAPI-MOBILE-M-8529`；不是另一个引擎恢复。
+
+
+## 发布记录
+
+- 产品提交 `4104a05`（feat: add private HAPI Codex console entry and deployment guide），经独立只读复核未发现 P0 / P1 / P2 发布阻碍；reviewer 补充模拟备份失败路径。
+- Mac 直连 GitHub push 曾 TLS 失败；随后借助 SSH 的回环 17890 → 服务器回环 7890 临时代理，原子推送功能分支与 main。无 force push，无全局网络设置修改；临时隧道在交付时关闭。
+- 生产 `/srv/personal-blog` main 从 `41b45c5` fast-forward 到产品提交。只构建并重建 Compose 的 web；api 与 database 容器保持原运行实例。
+- 服务端 Node 22 生产 Docker 构建 exit 0；新镜像 manifest `sha256:eff0eed9af84e0f7355df020168da647f9bde418616e94388819ea60b39389f0`，web healthy；HAPI Hub 和备份 timer enabled/active，Hub 回环 3006。
+- 发布前前端镜像保留为 `personal-blog-web:hapi-before-20261117`，原镜像 ID 只存于服务器 `/etc/hapi/blog-web-image-before-20261117`。
+- HTTPS smoke：`/`、`/documents`、`/admin/codex` 的 SPA shell、新入口 JS chunk、公开文章列表 API、其中一篇真实文章详情 API 与页面均 200。实际生产 chunk 包含正确控制台 URL 与“访问令牌”说明，无 cliApiToken 或 Bearer 凭据。
+- 真实浏览器匿名访问 `/admin/codex` 跳转 `/admin/login?redirect=/admin/codex`；没有读取生产管理员密码，也未声称完成真实管理员登录的 UI 验收。管理员 / 非管理员边界由路由测试验证。
+- 本地 Hub、原 CLI 测试会话、事件采集、旧 SSH 转发、开发服务器已停止；正式云端 Hub、隔离桌面 App / 引擎与 launchd attach 保留。正式 HTTPS 控制台与博客入口标签作为交付保留。
+- 仍待后续：日常原 App 接入、后台新建 CLI 超时修复、逐 token / 逐行输出、完整 shell 中止、睡眠 / 重启 / App 退出恢复、24 小时稳定性。第一版未将这些项目判为通过。
