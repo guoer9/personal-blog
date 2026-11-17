@@ -69,16 +69,16 @@ Mac Runner 的允许目录为 `/Users/guoer/.hapi-blog/workspace` 及当前博�
 
 ## 已知限制
 
-本次对话与桌面真实请求可经 cc-switch；原日常 App 的当前聊天已通过共享 WebSocket 接入。其他聊天仍需逐条显式 attach。Stop 不保证终止已开始的 shell 子进程。桌面工具状态与最终结果可见，但本次观察中命令 stdout 在完成后一次性展示，聊天文本也未能验证逐 token 流式。Mac 睡眠或离线期间无法执行。
+本次对话与桌面真实请求可经 cc-switch；原日常 App 的当前聊天此前通过共享 WebSocket 接入并完成双向验收。22:45 最终检查发现旧视图已冻结，当前 App 普通重开后使用 stdio，恢复步骤见下方。其他聊天仍需逐条显式 attach。Stop 不保证终止已开始的 shell 子进程。桌面工具状态与最终结果可见，但本次观察中命令 stdout 在完成后一次性展示，聊天文本也未能验证逐 token 流式。Mac 睡眠或离线期间无法在该节点执行，云端独立聊天仍可执行。
 
 
 ## 本机当前操作
 
-- 打开已连接日常会话：访问 `https://codex.guoer9.me/sessions/5f1c09e0-73cd-453f-8c18-3cbe183968e0`，标题为“查找适合博客集成的开源 Codex 对话框架”。旧隔离投影离线属预期。
+- 日常会话旧视图为 `5f1c09e0-73cd-453f-8c18-3cbe183968e0`，标题“查找适合博客集成的开源 Codex 对话框架”。22:45 状态为 inactive / history-changed，历史保留；不能向它继续发送。Mac 与云端 Runner 新建聊天不受影响。
 - 登录 token 仅存于 `~/.hapi-blog/settings.json` 的 `cliApiToken`；复制时粘贴完整值，不将 token 发到聊天或放入链接。
 - 检查 worker：`launchctl print gui/$(id -u)/com.guoer.hapi-current-desktop-attach`。
 - 停止 worker：`launchctl bootout gui/$(id -u)/com.guoer.hapi-current-desktop-attach`。这只断开投影，云端历史保留。
-- 日常 App 与目标聊天已加载时，可用 `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.guoer.hapi-current-desktop-attach.plist` 启动；注册仍在但进程已退出时先检查 socket，再 `launchctl kickstart gui/$(id -u)/com.guoer.hapi-current-desktop-attach`。
+- App 经专用启动器打开、目标聊天已由共享引擎加载时，可用 `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.guoer.hapi-current-desktop-attach.plist` 启动；注册仍在但进程已退出时先检查 socket，再 `launchctl kickstart gui/$(id -u)/com.guoer.hapi-current-desktop-attach`。stdio 实例不能通过 kickstart 热接入。
 - 旧 `com.guoer.hapi-desktop-attach` plist 仅用于隔离实例，当前已停止，避免误启旧测试投影。
 
 ### 日常窗口接入（2026-11-17，已验证）
@@ -96,6 +96,14 @@ Mac Runner 的允许目录为 `/Users/guoer/.hapi-blog/workspace` 及当前博�
 - 日常实例实测：auth.json 摘要与切换前一致；引擎报告原 CODEX_HOME、ChatGPT 认证及原 MCP 配置。桌面标识 D 经 Hub 历史读取，网页测试消息通过显式 Steer 送入当前活跃 turn，原聊天正确复述 D 并记住网页 E。普通发送可先进入原生队列，当前 turn 未结束时不要因此重复发送。
 - 当前聊天的 native response ID 与本机 cc-switch 请求记录精确匹配，gpt-6.1-sol / HTTP 200 / streaming；全局配置仍为 custom / gpt-6-astra / 本机 15721。全局配置与单会话模型是两个层级，本轮未切换 provider。
 
+### 普通重开后的恢复（22:45 检查结果）
+
+旧 worker 在网络恢复后的历史核对中关闭，Hub 为 `history-changed`；该状态的具体历史差异尚未定位，不将其归因于某次用户操作。当前 App PID 31642 的启动日志于 22:42:22 明确记录 `hostId=local transport=stdio`，其 engine 无共享 listen endpoint；原 daemon 仍运行，但 `hapi attach --list` 无目标。不能为了重新接入而让另一引擎 cold-resume 当前活跃聊天。
+
+恢复入口已准备：待当前工作结束，手动退出 App，然后双击 `~/.hapi-blog/current-desktop/打开当前Codex并同步.command`，再打开此聊天。启动器会使用已核验的现有 daemon 和明确 WebSocket 环境；worker 仅等待原 owner 加载聊天。`state.json` 已设置 `new_view_requested=true`，下一次成功 attach 使用 `--new-view` 建立新投影并保存新 HAPI ID；旧投影和 checkpoint 保留，不合并历史。未自动关闭 App 或重启引擎。该次恢复尚需用户操作及后续验收，不能称为已恢复在线。
+
 ## 本轮博客发布与快速回退
 
 入口产品提交为 `4104a05`，已推送 main 并在 `/srv/personal-blog` 构建发布。仅重建 web，未执行数据库迁移。前端上一版保留为 `personal-blog-web:hapi-before-20261117`。紧急回退入口时，可将该标签重新标记为 `personal-blog-web:latest`，在生产目录使用现有 `.env.production` 与 Compose 文件执行 `up -d --no-deps web`，然后验证 health 与页面。Git 源码也需通过正常 revert / review 与部署镜像重新对齐，避免下一次更新又发布被回退的变更。独立 HAPI Hub 与状态数据不随前端入口回退删除。
+
+增量提交 `dc63613` 已发布多机器入口说明，运行镜像 `sha256:cc1be3827513d67c3c1443317350ea905c8dbc65e37a3ffe4f321a4aaf7b2bbb`，前端 healthy。部署前镜像另保留为 `personal-blog-web:hapi-before-multimachine-20261117`。线上 `Codex-CBeGtsyI.js` 包含两台机器说明，HTTP 200；该轮仍只重建前端。

@@ -1,6 +1,6 @@
 # HAPI / Codex 实测记录
 
-日期：2026-11-17（Asia/Shanghai）。当前阶段：云端 HTTPS 与手机跨网测试通过；原日常 App 的当前聊天已接入；Mac 与云服务器两个 Runner 在线，新建聊天与真实回复通过。操作同步边界见末尾补充。
+日期：2026-11-17（Asia/Shanghai）。当前阶段：Mac 与云服务器两个 Runner 在线，新建聊天与真实回复通过；多机器入口已发布。原日常聊天此前接入并通过双向验收，22:45 最终检查为旧视图冻结 / 当前 App stdio，需专用启动器手动重开后恢复。操作同步边界及最新状态见末尾补充。
 
 ## 环境与安装
 
@@ -164,3 +164,12 @@
 - 同步边界以 pinned 0.36.4 源码及临时实测为准：Hub delete 不调用原生永久删除；网页重命名/置顶属于 HAPI 元数据；attached End session 只 detach，原生 archive 才反向结束桥接。云端 API 导入是配置快照，不是 cc-switch 的自动实时同步。
 - 全部操作同步尚未实现。需以每条 native thread 的单一 owner 为准，增加管理操作到原生 API 的适配、确认事件和离线失败处理；跨机器文件 / 配置 / 上下文迁移另行设计，不能复制活跃 SQLite 或双引擎恢复同一活跃聊天。
 - 本轮入口说明更新：16/16 路由与 Element Plus 测试通过，`vue-tsc -b && vite build` exit 0，Mac plist 和导入脚本语法、systemd unit 验证及 `git diff --check` 通过。构建保留原有大 chunk 提示。最终检查两机 active、原日常 attached、Mac auth 摘要与基线一致，Git diff 不含所用 API key 或 HAPI token。
+
+## 中断后发布核验与桌面状态变化（22:45 后）
+
+- 后台部署已完成：生产 Git 为 `dc63613`，web 运行镜像 `sha256:cc1be3827513d67c3c1443317350ea905c8dbc65e37a3ffe4f321a4aaf7b2bbb`，容器 healthy。线上 `Codex-CBeGtsyI.js` HTTP 200 并包含“新建会话时选择 MacBook Air 或阿里云服务器”；博客 health、HAPI 首页均 200。备份标签 `personal-blog-web:hapi-before-multimachine-20261117` 保留，生产源码干净。
+- 两台 Runner 仍 active；两条新建验收聊天仍 active。匿名 sessions API 401，云端 Hub、Runner 与备份 timer 均 active。云端配置及 auth 权限 0600，独立目录 0700，默认模型 / effort 与导入时一致。
+- 原日常投影 `5f1c09e0-73cd-453f-8c18-3cbe183968e0` 已变为 inactive / history-changed，worker exit 0。日志有网络断开和 22:41 Hub resync，具体历史差异尚未定位，不将其等同普通断线必然丢失上下文。
+- 当前 App PID 31642 在 22:42:22 以 `hostId=local transport=stdio` 启动，engine PID 31879 没有 `--listen`；原共享 daemon 12104 仍在，但 `hapi attach --list` 无加载线程。因此本轮未尝试用其他引擎恢复该活动 thread，也没有关闭当前 App。
+- `connect.py` 已备份并准备显式 fresh-view 恢复：state 标记 `needs_manual_shared_reopen`、`new_view_requested=true`；下次用户退出 App 后运行现有 `.command`，原 owner 加载聊天后 worker 才以 `--new-view` attach，记录新 HAPI ID，保留冻结旧视图。语法和“App 仍在时拒绝第二实例”的无副作用 guard 通过。该次恢复未执行，不判为已恢复在线。
+- 这修正了前一阶段“最终检查原日常 attached”的时点结论；当前已交付的是两机 Runner、新建、API 导入和博客入口，桌面当前聊天恢复仍需上述人工重开和再次验证。
